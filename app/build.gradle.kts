@@ -61,7 +61,7 @@ dependencies {
     implementation("androidx.compose.material3:material3")
 
     // libVLC for Android
-    implementation("org.videolan.android:libvlc-all:3.7.7")
+    implementation("org.videolan.android:libvlc-all:3.6.5")
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
