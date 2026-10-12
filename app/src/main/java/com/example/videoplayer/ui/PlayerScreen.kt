@@ -3,7 +3,6 @@ package com.example.videoplayer.ui
 import android.app.Activity
 import android.content.Context
 import android.media.AudioManager
-import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.WindowManager
@@ -16,6 +15,7 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -31,7 +31,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.videoplayer.player.VlcPlayerManager
 import kotlinx.coroutines.delay
-import kotlin.math.abs
 
 @Composable
 fun PlayerScreen(
@@ -119,7 +118,6 @@ fun PlayerScreen(
                 detectTapGestures(
                     onTap = { showControls = !showControls },
                     onDoubleTap = { offset ->
-                        // Double tap left or right (-10s or +10s)
                         if (offset.x < size.width / 2) {
                             playerManager.seekRelative(-10000)
                             gestureIndicatorText = "-10 сек"
@@ -131,12 +129,10 @@ fun PlayerScreen(
                 )
             }
             .pointerInput(Unit) {
-                // Vertical drag on left half (brightness) and right half (volume)
                 detectVerticalDragGestures(
                     onVerticalDrag = { change, dragAmount ->
                         val isLeft = change.position.x < size.width / 2
                         if (isLeft) {
-                            // Brightness
                             val lp = activity?.window?.attributes
                             var currentBrightness = lp?.screenBrightness ?: 0.5f
                             if (currentBrightness < 0f) currentBrightness = 0.5f
@@ -146,7 +142,6 @@ fun PlayerScreen(
                             activity?.window?.attributes = lp
                             gestureIndicatorText = "Яркость: ${(currentBrightness * 100).toInt()}%"
                         } else {
-                            // Volume
                             val currentVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
                             val changeVol = if (dragAmount < 0) 1 else -1
                             val newVol = (currentVol + changeVol).coerceIn(0, maxVolume)
@@ -157,7 +152,6 @@ fun PlayerScreen(
                 )
             }
             .pointerInput(Unit) {
-                // Horizontal drag for seeking
                 detectHorizontalDragGestures(
                     onHorizontalDrag = { _, dragAmount ->
                         val seekOffset = (dragAmount * 50).toLong()
@@ -167,7 +161,6 @@ fun PlayerScreen(
                 )
             }
     ) {
-        // Video Surface
         AndroidView(
             factory = { ctx ->
                 SurfaceView(ctx).apply {
@@ -189,7 +182,6 @@ fun PlayerScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        // Gesture Indicator overlay
         if (gestureIndicatorText != null) {
             Box(
                 modifier = Modifier
@@ -201,7 +193,6 @@ fun PlayerScreen(
             }
         }
 
-        // Status overlay if not playing
         if (playerStatus.startsWith("Error") || playerStatus.contains("Buffering")) {
             Box(
                 modifier = Modifier
@@ -213,7 +204,6 @@ fun PlayerScreen(
             }
         }
 
-        // Control overlay (3-second auto-hide)
         AnimatedVisibility(
             visible = showControls,
             enter = fadeIn(),
@@ -225,7 +215,6 @@ fun PlayerScreen(
                     .fillMaxSize()
                     .background(Color.Black.copy(alpha = 0.4f))
             ) {
-                // Play/Pause center button
                 IconButton(
                     onClick = {
                         if (isPlaying) {
@@ -249,7 +238,6 @@ fun PlayerScreen(
                     )
                 }
 
-                // Bottom bar with orange progress slider and time labels
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -271,7 +259,7 @@ fun PlayerScreen(
                             currentPosition = newValue.toLong()
                             playerManager.seekTo(currentPosition)
                         },
-                        valueRange = 0f.until(if (duration > 0) duration.toFloat() else 1f),
+                        valueRange = 0f..(if (duration > 0) duration.toFloat() else 1f),
                         colors = SliderDefaults.colors(
                             thumbColor = Color(0xFFFF8800),
                             activeTrackColor = Color(0xFFFF8800),
