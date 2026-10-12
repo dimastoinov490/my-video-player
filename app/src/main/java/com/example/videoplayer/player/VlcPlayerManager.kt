@@ -2,6 +2,7 @@ package com.example.videoplayer.player
 
 import android.content.Context
 import android.net.Uri
+import android.view.SurfaceView
 import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
@@ -17,15 +18,70 @@ class VlcPlayerManager(context: Context) {
     val libVLC = LibVLC(context, options)
     val mediaPlayer = MediaPlayer(libVLC)
 
-    fun play(url: String) {
+    var onStatusChanged: ((String) -> Unit)? = null
+
+    private val eventListener = MediaPlayer.EventListener { event ->
+        when (event.type) {
+            MediaPlayer.Event.Playing -> onStatusChanged?.invoke("Playing")
+            MediaPlayer.Event.Paused -> onStatusChanged?.invoke("Paused")
+            MediaPlayer.Event.Stopped -> onStatusChanged?.invoke("Stopped")
+            MediaPlayer.Event.EndReached -> onStatusChanged?.invoke("End Reached")
+            MediaPlayer.Event.EncounteredError -> onStatusChanged?.invoke("Error: Encountered Error")
+            MediaPlayer.Event.Buffering -> onStatusChanged?.invoke("Buffering: ${event.buffering}%")
+            else -> {}
+        }
+    }
+
+    init {
+        mediaPlayer.setEventListener(eventListener)
+    }
+
+    fun attachSurface(surfaceView: SurfaceView) {
+        val vout = mediaPlayer.vlcVout
+        if (!vout.areViewsAttached()) {
+            vout.setVideoView(surfaceView)
+            vout.attachViews()
+        }
+    }
+
+    fun detachSurface() {
+        val vout = mediaPlayer.vlcVout
+        if (vout.areViewsAttached()) {
+            vout.detachViews()
+        }
+    }
+
+    fun updateWindowSize(width: Int, height: Int) {
+        mediaPlayer.updateVideoSurfaces()
+        mediaPlayer.vlcVout.setWindowSize(width, height)
+    }
+
+    fun playUrl(context: Context, urlOrUri: String) {
         try {
-            val media = Media(libVLC, Uri.parse(url))
+            mediaPlayer.stop()
+            val media = if (urlOrUri.startsWith("content://")) {
+                val uri = Uri.parse(urlOrUri)
+                val pfd = context.contentResolver.openFileDescriptor(uri, "r")
+                if (pfd != null) {
+                    Media(libVLC, pfd.fileDescriptor).apply {
+                        // Close pfd after media is parsed or let gc/release handle it. 
+                        // Note: Media takes ownership or we can keep it open during playback.
+                    }
+                } else {
+                    Media(libVLC, uri)
+                }
+            } else {
+                Media(libVLC, Uri.parse(urlOrUri))
+            }
+
             media.setHWDecoderEnabled(true, false)
             mediaPlayer.media = media
             media.release()
             mediaPlayer.play()
+            onStatusChanged?.invoke("Starting playback...")
         } catch (e: Exception) {
             e.printStackTrace()
+            onStatusChanged?.invoke("Error: ${e.localizedMessage}")
         }
     }
 
@@ -46,8 +102,13 @@ class VlcPlayerManager(context: Context) {
     }
 
     fun release() {
-        mediaPlayer.stop()
-        mediaPlayer.release()
-        libVLC.release()
+        try {
+            mediaPlayer.stop()
+            detachSurface()
+            mediaPlayer.release()
+            libVLC.release()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 }

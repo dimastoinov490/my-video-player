@@ -1,6 +1,7 @@
 package com.example.videoplayer.ui
 
 import android.net.Uri
+import android.view.SurfaceHolder
 import android.view.SurfaceView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -23,15 +24,25 @@ import com.example.videoplayer.player.VlcPlayerManager
 @Composable
 fun PlayerScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    var playerManager by remember { mutableStateOf<VlcPlayerManager?>(null) }
+    val playerManager = remember { VlcPlayerManager(context) }
     var videoUrl by remember { mutableStateOf("https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4") }
+    var playerStatus by remember { mutableStateOf("Idle") }
     var isPlaying by remember { mutableStateOf(false) }
+
+    DisposableEffect(playerManager) {
+        playerManager.onStatusChanged = { status ->
+            playerStatus = status
+            isPlaying = status == "Playing"
+        }
+        onDispose {
+            playerManager.release()
+        }
+    }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         uri?.let {
-            // Take persistable URI permission if needed, or pass URI string directly to libVLC
             try {
                 context.contentResolver.takePersistableUriPermission(
                     it,
@@ -41,16 +52,7 @@ fun PlayerScreen(modifier: Modifier = Modifier) {
                 e.printStackTrace()
             }
             videoUrl = it.toString()
-            playerManager?.play(videoUrl)
-            isPlaying = true
-        }
-    }
-
-    DisposableEffect(context) {
-        val manager = VlcPlayerManager(context)
-        playerManager = manager
-        onDispose {
-            manager.release()
+            playerManager.playUrl(context, videoUrl)
         }
     }
 
@@ -81,12 +83,38 @@ fun PlayerScreen(modifier: Modifier = Modifier) {
                 AndroidView(
                     factory = { ctx ->
                         SurfaceView(ctx).apply {
-                            playerManager?.mediaPlayer?.vlcVout?.setVideoView(this)
-                            playerManager?.mediaPlayer?.vlcVout?.attachViews()
+                            holder.addCallback(object : SurfaceHolder.Callback {
+                                override fun surfaceCreated(holder: SurfaceHolder) {
+                                    playerManager.attachSurface(this@apply)
+                                }
+
+                                override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+                                    playerManager.updateWindowSize(width, height)
+                                }
+
+                                override fun surfaceDestroyed(holder: SurfaceHolder) {
+                                    playerManager.detachSurface()
+                                }
+                            })
                         }
                     },
                     modifier = Modifier.fillMaxSize()
                 )
+
+                // Status overlay
+                Surface(
+                    color = Color.Black.copy(alpha = 0.6f),
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(8.dp)
+                ) {
+                    Text(
+                        text = "Status: $playerStatus",
+                        color = Color.White,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
             }
 
             // Controls & URL input
@@ -99,7 +127,7 @@ fun PlayerScreen(modifier: Modifier = Modifier) {
             ) {
                 Button(
                     onClick = {
-                        filePickerLauncher.launch(arrayOf("video/*", "audio/*", "application/octet-stream"))
+                        filePickerLauncher.launch(arrayOf("video/*", "audio/*", "application/octet-stream", "*/*"))
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -114,8 +142,7 @@ fun PlayerScreen(modifier: Modifier = Modifier) {
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = {
-                        playerManager?.play(videoUrl)
-                        isPlaying = true
+                        playerManager.playUrl(context, videoUrl)
                     })
                 )
 
@@ -125,18 +152,17 @@ fun PlayerScreen(modifier: Modifier = Modifier) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Button(onClick = {
-                        playerManager?.play(videoUrl)
-                        isPlaying = true
+                        playerManager.playUrl(context, videoUrl)
                     }) {
                         Text("Play")
                     }
 
                     Button(onClick = {
                         if (isPlaying) {
-                            playerManager?.pause()
+                            playerManager.pause()
                             isPlaying = false
                         } else {
-                            playerManager?.resume()
+                            playerManager.resume()
                             isPlaying = true
                         }
                     }) {
@@ -144,7 +170,7 @@ fun PlayerScreen(modifier: Modifier = Modifier) {
                     }
 
                     Button(onClick = {
-                        playerManager?.stop()
+                        playerManager.stop()
                         isPlaying = false
                     }) {
                         Text("Stop")
