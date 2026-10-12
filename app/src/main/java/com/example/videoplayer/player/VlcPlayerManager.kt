@@ -19,6 +19,7 @@ class VlcPlayerManager(context: Context) {
     val mediaPlayer = MediaPlayer(libVLC)
 
     var onStatusChanged: ((String) -> Unit)? = null
+    var onTimeChanged: ((Long, Long) -> Unit)? = null
 
     private val eventListener = MediaPlayer.EventListener { event ->
         when (event.type) {
@@ -28,6 +29,12 @@ class VlcPlayerManager(context: Context) {
             MediaPlayer.Event.EndReached -> onStatusChanged?.invoke("End Reached")
             MediaPlayer.Event.EncounteredError -> onStatusChanged?.invoke("Error: Encountered Error")
             MediaPlayer.Event.Buffering -> onStatusChanged?.invoke("Buffering: ${event.buffering}%")
+            MediaPlayer.Event.TimeChanged -> {
+                onTimeChanged?.invoke(mediaPlayer.time, mediaPlayer.length)
+            }
+            MediaPlayer.Event.PositionChanged -> {
+                onTimeChanged?.invoke(mediaPlayer.time, mediaPlayer.length)
+            }
             else -> {}
         }
     }
@@ -63,10 +70,7 @@ class VlcPlayerManager(context: Context) {
                 val uri = Uri.parse(urlOrUri)
                 val pfd = context.contentResolver.openFileDescriptor(uri, "r")
                 if (pfd != null) {
-                    Media(libVLC, pfd.fileDescriptor).apply {
-                        // Close pfd after media is parsed or let gc/release handle it. 
-                        // Note: Media takes ownership or we can keep it open during playback.
-                    }
+                    Media(libVLC, pfd.fileDescriptor)
                 } else {
                     Media(libVLC, uri)
                 }
@@ -83,6 +87,15 @@ class VlcPlayerManager(context: Context) {
             e.printStackTrace()
             onStatusChanged?.invoke("Error: ${e.localizedMessage}")
         }
+    }
+
+    fun seekTo(timeMs: Long) {
+        mediaPlayer.time = timeMs
+    }
+
+    fun seekRelative(offsetMs: Long) {
+        val newTime = (mediaPlayer.time + offsetMs).coerceIn(0, mediaPlayer.length)
+        mediaPlayer.time = newTime
     }
 
     fun pause() {

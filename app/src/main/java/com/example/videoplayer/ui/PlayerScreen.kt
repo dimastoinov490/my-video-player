@@ -1,163 +1,233 @@
 package com.example.videoplayer.ui
 
-import android.net.Uri
+import android.app.Activity
+import android.content.Context
+import android.media.AudioManager
+import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import android.view.WindowManager
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.videoplayer.player.VlcPlayerManager
+import kotlinx.coroutines.delay
+import kotlin.math.abs
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PlayerScreen(modifier: Modifier = Modifier) {
+fun PlayerScreen(
+    videoUri: String,
+    onBack: () -> Unit
+) {
     val context = LocalContext.current
+    val activity = context as? Activity
     val playerManager = remember { VlcPlayerManager(context) }
-    var videoUrl by remember { mutableStateOf("https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4") }
-    var playerStatus by remember { mutableStateOf("Idle") }
-    var isPlaying by remember { mutableStateOf(false) }
 
-    DisposableEffect(playerManager) {
+    var isPlaying by remember { mutableStateOf(true) }
+    var currentPosition by remember { mutableStateOf(0L) }
+    var duration by remember { mutableStateOf(0L) }
+    var playerStatus by remember { mutableStateOf("Buffering...") }
+    var showControls by remember { mutableStateOf(true) }
+    var gestureIndicatorText by remember { mutableStateOf<String?>(null) }
+
+    // Keep screen on and immersive mode
+    DisposableEffect(activity) {
+        activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        activity?.window?.decorView?.systemUiVisibility = (
+                android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                        or android.view.View.SYSTEM_UI_FLAG_FULLSCREEN
+                        or android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                        or android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                        or android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                        or android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                )
+        onDispose {
+            activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            activity?.window?.decorView?.systemUiVisibility = android.view.View.SYSTEM_UI_FLAG_VISIBLE
+        }
+    }
+
+    // Save progress to SharedPreferences
+    val prefs = remember { context.getSharedPreferences("video_prefs", Context.MODE_PRIVATE) }
+    DisposableEffect(Unit) {
+        prefs.edit().putString("last_played_uri", videoUri).apply()
+        onDispose {
+            prefs.edit().putLong("last_pos_$videoUri", currentPosition).apply()
+        }
+    }
+
+    // Auto hide controls after 3 seconds
+    LaunchedEffect(showControls) {
+        if (showControls) {
+            delay(3000)
+            showControls = false
+        }
+    }
+
+    // Hide gesture indicator after 1 second
+    LaunchedEffect(gestureIndicatorText) {
+        if (gestureIndicatorText != null) {
+            delay(1000)
+            gestureIndicatorText = null
+        }
+    }
+
+    LaunchedEffect(videoUri) {
         playerManager.onStatusChanged = { status ->
             playerStatus = status
             isPlaying = status == "Playing"
         }
-        onDispose {
-            playerManager.release()
+        playerManager.onTimeChanged = { time, len ->
+            currentPosition = time
+            duration = len
         }
+        playerManager.playUrl(context, videoUri)
     }
 
-    val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        uri?.let {
-            try {
-                context.contentResolver.takePersistableUriPermission(
-                    it,
-                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+    BackHandler {
+        playerManager.release()
+        onBack()
+    }
+
+    val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
+    val maxVolume = remember { audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = { showControls = !showControls },
+                    onDoubleTap = { offset ->
+                        // Double tap left or right (-10s or +10s)
+                        if (offset.x < size.width / 2) {
+                            playerManager.seekRelative(-10000)
+                            gestureIndicatorText = "-10 сек"
+                        } else {
+                            playerManager.seekRelative(10000)
+                            gestureIndicatorText = "+10 сек"
+                        }
+                    }
                 )
-            } catch (e: Exception) {
-                e.printStackTrace()
             }
-            videoUrl = it.toString()
-            playerManager.playUrl(context, videoUrl)
-        }
-    }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("libVLC Video Player") },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            .pointerInput(Unit) {
+                // Vertical drag on left half (brightness) and right half (volume)
+                detectVerticalDragGestures(
+                    onVerticalDrag = { change, dragAmount ->
+                        val isLeft = change.position.x < size.width / 2
+                        if (isLeft) {
+                            // Brightness
+                            val lp = activity?.window?.attributes
+                            var currentBrightness = lp?.screenBrightness ?: 0.5f
+                            if (currentBrightness < 0f) currentBrightness = 0.5f
+                            currentBrightness -= dragAmount / 500f
+                            currentBrightness = currentBrightness.coerceIn(0.01f, 1f)
+                            lp?.screenBrightness = currentBrightness
+                            activity?.window?.attributes = lp
+                            gestureIndicatorText = "Яркость: ${(currentBrightness * 100).toInt()}%"
+                        } else {
+                            // Volume
+                            val currentVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+                            val changeVol = if (dragAmount < 0) 1 else -1
+                            val newVol = (currentVol + changeVol).coerceIn(0, maxVolume)
+                            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, newVol, 0)
+                            gestureIndicatorText = "Громкость: ${((newVol.toFloat() / maxVolume) * 100).toInt()}%"
+                        }
+                    }
                 )
-            )
-        }
-    ) { innerPadding ->
-        Column(
-            modifier = modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .background(Color.Black),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // Video Surface container
+            }
+            .pointerInput(Unit) {
+                // Horizontal drag for seeking
+                detectHorizontalDragGestures(
+                    onHorizontalDrag = { _, dragAmount ->
+                        val seekOffset = (dragAmount * 50).toLong()
+                        playerManager.seekRelative(seekOffset)
+                        gestureIndicatorText = "Перемотка"
+                    }
+                )
+            }
+    ) {
+        // Video Surface
+        AndroidView(
+            factory = { ctx ->
+                SurfaceView(ctx).apply {
+                    holder.addCallback(object : SurfaceHolder.Callback {
+                        override fun surfaceCreated(holder: SurfaceHolder) {
+                            playerManager.attachSurface(this@apply)
+                        }
+
+                        override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+                            playerManager.updateWindowSize(width, height)
+                        }
+
+                        override fun surfaceDestroyed(holder: SurfaceHolder) {
+                            playerManager.detachSurface()
+                        }
+                    })
+                }
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+
+        // Gesture Indicator overlay
+        if (gestureIndicatorText != null) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
+                    .align(Alignment.Center)
+                    .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                AndroidView(
-                    factory = { ctx ->
-                        SurfaceView(ctx).apply {
-                            holder.addCallback(object : SurfaceHolder.Callback {
-                                override fun surfaceCreated(holder: SurfaceHolder) {
-                                    playerManager.attachSurface(this@apply)
-                                }
-
-                                override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-                                    playerManager.updateWindowSize(width, height)
-                                }
-
-                                override fun surfaceDestroyed(holder: SurfaceHolder) {
-                                    playerManager.detachSurface()
-                                }
-                            })
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize()
-                )
-
-                // Status overlay
-                Surface(
-                    color = Color.Black.copy(alpha = 0.6f),
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(8.dp)
-                ) {
-                    Text(
-                        text = "Status: $playerStatus",
-                        color = Color.White,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
+                Text(text = gestureIndicatorText!!, color = Color.White, fontSize = 16.sp)
             }
+        }
 
-            // Controls & URL input
-            Column(
+        // Status overlay if not playing
+        if (playerStatus.startsWith("Error") || playerStatus.contains("Buffering")) {
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .align(Alignment.Center)
+                    .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                Button(
+                Text(text = playerStatus, color = Color.White, fontSize = 14.sp)
+            }
+        }
+
+        // Control overlay (3-second auto-hide)
+        AnimatedVisibility(
+            visible = showControls,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.4f))
+            ) {
+                // Play/Pause center button
+                IconButton(
                     onClick = {
-                        filePickerLauncher.launch(arrayOf("video/*", "audio/*", "application/octet-stream", "*/*"))
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("📁 Открыть видео (MP4, AVI, MKV...)")
-                }
-
-                OutlinedTextField(
-                    value = videoUrl,
-                    onValueChange = { videoUrl = it },
-                    label = { Text("Video Stream URL or File URI") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = {
-                        playerManager.playUrl(context, videoUrl)
-                    })
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Button(onClick = {
-                        playerManager.playUrl(context, videoUrl)
-                    }) {
-                        Text("Play")
-                    }
-
-                    Button(onClick = {
                         if (isPlaying) {
                             playerManager.pause()
                             isPlaying = false
@@ -165,16 +235,50 @@ fun PlayerScreen(modifier: Modifier = Modifier) {
                             playerManager.resume()
                             isPlaying = true
                         }
-                    }) {
-                        Text(if (isPlaying) "Pause" else "Resume")
+                    },
+                    modifier = Modifier
+                        .size(64.dp)
+                        .align(Alignment.Center)
+                        .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(32.dp))
+                ) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = "Play/Pause",
+                        tint = Color.White,
+                        modifier = Modifier.size(36.dp)
+                    )
+                }
+
+                // Bottom bar with orange progress slider and time labels
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .background(Color.Black.copy(alpha = 0.7f))
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(text = formatDuration(currentPosition), color = Color.White, fontSize = 12.sp)
+                        Text(text = formatDuration(duration), color = Color.White, fontSize = 12.sp)
                     }
 
-                    Button(onClick = {
-                        playerManager.stop()
-                        isPlaying = false
-                    }) {
-                        Text("Stop")
-                    }
+                    Slider(
+                        value = if (duration > 0) currentPosition.toFloat() else 0f,
+                        onValueChange = { newValue ->
+                            currentPosition = newValue.toLong()
+                            playerManager.seekTo(currentPosition)
+                        },
+                        valueRange = 0f.until(if (duration > 0) duration.toFloat() else 1f),
+                        colors = SliderDefaults.colors(
+                            thumbColor = Color(0xFFFF8800),
+                            activeTrackColor = Color(0xFFFF8800),
+                            inactiveTrackColor = Color.DarkGray
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
         }
