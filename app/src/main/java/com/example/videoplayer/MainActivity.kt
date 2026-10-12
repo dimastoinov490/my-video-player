@@ -4,8 +4,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import com.example.videoplayer.ui.PlayerScreen
@@ -36,31 +36,31 @@ class MainActivity : ComponentActivity() {
 
                         if (customUrlDialog) {
                             var urlInput by remember { mutableStateOf("https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4") }
-                            androidx.compose.material3.AlertDialog(
+                            AlertDialog(
                                 onDismissRequest = { customUrlDialog = false },
-                                title = { androidx.compose.material3.Text("Открыть по ссылке") },
+                                title = { Text("Открыть по ссылке") },
                                 text = {
-                                    androidx.compose.material3.OutlinedTextField(
+                                    OutlinedTextField(
                                         value = urlInput,
                                         onValueChange = { urlInput = it },
-                                        label = { androidx.compose.material3.Text("URL или URI") },
+                                        label = { Text("URL или URI") },
                                         singleLine = true,
                                         modifier = Modifier.fillMaxWidth()
                                     )
                                 },
                                 confirmButton = {
-                                    androidx.compose.material3.TextButton(
+                                    TextButton(
                                         onClick = {
                                             customUrlDialog = false
                                             selectedVideoUri = urlInput
                                         }
                                     ) {
-                                        androidx.compose.material3.Text("Воспроизвести")
+                                        Text("Воспроизвести")
                                     }
                                 },
                                 dismissButton = {
-                                    androidx.compose.material3.TextButton(onClick = { customUrlDialog = false }) {
-                                        androidx.compose.material3.Text("Отмена")
+                                    TextButton(onClick = { customUrlDialog = false }) {
+                                        Text("Отмена")
                                     }
                                 }
                             )
