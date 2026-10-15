@@ -192,7 +192,9 @@ fun PlayerScreen(
             }
         }
 
-        if (playerStatus.startsWith("Error") || playerStatus.contains("Buffering")) {
+        val showBuffering = prefs.getBoolean("show_buffering_status", false)
+
+        if (playerStatus.startsWith("Error") || (showBuffering && playerStatus.contains("Buffering"))) {
             Box(
                 modifier = Modifier
                     .align(Alignment.Center)

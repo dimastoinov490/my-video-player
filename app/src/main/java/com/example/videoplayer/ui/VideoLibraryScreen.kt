@@ -40,7 +40,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun VideoLibraryScreen(
     onVideoSelected: (String) -> Unit,
-    onOpenCustomUrl: () -> Unit
+    onOpenCustomUrl: () -> Unit,
+    onOpenSettings: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -85,7 +86,7 @@ fun VideoLibraryScreen(
         topBar = {
             Column(modifier = Modifier.background(Color(0xFF121212))) {
                 TopAppBar(
-                    title = { Text("VLC Video Player", color = Color.White) },
+                    title = { Text("Nexora", color = Color.White) },
                     actions = {
                         IconButton(onClick = { /* Search toggle or focus */ }) {
                             Icon(Icons.Default.Search, contentDescription = "Search", tint = Color.White)
@@ -104,6 +105,13 @@ fun VideoLibraryScreen(
                                     onClick = {
                                         showMenu = false
                                         onOpenCustomUrl()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Настройки", color = Color.White) },
+                                    onClick = {
+                                        showMenu = false
+                                        onOpenSettings()
                                     }
                                 )
                             }

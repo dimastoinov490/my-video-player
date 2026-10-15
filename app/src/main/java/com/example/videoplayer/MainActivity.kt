@@ -9,6 +9,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import com.example.videoplayer.ui.PlayerScreen
+import com.example.videoplayer.ui.SettingsScreen
 import com.example.videoplayer.ui.VideoLibraryScreen
 
 class MainActivity : ComponentActivity() {
@@ -22,16 +23,22 @@ class MainActivity : ComponentActivity() {
                 ) {
                     var selectedVideoUri by remember { mutableStateOf<String?>(null) }
                     var customUrlDialog by remember { mutableStateOf(false) }
+                    var settingsScreen by remember { mutableStateOf(false) }
 
                     if (selectedVideoUri != null) {
                         PlayerScreen(
                             videoUri = selectedVideoUri!!,
                             onBack = { selectedVideoUri = null }
                         )
+                    } else if (settingsScreen) {
+                        SettingsScreen(
+                            onBack = { settingsScreen = false }
+                        )
                     } else {
                         VideoLibraryScreen(
                             onVideoSelected = { uri -> selectedVideoUri = uri },
-                            onOpenCustomUrl = { customUrlDialog = true }
+                            onOpenCustomUrl = { customUrlDialog = true },
+                            onOpenSettings = { settingsScreen = true }
                         )
 
                         if (customUrlDialog) {
