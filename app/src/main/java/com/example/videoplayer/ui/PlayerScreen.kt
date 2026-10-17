@@ -6,30 +6,40 @@ import android.media.AudioManager
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.example.videoplayer.model.MediaStoreHelper
+import com.example.videoplayer.model.VideoItem
 import com.example.videoplayer.player.VlcPlayerManager
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun PlayerScreen(
@@ -38,7 +48,11 @@ fun PlayerScreen(
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
+    val scope = rememberCoroutineScope()
     val playerManager = remember { VlcPlayerManager(context) }
+
+    var currentVideoUri by remember { mutableStateOf(videoUri) }
+    var videos by remember { mutableStateOf<List<VideoItem>>(emptyList()) }
 
     var isPlaying by remember { mutableStateOf(true) }
     var currentPosition by remember { mutableStateOf(0L) }
@@ -46,18 +60,38 @@ fun PlayerScreen(
     var playerStatus by remember { mutableStateOf("Buffering...") }
     var showControls by remember { mutableStateOf(true) }
     var gestureIndicatorText by remember { mutableStateOf<String?>(null) }
+    var showSpeedMenu by remember { mutableStateOf(false) }
+    var currentSpeed by remember { mutableStateOf(1f) }
+    var isFullscreen by remember { mutableStateOf(false) }
+
+    // Load videos list for previous/next navigation
+    LaunchedEffect(Unit) {
+        try {
+            videos = MediaStoreHelper.getVideos(context)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    val currentIndex = videos.indexOfFirst { it.uri.toString() == currentVideoUri }
+    val prevVideo = if (currentIndex > 0) videos[currentIndex - 1] else null
+    val nextVideo = if (currentIndex != -1 && currentIndex < videos.size - 1) videos[currentIndex + 1] else null
 
     // Keep screen on and immersive mode
-    DisposableEffect(activity) {
+    DisposableEffect(activity, isFullscreen) {
         activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        activity?.window?.decorView?.systemUiVisibility = (
-                android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                        or android.view.View.SYSTEM_UI_FLAG_FULLSCREEN
-                        or android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                        or android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                        or android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                        or android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                )
+        val uiFlags = if (isFullscreen) {
+            android.view.View.SYSTEM_UI_FLAG_VISIBLE
+        } else {
+            (android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                    or android.view.View.SYSTEM_UI_FLAG_FULLSCREEN
+                    or android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    or android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    or android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                    or android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN)
+        }
+        activity?.window?.decorView?.systemUiVisibility = uiFlags
+
         onDispose {
             activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             activity?.window?.decorView?.systemUiVisibility = android.view.View.SYSTEM_UI_FLAG_VISIBLE
@@ -66,10 +100,10 @@ fun PlayerScreen(
 
     // Save progress to SharedPreferences
     val prefs = remember { context.getSharedPreferences("video_prefs", Context.MODE_PRIVATE) }
-    DisposableEffect(Unit) {
-        prefs.edit().putString("last_played_uri", videoUri).apply()
+    DisposableEffect(currentVideoUri) {
+        prefs.edit().putString("last_played_uri", currentVideoUri).apply()
         onDispose {
-            prefs.edit().putLong("last_pos_$videoUri", currentPosition).apply()
+            prefs.edit().putLong("last_pos_$currentVideoUri", currentPosition).apply()
         }
     }
 
@@ -89,7 +123,7 @@ fun PlayerScreen(
         }
     }
 
-    LaunchedEffect(videoUri) {
+    LaunchedEffect(currentVideoUri) {
         playerManager.onStatusChanged = { status ->
             playerStatus = status
             isPlaying = status == "Playing"
@@ -98,7 +132,7 @@ fun PlayerScreen(
             currentPosition = time
             duration = len
         }
-        playerManager.playUrl(context, videoUri)
+        playerManager.playUrl(context, currentVideoUri)
     }
 
     BackHandler {
@@ -185,7 +219,8 @@ fun PlayerScreen(
             Box(
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(8.dp))
+                    .background(Color(0xFF0B0B0F).copy(alpha = 0.8f), RoundedCornerShape(12.dp))
+                    .border(1.dp, Brush.linearGradient(listOf(Color(0xFF00D4FF), Color(0xFF9B30FF))), RoundedCornerShape(12.dp))
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
                 Text(text = gestureIndicatorText!!, color = Color.White, fontSize = 16.sp)
@@ -198,7 +233,8 @@ fun PlayerScreen(
             Box(
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                    .background(Color(0xFF0B0B0F).copy(alpha = 0.8f), RoundedCornerShape(12.dp))
+                    .border(1.dp, Brush.linearGradient(listOf(Color(0xFF00D4FF), Color(0xFF9B30FF))), RoundedCornerShape(12.dp))
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
                 Text(text = playerStatus, color = Color.White, fontSize = 14.sp)
@@ -214,72 +250,286 @@ fun PlayerScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.4f))
+                    .background(Color.Black.copy(alpha = 0.5f))
             ) {
-                IconButton(
-                    onClick = {
-                        if (isPlaying) {
-                            playerManager.pause()
-                            isPlaying = false
-                        } else {
-                            playerManager.resume()
-                            isPlaying = true
-                        }
-                    },
+                val progressFraction = if (duration > 0) (currentPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f) else 0f
+
+                // Center large round Play/Pause button with gradient progress ring
+                Box(
                     modifier = Modifier
-                        .size(64.dp)
                         .align(Alignment.Center)
-                        .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(32.dp))
+                        .size(100.dp)
+                        .clickable {
+                            if (isPlaying) {
+                                playerManager.pause()
+                                isPlaying = false
+                            } else {
+                                playerManager.resume()
+                                isPlaying = true
+                            }
+                        },
+                    contentAlignment = Alignment.Center
                 ) {
-                    if (isPlaying) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(modifier = Modifier.size(width = 6.dp, height = 24.dp).background(Color.White))
-                            Box(modifier = Modifier.size(width = 6.dp, height = 24.dp).background(Color.White))
-                        }
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.PlayArrow,
-                            contentDescription = "Play/Pause",
-                            tint = Color.White,
-                            modifier = Modifier.size(36.dp)
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val strokeWidth = 6.dp.toPx()
+                        val diameter = size.minDimension - strokeWidth
+                        val topLeft = androidx.compose.ui.geometry.Offset(strokeWidth / 2, strokeWidth / 2)
+                        val sizeObj = androidx.compose.ui.geometry.Size(diameter, diameter)
+
+                        // Background ring track
+                        drawArc(
+                            color = Color.DarkGray.copy(alpha = 0.4f),
+                            startAngle = -90f,
+                            sweepAngle = 360f,
+                            useCenter = false,
+                            topLeft = topLeft,
+                            size = sizeObj,
+                            style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
                         )
+
+                        // Gradient progress ring (#00D4FF to #9B30FF)
+                        val sweep = progressFraction * 360f
+                        if (sweep > 0f) {
+                            drawArc(
+                                brush = Brush.sweepGradient(
+                                    listOf(Color(0xFF00D4FF), Color(0xFF9B30FF), Color(0xFF00D4FF))
+                                ),
+                                startAngle = -90f,
+                                sweepAngle = sweep,
+                                useCenter = false,
+                                topLeft = topLeft,
+                                size = sizeObj,
+                                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                            )
+                        }
+                    }
+
+                    Surface(
+                        modifier = Modifier.size(76.dp),
+                        shape = CircleShape,
+                        color = Color(0xFF0B0B0F).copy(alpha = 0.85f),
+                        border = BorderStroke(1.5.dp, Brush.linearGradient(listOf(Color(0xFF00D4FF), Color(0xFF9B30FF))))
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            if (isPlaying) {
+                                PauseIconCustom(tint = Color.White, modifier = Modifier.size(32.dp))
+                            } else {
+                                PlayIconCustom(tint = Color.White, modifier = Modifier.size(32.dp))
+                            }
+                        }
                     }
                 }
 
-                Column(
+                // Glassmorphic Control Panel at bottom (24dp corners, gradient border #00D4FF to #9B30FF)
+                Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .background(Color.Black.copy(alpha = 0.7f))
+                        .padding(16.dp)
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(Color(0xFF0B0B0F).copy(alpha = 0.88f))
+                        .border(1.dp, Brush.linearGradient(listOf(Color(0xFF00D4FF), Color(0xFF9B30FF))), RoundedCornerShape(24.dp))
                         .padding(16.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(text = formatDuration(currentPosition), color = Color.White, fontSize = 12.sp)
-                        Text(text = formatDuration(duration), color = Color.White, fontSize = 12.sp)
-                    }
-
-                    Slider(
-                        value = if (duration > 0) currentPosition.toFloat() else 0f,
-                        onValueChange = { newValue ->
-                            currentPosition = newValue.toLong()
-                            playerManager.seekTo(currentPosition)
-                        },
-                        valueRange = 0f..(if (duration > 0) duration.toFloat() else 1f),
-                        colors = SliderDefaults.colors(
-                            thumbColor = Color(0xFFFF8800),
-                            activeTrackColor = Color(0xFFFF8800),
-                            inactiveTrackColor = Color.DarkGray
-                        ),
+                    Column(
                         modifier = Modifier.fillMaxWidth()
-                    )
+                    ) {
+                        // Time indicators
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(text = formatDuration(currentPosition), color = Color(0xFF00D4FF), fontSize = 12.sp)
+                            Text(text = formatDuration(duration), color = Color.White, fontSize = 12.sp)
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        // Seekbar with gradient fill feel
+                        Slider(
+                            value = if (duration > 0) currentPosition.toFloat() else 0f,
+                            onValueChange = { newValue ->
+                                currentPosition = newValue.toLong()
+                                playerManager.seekTo(currentPosition)
+                            },
+                            valueRange = 0f..(if (duration > 0) duration.toFloat() else 1f),
+                            colors = SliderDefaults.colors(
+                                thumbColor = Color(0xFF00D4FF),
+                                activeTrackColor = Color(0xFF00D4FF),
+                                inactiveTrackColor = Color.DarkGray
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Row of control buttons: Fullscreen, Previous, Play/Pause, Next, Three dots (speed)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceAround,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Fullscreen button
+                            IconButton(onClick = { isFullscreen = !isFullscreen }) {
+                                FullscreenIconCustom(tint = Color.White)
+                            }
+
+                            // Previous video button
+                            IconButton(
+                                onClick = {
+                                    prevVideo?.let {
+                                        currentVideoUri = it.uri.toString()
+                                    } ?: Toast.makeText(context, "Это первое видео", Toast.LENGTH_SHORT).show()
+                                }
+                            ) {
+                                PreviousIconCustom(tint = if (prevVideo != null) Color.White else Color.Gray)
+                            }
+
+                            // Play/Pause button in panel
+                            IconButton(
+                                onClick = {
+                                    if (isPlaying) {
+                                        playerManager.pause()
+                                        isPlaying = false
+                                    } else {
+                                        playerManager.resume()
+                                        isPlaying = true
+                                    }
+                                },
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .background(Color(0xFF1E1E2C), CircleShape)
+                                    .border(1.dp, Brush.linearGradient(listOf(Color(0xFF00D4FF), Color(0xFF9B30FF))), CircleShape)
+                            ) {
+                                if (isPlaying) {
+                                    PauseIconCustom(tint = Color.White, modifier = Modifier.size(20.dp))
+                                } else {
+                                    PlayIconCustom(tint = Color.White, modifier = Modifier.size(20.dp))
+                                }
+                            }
+
+                            // Next video button
+                            IconButton(
+                                onClick = {
+                                    nextVideo?.let {
+                                        currentVideoUri = it.uri.toString()
+                                    } ?: Toast.makeText(context, "Это последнее видео", Toast.LENGTH_SHORT).show()
+                                }
+                            ) {
+                                NextIconCustom(tint = if (nextVideo != null) Color.White else Color.Gray)
+                            }
+
+                            // Three dots menu (playback speed)
+                            Box {
+                                IconButton(onClick = { showSpeedMenu = true }) {
+                                    SpeedIconCustom(tint = Color.White)
+                                }
+                                DropdownMenu(
+                                    expanded = showSpeedMenu,
+                                    onDismissRequest = { showSpeedMenu = false },
+                                    modifier = Modifier.background(Color(0xFF0B0B0F)).border(1.dp, Brush.linearGradient(listOf(Color(0xFF00D4FF), Color(0xFF9B30FF))), RoundedCornerShape(8.dp))
+                                ) {
+                                    listOf(0.5f, 1f, 1.5f, 2f).forEach { speed ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Text(
+                                                    text = "${speed}x" + if (currentSpeed == speed) " (активно)" else "",
+                                                    color = if (currentSpeed == speed) Color(0xFF00D4FF) else Color.White
+                                                )
+                                            },
+                                            onClick = {
+                                                currentSpeed = speed
+                                                playerManager.setRate(speed)
+                                                showSpeedMenu = false
+                                                Toast.makeText(context, "Скорость: ${speed}x", Toast.LENGTH_SHORT).show()
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+// Custom Icon Composables drawn via Canvas (No Icons.Default.Pause/SkipNext/SkipPrevious/Fullscreen)
+@Composable
+fun PlayIconCustom(tint: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier.size(24.dp)) {
+        val path = androidx.compose.ui.graphics.Path().apply {
+            moveTo(6f, 4f)
+            lineTo(20f, 12f)
+            lineTo(6f, 20f)
+            close()
+        }
+        drawPath(path, color = tint)
+    }
+}
+
+@Composable
+fun PauseIconCustom(tint: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier.size(24.dp)) {
+        drawRect(color = tint, topLeft = androidx.compose.ui.geometry.Offset(5f, 3f), size = androidx.compose.ui.geometry.Size(4f, 18f))
+        drawRect(color = tint, topLeft = androidx.compose.ui.geometry.Offset(15f, 3f), size = androidx.compose.ui.geometry.Size(4f, 18f))
+    }
+}
+
+@Composable
+fun PreviousIconCustom(tint: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier.size(24.dp)) {
+        drawRect(color = tint, topLeft = androidx.compose.ui.geometry.Offset(4f, 4f), size = androidx.compose.ui.geometry.Size(3f, 16f))
+        val path = androidx.compose.ui.graphics.Path().apply {
+            moveTo(20f, 4f)
+            lineTo(9f, 12f)
+            lineTo(20f, 20f)
+            close()
+        }
+        drawPath(path, color = tint)
+    }
+}
+
+@Composable
+fun NextIconCustom(tint: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier.size(24.dp)) {
+        val path = androidx.compose.ui.graphics.Path().apply {
+            moveTo(4f, 4f)
+            lineTo(15f, 12f)
+            lineTo(4f, 20f)
+            close()
+        }
+        drawPath(path, color = tint)
+        drawRect(color = tint, topLeft = androidx.compose.ui.geometry.Offset(17f, 4f), size = androidx.compose.ui.geometry.Size(3f, 16f))
+    }
+}
+
+@Composable
+fun FullscreenIconCustom(tint: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier.size(24.dp)) {
+        val w = size.width
+        val h = size.height
+        val stroke = 2.dp.toPx()
+        drawLine(color = tint, start = androidx.compose.ui.geometry.Offset(2f, 2f), end = androidx.compose.ui.geometry.Offset(8f, 2f), strokeWidth = stroke)
+        drawLine(color = tint, start = androidx.compose.ui.geometry.Offset(2f, 2f), end = androidx.compose.ui.geometry.Offset(2f, 8f), strokeWidth = stroke)
+
+        drawLine(color = tint, start = androidx.compose.ui.geometry.Offset(w - 2f, 2f), end = androidx.compose.ui.geometry.Offset(w - 8f, 2f), strokeWidth = stroke)
+        drawLine(color = tint, start = androidx.compose.ui.geometry.Offset(w - 2f, 2f), end = androidx.compose.ui.geometry.Offset(w - 2f, 8f), strokeWidth = stroke)
+
+        drawLine(color = tint, start = androidx.compose.ui.geometry.Offset(2f, h - 2f), end = androidx.compose.ui.geometry.Offset(8f, h - 2f), strokeWidth = stroke)
+        drawLine(color = tint, start = androidx.compose.ui.geometry.Offset(2f, h - 2f), end = androidx.compose.ui.geometry.Offset(2f, h - 8f), strokeWidth = stroke)
+
+        drawLine(color = tint, start = androidx.compose.ui.geometry.Offset(w - 2f, h - 2f), end = androidx.compose.ui.geometry.Offset(w - 8f, h - 2f), strokeWidth = stroke)
+        drawLine(color = tint, start = androidx.compose.ui.geometry.Offset(w - 2f, h - 2f), end = androidx.compose.ui.geometry.Offset(w - 2f, h - 8f), strokeWidth = stroke)
+    }
+}
+
+@Composable
+fun SpeedIconCustom(tint: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier.size(24.dp)) {
+        drawCircle(color = tint, radius = 2f, center = androidx.compose.ui.geometry.Offset(12f, 5f))
+        drawCircle(color = tint, radius = 2f, center = androidx.compose.ui.geometry.Offset(12f, 12f))
+        drawCircle(color = tint, radius = 2f, center = androidx.compose.ui.geometry.Offset(12f, 19f))
     }
 }

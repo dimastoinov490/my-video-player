@@ -98,6 +98,14 @@ class VlcPlayerManager(context: Context) {
         mediaPlayer.time = newTime
     }
 
+    fun setRate(rate: Float) {
+        try {
+            mediaPlayer.rate = rate
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     fun pause() {
         if (mediaPlayer.isPlaying) {
             mediaPlayer.pause()
