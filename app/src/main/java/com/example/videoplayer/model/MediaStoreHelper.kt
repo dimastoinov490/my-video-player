@@ -8,7 +8,6 @@ import android.provider.MediaStore
 import android.util.Size
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.File
 
 object MediaStoreHelper {
 
@@ -28,7 +27,8 @@ object MediaStoreHelper {
             MediaStore.Video.Media.RESOLUTION,
             MediaStore.Video.Media.WIDTH,
             MediaStore.Video.Media.HEIGHT,
-            MediaStore.Video.Media.DATE_ADDED
+            MediaStore.Video.Media.DATE_ADDED,
+            MediaStore.Video.Media.SIZE
         )
 
         val sortOrder = "${MediaStore.Video.Media.DATE_ADDED} DESC"
@@ -40,24 +40,26 @@ object MediaStoreHelper {
             null,
             sortOrder
         )?.use { cursor ->
-            idCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
-            titleCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.TITLE)
-            displayCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
-            durationCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
-            resolutionCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.RESOLUTION)
-            widthCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.WIDTH)
-            heightCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.HEIGHT)
-            dateCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_ADDED)
+            val idCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
+            val titleCol = cursor.getColumnIndex(MediaStore.Video.Media.TITLE)
+            val displayCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
+            val durationCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
+            val resolutionCol = cursor.getColumnIndex(MediaStore.Video.Media.RESOLUTION)
+            val widthCol = cursor.getColumnIndex(MediaStore.Video.Media.WIDTH)
+            val heightCol = cursor.getColumnIndex(MediaStore.Video.Media.HEIGHT)
+            val dateCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_ADDED)
+            val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
 
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idCol)
-                val displayName = cursor.getString(displayCol) ?: "Video"
-                val title = cursor.getString(titleCol) ?: displayName
+                val displayName = cursor.getString(displayCol) ?: "video.mp4"
+                val title = if (titleCol != -1) cursor.getString(titleCol) ?: displayName else displayName
                 val duration = cursor.getLong(durationCol)
-                val resolution = cursor.getString(resolutionCol) ?: ""
-                val width = cursor.getInt(widthCol)
-                val height = cursor.getInt(heightCol)
+                val resolution = if (resolutionCol != -1) cursor.getString(resolutionCol) ?: "" else ""
+                val width = if (widthCol != -1) cursor.getInt(widthCol) else 0
+                val height = if (heightCol != -1) cursor.getInt(heightCol) else 0
                 val dateAdded = cursor.getLong(dateCol)
+                val size = if (sizeCol != -1) cursor.getLong(sizeCol) else 0L
 
                 val uri = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id)
 
@@ -65,27 +67,20 @@ object MediaStoreHelper {
                     VideoItem(
                         id = id,
                         title = title,
+                        displayName = displayName,
                         uri = uri,
                         duration = duration,
                         resolution = resolution,
                         width = width,
                         height = height,
-                        dateAdded = dateAdded
+                        dateAdded = dateAdded,
+                        size = size
                     )
                 )
             }
         }
         list
     }
-
-    private var idCol = 0
-    private var titleCol = 0
-    private var displayCol = 0
-    private var durationCol = 0
-    private var resolutionCol = 0
-    private var widthCol = 0
-    private var heightCol = 0
-    private var dateCol = 0
 
     suspend fun loadThumbnail(context: Context, id: Long): Bitmap? = withContext(Dispatchers.IO) {
         try {
