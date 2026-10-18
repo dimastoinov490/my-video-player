@@ -33,7 +33,6 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -409,14 +408,20 @@ fun PlayerScreen(
 
                         Spacer(modifier = Modifier.height(4.dp))
 
-                        // Custom Seekbar (track 3-4dp, thumb 12-16dp, gradient)
-                        GradientSeekbar(
-                            value = currentPosition,
-                            duration = duration,
-                            onValueChange = { newPos ->
-                                currentPosition = newPos
+                        // Standard Seekbar (3-4dp track, thumb)
+                        Slider(
+                            value = if (duration > 0) currentPosition.toFloat() else 0f,
+                            onValueChange = { newValue ->
+                                currentPosition = newValue.toLong()
                                 playerManager.seekTo(currentPosition)
-                            }
+                            },
+                            valueRange = 0f..(if (duration > 0) duration.toFloat() else 1f),
+                            colors = SliderDefaults.colors(
+                                thumbColor = Color(0xFF00D4FF),
+                                activeTrackColor = Color(0xFF00D4FF),
+                                inactiveTrackColor = Color.DarkGray
+                            ),
+                            modifier = Modifier.fillMaxWidth()
                         )
 
                         Spacer(modifier = Modifier.height(8.dp))
@@ -542,72 +547,8 @@ fun PlayerScreen(
     }
 }
 
-// Custom Seekbar with 4dp track and 14dp thumb, gradient active track
-@Composable
-fun GradientSeekbar(
-    value: Long,
-    duration: Long,
-    onValueChange: (Long) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    BoxWithConstraints(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(28.dp)
-            .pointerInput(Unit) {
-                detectHorizontalDragGestures { change, _ ->
-                    val width = constraints.maxWidth.toFloat()
-                    if (width > 0f && duration > 0L) {
-                        val fraction = (change.position.x / width).coerceIn(0f, 1f)
-                        onValueChange((fraction * duration).toLong())
-                    }
-                }
-            }
-            .pointerInput(Unit) {
-                detectTapGestures { offset ->
-                    val width = constraints.maxWidth.toFloat()
-                    if (width > 0f && duration > 0L) {
-                        val fraction = (offset.x / width).coerceIn(0f, 1f)
-                        onValueChange((fraction * duration).toLong())
-                    }
-                }
-            },
-        contentAlignment = Alignment.CenterStart
-    ) {
-        val fraction = if (duration > 0L) (value.toFloat() / duration.toFloat()).coerceIn(0f, 1f) else 0f
-        val trackHeight = 4.dp
-        val thumbSize = 14.dp
-        val widthPx = constraints.maxWidth.toFloat()
-        val thumbOffsetPx = widthPx * fraction
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(trackHeight)
-                .clip(RoundedCornerShape(2.dp))
-                .background(Color.DarkGray)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(fraction)
-                    .background(Brush.horizontalGradient(listOf(Color(0xFF00D4FF), Color(0xFF9B30FF))))
-            )
-        }
-
-        // Thumb
-        Box(
-            modifier = Modifier
-                .offset(x = with(LocalDensity.current) { (thumbOffsetPx - thumbSize.toPx() / 2).toDp() })
-                .size(thumbSize)
-                .background(Color(0xFF00D4FF), CircleShape)
-                .border(1.dp, Color.White, CircleShape)
-        )
-    }
-}
-
-// Format duration helper
-fun formatDuration(ms: Long): String {
+// Format duration helper (private to avoid conflict)
+private fun formatDuration(ms: Long): String {
     val totalSeconds = ms / 1000
     val hours = totalSeconds / 3600
     val minutes = (totalSeconds % 3600) / 60
