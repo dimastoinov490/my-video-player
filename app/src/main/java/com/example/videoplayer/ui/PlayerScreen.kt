@@ -11,24 +11,23 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
@@ -60,10 +59,35 @@ fun PlayerScreen(
     var playerStatus by remember { mutableStateOf("Buffering...") }
     var showControls by remember { mutableStateOf(true) }
     var gestureIndicatorText by remember { mutableStateOf<String?>(null) }
-    var showSpeedMenu by remember { mutableStateOf(false) }
-    var currentSpeed by remember { mutableStateOf(1f) }
-    var isFullscreen by remember { mutableStateOf(false) }
     var isLooping by remember { mutableStateOf(false) }
+
+    // Master horizontal gradient matching #03B6F7 -> #5F6BF7 -> #B14BF7
+    val masterGradient = Brush.horizontalGradient(
+        listOf(Color(0xFF03B6F7), Color(0xFF5F6BF7), Color(0xFFB14BF7))
+    )
+
+    // Helper function to get color based on horizontal fraction (0.0 to 1.0)
+    fun colorForFraction(fraction: Float): Color {
+        val f = fraction.coerceIn(0f, 1f)
+        return when {
+            f < 0.5f -> {
+                val t = f * 2f
+                Color(
+                    red = 0x03 + (0x5F - 0x03) * t / 255f,
+                    green = 0xB6 + (0x6F - 0xB6) * t / 255f, // approx
+                    blue = 0xF7
+                )
+            }
+            else -> {
+                val t = (f - 0.5f) * 2f
+                Color(
+                    red = 0x5F + (0xB1 - 0x5F) * t / 255f,
+                    green = 0x6B + (0x4B - 0x6B) * t / 255f,
+                    blue = 0xF7
+                )
+            }
+        }
+    }
 
     // Load videos list for previous/next navigation
     LaunchedEffect(Unit) {
@@ -82,18 +106,14 @@ fun PlayerScreen(
     val nextVideo = if (currentIndex != -1 && currentIndex < videos.size - 1) videos[currentIndex + 1] else null
 
     // Keep screen on and immersive mode
-    DisposableEffect(activity, isFullscreen) {
+    DisposableEffect(activity) {
         activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        val uiFlags = if (isFullscreen) {
-            android.view.View.SYSTEM_UI_FLAG_VISIBLE
-        } else {
-            (android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                    or android.view.View.SYSTEM_UI_FLAG_FULLSCREEN
-                    or android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                    or android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                    or android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                    or android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN)
-        }
+        val uiFlags = (android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                or android.view.View.SYSTEM_UI_FLAG_FULLSCREEN
+                or android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                or android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                or android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                or android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN)
         activity?.window?.decorView?.systemUiVisibility = uiFlags
 
         onDispose {
@@ -198,6 +218,7 @@ fun PlayerScreen(
                 )
             }
     ) {
+        // Video SurfaceView
         AndroidView(
             factory = { ctx ->
                 SurfaceView(ctx).apply {
@@ -219,32 +240,19 @@ fun PlayerScreen(
             modifier = Modifier.fillMaxSize()
         )
 
+        // Gesture indicator
         if (gestureIndicatorText != null) {
             Box(
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .background(Color(0xFF0B0B0F).copy(alpha = 0.8f), RoundedCornerShape(12.dp))
-                    .border(1.dp, Brush.linearGradient(listOf(Color(0xFF00D4FF), Color(0xFF9B30FF))), RoundedCornerShape(12.dp))
+                    .background(Color(0xFF0B0B0F).copy(alpha = 0.8f), CircleShape)
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
                 Text(text = gestureIndicatorText!!, color = Color.White, fontSize = 16.sp)
             }
         }
 
-        val showBuffering = prefs.getBoolean("show_buffering_status", false)
-
-        if (playerStatus.startsWith("Error") || (showBuffering && playerStatus.contains("Buffering"))) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .background(Color(0xFF0B0B0F).copy(alpha = 0.8f), RoundedCornerShape(12.dp))
-                    .border(1.dp, Brush.linearGradient(listOf(Color(0xFF00D4FF), Color(0xFF9B30FF))), RoundedCornerShape(12.dp))
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-            ) {
-                Text(text = playerStatus, color = Color.White, fontSize = 14.sp)
-            }
-        }
-
+        // Controls Overlay (No framed panel, direct on video with slight gradient shading)
         AnimatedVisibility(
             visible = showControls,
             enter = fadeIn(),
@@ -254,292 +262,366 @@ fun PlayerScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.5f))
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                Color.Black.copy(alpha = 0.5f),
+                                Color.Transparent,
+                                Color.Transparent,
+                                Color.Black.copy(alpha = 0.6f)
+                            )
+                        )
+                    )
             ) {
-                // Top Bar matching mockup (App Icon, Nexora, Video Title, Cast, Menu)
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                BoxWithConstraints(
+                    modifier = Modifier.fillMaxSize()
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
+                    val screenWidthDp = maxWidth
+                    val screenHeightDp = maxHeight
+
+                    // 3) Верхний ряд, центр по вертикали на 13% высоты
+                    val topRowY = screenHeightDp * 0.13f
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .absoluteOffset(y = topRowY - 18.dp) // centering roughly 36dp row
+                            .padding(horizontal = 33.dp),
+                        contentAlignment = Alignment.CenterStart
                     ) {
-                        // App Logo box (36dp, gradient border)
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .background(Color(0xFF0B0B0F), RoundedCornerShape(12.dp))
-                                .border(1.dp, Brush.linearGradient(listOf(Color(0xFF00D4FF), Color(0xFF9B30FF))), RoundedCornerShape(12.dp)),
-                            contentAlignment = Alignment.Center
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            PlayIconCustom(tint = Color(0xFF00D4FF), modifier = Modifier.size(16.dp))
-                        }
+                            // Логотип приложения 30dp
+                            Box(
+                                modifier = Modifier
+                                    .size(30.dp)
+                                    .background(Color(0xFF0B0B0F).copy(alpha = 0.8f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                PlayIconCustom(tint = Color(0xFF03B6F7), modifier = Modifier.size(14.dp))
+                            }
 
-                        Spacer(modifier = Modifier.width(12.dp))
+                            Spacer(modifier = Modifier.width(12.dp))
 
-                        Text(
-                            text = "Nexora",
-                            color = Color(0xFF00D4FF),
-                            fontSize = 18.sp,
-                            style = MaterialTheme.typography.titleMedium
-                        )
+                            // "Nexora" 18sp градиентом
+                            Text(
+                                text = "Nexora",
+                                color = Color(0xFF03B6F7), // Fallback, shader or gradient text if needed
+                                fontSize = 18.sp
+                            )
 
-                        Spacer(modifier = Modifier.width(16.dp))
+                            Spacer(modifier = Modifier.width(16.dp))
 
-                        Text(
-                            text = videoTitle,
-                            color = Color.White,
-                            fontSize = 14.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
+                            // Название видео 14sp цветом #D6E7FB
+                            Text(
+                                text = videoTitle,
+                                color = Color(0xFFD6E7FB),
+                                fontSize = 14.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
 
-                        Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(16.dp))
 
-                        // Cast button (24-30dp)
-                        IconButton(
-                            onClick = { Toast.makeText(context, "Трансляция не подключена", Toast.LENGTH_SHORT).show() },
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            CastIconCustom(tint = Color.White)
-                        }
+                            // Справа значок трансляции 22x18dp (в 48dp кликабельной области)
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clickable {
+                                        Toast.makeText(context, "Скоро", Toast.LENGTH_SHORT).show()
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CastIconCustom(tint = Color(0xFFB14BF7), width = 22.dp, height = 18.dp)
+                            }
 
-                        // Overflow menu button
-                        IconButton(
-                            onClick = { showSpeedMenu = true },
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            MenuIconCustom(tint = Color.White)
+                            Spacer(modifier = Modifier.width(8.dp))
+
+                            // и три точки 4x17dp
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clickable {
+                                        Toast.makeText(context, "Скоро", Toast.LENGTH_SHORT).show()
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                VerticalDotsIconCustom(tint = Color(0xFFB14BF7), width = 4.dp, height = 17.dp)
+                            }
                         }
                     }
-                }
 
-                // Center large round Play/Pause button with gradient progress ring
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .size(90.dp)
-                        .clickable {
-                            if (isPlaying) {
-                                playerManager.pause()
-                                isPlaying = false
-                            } else {
-                                playerManager.resume()
-                                isPlaying = true
-                            }
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    val progressFraction = if (duration > 0) (currentPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f) else 0f
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        val strokeWidth = 4.dp.toPx()
-                        val diameter = size.minDimension - strokeWidth
-                        val topLeft = androidx.compose.ui.geometry.Offset(strokeWidth / 2, strokeWidth / 2)
-                        val sizeObj = androidx.compose.ui.geometry.Size(diameter, diameter)
+                    // 4) Центр на 47% высоты, по центру ширины: кольцо диаметром 76dp, толщина 3.5dp, градиент от #00D8FF слева до #AF5FFF справа, лёгкое свечение. Внутри треугольник Play 15x18dp или две полоски такого же размера.
+                    val centerY = screenHeightDp * 0.47f
+                    Box(
+                        modifier = Modifier
+                            .size(76.dp)
+                            .absoluteOffset(
+                                x = (screenWidthDp - 76.dp) / 2,
+                                y = centerY - 38.dp
+                            )
+                            .clickable {
+                                if (isPlaying) {
+                                    playerManager.pause()
+                                    isPlaying = false
+                                } else {
+                                    playerManager.resume()
+                                    isPlaying = true
+                                }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Canvas(modifier = Modifier.fillMaxSize()) {
+                            val strokeWidth = 3.5.dp.toPx()
+                            val radius = (size.minDimension - strokeWidth) / 2
+                            val center = Offset(size.width / 2, size.height / 2)
 
-                        drawArc(
-                            color = Color.DarkGray.copy(alpha = 0.4f),
-                            startAngle = -90f,
-                            sweepAngle = 360f,
-                            useCenter = false,
-                            topLeft = topLeft,
-                            size = sizeObj,
-                            style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
-                        )
-
-                        val sweep = progressFraction * 360f
-                        if (sweep > 0f) {
-                            drawArc(
-                                brush = Brush.sweepGradient(
-                                    listOf(Color(0xFF00D4FF), Color(0xFF9B30FF), Color(0xFF00D4FF))
+                            // Gradient ring #00D8FF to #AF5FFF
+                            drawCircle(
+                                brush = Brush.linearGradient(
+                                    listOf(Color(0xFF00D8FF), Color(0xFFAF5FFF)),
+                                    start = Offset(0f, size.height / 2),
+                                    end = Offset(size.width, size.height / 2)
                                 ),
-                                startAngle = -90f,
-                                sweepAngle = sweep,
-                                useCenter = false,
-                                topLeft = topLeft,
-                                size = sizeObj,
+                                radius = radius,
+                                center = center,
                                 style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
                             )
                         }
-                    }
 
-                    Surface(
-                        modifier = Modifier.size(68.dp),
-                        shape = CircleShape,
-                        color = Color(0xFF0B0B0F).copy(alpha = 0.85f),
-                        border = BorderStroke(1.dp, Brush.linearGradient(listOf(Color(0xFF00D4FF), Color(0xFF9B30FF))))
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            if (isPlaying) {
-                                PauseIconCustom(tint = Color.White, modifier = Modifier.size(28.dp))
-                            } else {
-                                PlayIconCustom(tint = Color.White, modifier = Modifier.size(28.dp))
-                            }
+                        // Inside icon: Play 15x18dp or Pause 15x18dp
+                        if (isPlaying) {
+                            PauseIconCustom(tint = Color.White, width = 15.dp, height = 18.dp)
+                        } else {
+                            PlayIconCustom(tint = Color.White, width = 15.dp, height = 18.dp)
                         }
                     }
-                }
 
-                // Glassmorphic Control Panel at bottom (24dp corners, gradient border #00D4FF to #9B30FF)
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .padding(16.dp)
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(Color(0xFF0B0B0F).copy(alpha = 0.88f))
-                        .border(1.dp, Brush.linearGradient(listOf(Color(0xFF00D4FF), Color(0xFF9B30FF))), RoundedCornerShape(24.dp))
-                        .padding(16.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth()
+                    // 5) Полоса перемотки на 75% высоты, от 25dp слева до 29dp справа: толщина 3dp, градиент из п.2, бегунок 16dp. Сделай через Canvas и pointerInput (тап и перетаскивание)
+                    val seekbarY = screenHeightDp * 0.75f
+                    val seekbarLeftPadding = 25.dp
+                    val seekbarRightPadding = 29.dp
+
+                    // Время над полосой слева #00F9FF и справа #CBAAFF, 10sp.
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .absoluteOffset(y = seekbarY - 24.dp)
+                            .padding(horizontal = seekbarLeftPadding)
                     ) {
-                        // Time indicators
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(text = formatDuration(currentPosition), color = Color(0xFF00D4FF), fontSize = 12.sp)
-                            Text(text = formatDuration(duration), color = Color.White, fontSize = 12.sp)
+                            Text(text = formatDuration(currentPosition), color = Color(0xFF00F9FF), fontSize = 10.sp)
+                            Text(text = formatDuration(duration), color = Color(0xFFCBAAFF), fontSize = 10.sp)
                         }
+                    }
 
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        // Standard Seekbar (3-4dp track, thumb)
-                        Slider(
-                            value = if (duration > 0) currentPosition.toFloat() else 0f,
-                            onValueChange = { newValue ->
-                                currentPosition = newValue.toLong()
-                                playerManager.seekTo(currentPosition)
+                    // Seekbar Canvas & Touch
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .absoluteOffset(
+                                x = seekbarLeftPadding,
+                                y = seekbarY - 24.dp
+                            )
+                            .padding(horizontal = 0.dp) // handled by width offset
+                            .pointerInput(duration) {
+                                detectTapGestures { offset ->
+                                    val totalWidth = size.width.toFloat()
+                                    if (totalWidth > 0 && duration > 0) {
+                                        val clickFraction = (offset.x / totalWidth).coerceIn(0f, 1f)
+                                        val newPos = (clickFraction * duration).toLong()
+                                        currentPosition = newPos
+                                        playerManager.seekTo(newPos)
+                                    }
+                                }
+                            }
+                            .pointerInput(duration) {
+                                detectHorizontalDragGestures { change, _ ->
+                                    val totalWidth = size.width.toFloat()
+                                    if (totalWidth > 0 && duration > 0) {
+                                        val dragFraction = (change.position.x / totalWidth).coerceIn(0f, 1f)
+                                        val newPos = (dragFraction * duration).toLong()
+                                        currentPosition = newPos
+                                        playerManager.seekTo(newPos)
+                                    }
+                                }
                             },
-                            valueRange = 0f..(if (duration > 0) duration.toFloat() else 1f),
-                            colors = SliderDefaults.colors(
-                                thumbColor = Color(0xFF00D4FF),
-                                activeTrackColor = Color(0xFF00D4FF),
-                                inactiveTrackColor = Color.DarkGray
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        // Row of control buttons: Subtitle, Repeat, Previous, Play/Pause (48-56dp), Next, Fullscreen, Menu
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Canvas(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(3.dp)
                         ) {
-                            // 1. Subtitle / Aspect ratio button (24-30dp)
-                            IconButton(
-                                onClick = { Toast.makeText(context, "Субтитры / Соотношение сторон", Toast.LENGTH_SHORT).show() },
-                                modifier = Modifier.size(30.dp)
-                            ) {
-                                SubtitleIconCustom(tint = Color.White)
+                            val trackWidth = size.width
+                            val progressFraction = if (duration > 0) (currentPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f) else 0f
+                            val thumbX = trackWidth * progressFraction
+
+                            // Background inactive track
+                            drawLine(
+                                color = Color.DarkGray.copy(alpha = 0.5f),
+                                start = Offset(0f, size.height / 2),
+                                end = Offset(trackWidth, size.height / 2),
+                                strokeWidth = size.height,
+                                cap = StrokeCap.Round
+                            )
+
+                            // Active gradient track
+                            if (progressFraction > 0f) {
+                                drawLine(
+                                    brush = masterGradient,
+                                    start = Offset(0f, size.height / 2),
+                                    end = Offset(thumbX, size.height / 2),
+                                    strokeWidth = size.height,
+                                    cap = StrokeCap.Round
+                                )
                             }
 
-                            // 2. Repeat button (24-30dp)
-                            IconButton(
-                                onClick = {
-                                    isLooping = !isLooping
-                                    Toast.makeText(context, if (isLooping) "Повтор включен" else "Повтор выключен", Toast.LENGTH_SHORT).show()
-                                },
-                                modifier = Modifier.size(30.dp)
-                            ) {
-                                RepeatIconCustom(tint = if (isLooping) Color(0xFF00D4FF) else Color.White)
-                            }
+                            // Thumb (16dp diameter)
+                            drawCircle(
+                                color = Color.White,
+                                radius = 8.dp.toPx(),
+                                center = Offset(thumbX, size.height / 2)
+                            )
+                        }
+                    }
 
-                            // 3. Previous video button (24-30dp)
-                            IconButton(
-                                onClick = {
-                                    prevVideo?.let {
-                                        currentVideoUri = it.uri.toString()
-                                    } ?: Toast.makeText(context, "Это первое видео", Toast.LENGTH_SHORT).show()
-                                },
-                                modifier = Modifier.size(30.dp)
-                            ) {
-                                PreviousIconCustom(tint = if (prevVideo != null) Color.White else Color.Gray)
-                            }
+                    // 6) Нижний ряд на 86% высоты.
+                    // Слева субтитры 24x20dp (x 33dp) и повтор 20x19dp (x 100dp).
+                    // По центру три элемента с шагом 73dp между центрами: предыдущее 15x15dp, круглая кнопка диаметром 38dp с градиентным кольцом (внутри Play 10x12dp), следующее 15x15dp.
+                    // Справа пропорции 25x20dp (x 741dp) и три точки 5x18dp (x 817dp).
+                    val bottomRowY = screenHeightDp * 0.86f
 
-                            // 4. Center Play/Pause button in panel (48-56dp)
-                            IconButton(
-                                onClick = {
-                                    if (isPlaying) {
-                                        playerManager.pause()
-                                        isPlaying = false
-                                    } else {
-                                        playerManager.resume()
-                                        isPlaying = true
-                                    }
-                                },
-                                modifier = Modifier
-                                    .size(52.dp)
-                                    .background(Color(0xFF1E1E2C), CircleShape)
-                                    .border(1.dp, Brush.linearGradient(listOf(Color(0xFF00D4FF), Color(0xFF9B30FF))), CircleShape)
-                            ) {
+                    // Left group: Subtitles (x=33dp), Repeat (x=100dp)
+                    Box(
+                        modifier = Modifier
+                            .absoluteOffset(x = 33.dp, y = bottomRowY - 24.dp)
+                            .size(48.dp)
+                            .clickable {
+                                Toast.makeText(context, "Скоро", Toast.LENGTH_SHORT).show()
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        SubtitleIconCustom(tint = Color(0xFF03B6F7), width = 24.dp, height = 20.dp)
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .absoluteOffset(x = 100.dp, y = bottomRowY - 24.dp)
+                            .size(48.dp)
+                            .clickable {
+                                isLooping = !isLooping
+                                Toast.makeText(context, if (isLooping) "Повтор включен" else "Повтор выключен", Toast.LENGTH_SHORT).show()
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        RepeatIconCustom(tint = if (isLooping) Color(0xFF03B6F7) else Color(0xFF5F6BF7), width = 20.dp, height = 19.dp)
+                    }
+
+                    // Center group: Previous, Circle Play button, Next (step 73dp between centers)
+                    // Let's place center group around screen width center.
+                    val centerGroupLeft = (screenWidthDp - (73.dp * 2 + 38.dp)) / 2 // approx center calculation
+
+                    // Previous (15x15dp)
+                    Box(
+                        modifier = Modifier
+                            .absoluteOffset(x = centerGroupLeft, y = bottomRowY - 24.dp)
+                            .size(48.dp)
+                            .clickable {
+                                prevVideo?.let {
+                                    currentVideoUri = it.uri.toString()
+                                } ?: Toast.makeText(context, "Это первое видео", Toast.LENGTH_SHORT).show()
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        PreviousIconCustom(tint = Color(0xFF5F6BF7), width = 15.dp, height = 15.dp)
+                    }
+
+                    // Circle Play button (diameter 38dp, gradient ring, inside Play 10x12dp)
+                    Box(
+                        modifier = Modifier
+                            .absoluteOffset(x = centerGroupLeft + 73.dp - 5.dp, y = bottomRowY - 24.dp)
+                            .size(48.dp)
+                            .clickable {
                                 if (isPlaying) {
-                                    PauseIconCustom(tint = Color.White, modifier = Modifier.size(22.dp))
+                                    playerManager.pause()
+                                    isPlaying = false
                                 } else {
-                                    PlayIconCustom(tint = Color.White, modifier = Modifier.size(22.dp))
+                                    playerManager.resume()
+                                    isPlaying = true
                                 }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .background(Color(0xFF0B0B0F), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Canvas(modifier = Modifier.fillMaxSize()) {
+                                val strokeWidth = 2.dp.toPx()
+                                drawCircle(
+                                    brush = masterGradient,
+                                    radius = (size.minDimension - strokeWidth) / 2,
+                                    center = Offset(size.width / 2, size.height / 2),
+                                    style = Stroke(width = strokeWidth)
+                                )
                             }
-
-                            // 5. Next video button (24-30dp)
-                            IconButton(
-                                onClick = {
-                                    nextVideo?.let {
-                                        currentVideoUri = it.uri.toString()
-                                    } ?: Toast.makeText(context, "Это последнее видео", Toast.LENGTH_SHORT).show()
-                                },
-                                modifier = Modifier.size(30.dp)
-                            ) {
-                                NextIconCustom(tint = if (nextVideo != null) Color.White else Color.Gray)
-                            }
-
-                            // 6. Fullscreen button (24-30dp)
-                            IconButton(
-                                onClick = { isFullscreen = !isFullscreen },
-                                modifier = Modifier.size(30.dp)
-                            ) {
-                                FullscreenIconCustom(tint = Color.White)
-                            }
-
-                            // 7. Three dots menu (speed & options) (24-30dp)
-                            Box {
-                                IconButton(
-                                    onClick = { showSpeedMenu = true },
-                                    modifier = Modifier.size(30.dp)
-                                ) {
-                                    MenuIconCustom(tint = Color.White)
-                                }
-                                DropdownMenu(
-                                    expanded = showSpeedMenu,
-                                    onDismissRequest = { showSpeedMenu = false },
-                                    modifier = Modifier
-                                        .background(Color(0xFF0B0B0F))
-                                        .border(1.dp, Brush.linearGradient(listOf(Color(0xFF00D4FF), Color(0xFF9B30FF))), RoundedCornerShape(8.dp))
-                                ) {
-                                    listOf(0.5f, 1f, 1.5f, 2f).forEach { speed ->
-                                        DropdownMenuItem(
-                                            text = {
-                                                Text(
-                                                    text = "${speed}x" + if (currentSpeed == speed) " (активно)" else "",
-                                                    color = if (currentSpeed == speed) Color(0xFF00D4FF) else Color.White
-                                                )
-                                            },
-                                            onClick = {
-                                                currentSpeed = speed
-                                                playerManager.setRate(speed)
-                                                showSpeedMenu = false
-                                                Toast.makeText(context, "Скорость: ${speed}x", Toast.LENGTH_SHORT).show()
-                                            }
-                                        )
-                                    }
-                                }
+                            if (isPlaying) {
+                                PauseIconCustom(tint = Color(0xFF5F6BF7), width = 10.dp, height = 12.dp)
+                            } else {
+                                PlayIconCustom(tint = Color(0xFF5F6BF7), width = 10.dp, height = 12.dp)
                             }
                         }
+                    }
+
+                    // Next (15x15dp)
+                    Box(
+                        modifier = Modifier
+                            .absoluteOffset(x = centerGroupLeft + 73.dp * 2, y = bottomRowY - 24.dp)
+                            .size(48.dp)
+                            .clickable {
+                                nextVideo?.let {
+                                    currentVideoUri = it.uri.toString()
+                                } ?: Toast.makeText(context, "Это последнее видео", Toast.LENGTH_SHORT).show()
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        NextIconCustom(tint = Color(0xFFB14BF7), width = 15.dp, height = 15.dp)
+                    }
+
+                    // Right group: Proportions (x 741dp or relative to right) and three dots (x 817dp)
+                    // Given screen width 857dp, let's use exact fixed dp positions as specified
+                    Box(
+                        modifier = Modifier
+                            .absoluteOffset(x = 741.dp, y = bottomRowY - 24.dp)
+                            .size(48.dp)
+                            .clickable {
+                                Toast.makeText(context, "Скоро", Toast.LENGTH_SHORT).show()
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        ProportionsIconCustom(tint = Color(0xFFB14BF7), width = 25.dp, height = 20.dp)
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .absoluteOffset(x = 817.dp, y = bottomRowY - 24.dp)
+                            .size(48.dp)
+                            .clickable {
+                                Toast.makeText(context, "Скоро", Toast.LENGTH_SHORT).show()
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        VerticalDotsIconCustom(tint = Color(0xFFB14BF7), width = 5.dp, height = 18.dp)
                     }
                 }
             }
@@ -547,14 +629,14 @@ fun PlayerScreen(
     }
 }
 
-// Custom Icon Composables drawn via Canvas (No Icons.Default.*)
+// 7) Значки только контуром через Canvas/Path, толщина линии около 2dp, Icons.Default.* не использовать.
 @Composable
-fun PlayIconCustom(tint: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier.size(24.dp)) {
-        val path = androidx.compose.ui.graphics.Path().apply {
-            moveTo(6f, 4f)
-            lineTo(20f, 12f)
-            lineTo(6f, 20f)
+fun PlayIconCustom(tint: Color, width: androidx.compose.ui.unit.Dp, height: androidx.compose.ui.unit.Dp) {
+    Canvas(modifier = Modifier.size(width, height)) {
+        val path = Path().apply {
+            moveTo(0f, 0f)
+            lineTo(size.width, size.height / 2)
+            lineTo(0f, size.height)
             close()
         }
         drawPath(path, color = tint)
@@ -562,21 +644,23 @@ fun PlayIconCustom(tint: Color, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun PauseIconCustom(tint: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier.size(24.dp)) {
-        drawRect(color = tint, topLeft = androidx.compose.ui.geometry.Offset(5f, 3f), size = androidx.compose.ui.geometry.Size(4f, 18f))
-        drawRect(color = tint, topLeft = androidx.compose.ui.geometry.Offset(15f, 3f), size = androidx.compose.ui.geometry.Size(4f, 18f))
+fun PauseIconCustom(tint: Color, width: androidx.compose.ui.unit.Dp, height: androidx.compose.ui.unit.Dp) {
+    Canvas(modifier = Modifier.size(width, height)) {
+        val barWidth = size.width / 3f
+        drawRect(color = tint, topLeft = Offset(0f, 0f), size = Size(barWidth, size.height))
+        drawRect(color = tint, topLeft = Offset(size.width - barWidth, 0f), size = Size(barWidth, size.height))
     }
 }
 
 @Composable
-fun PreviousIconCustom(tint: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier.size(24.dp)) {
-        drawRect(color = tint, topLeft = androidx.compose.ui.geometry.Offset(4f, 4f), size = androidx.compose.ui.geometry.Size(3f, 16f))
-        val path = androidx.compose.ui.graphics.Path().apply {
-            moveTo(20f, 4f)
-            lineTo(9f, 12f)
-            lineTo(20f, 20f)
+fun PreviousIconCustom(tint: Color, width: androidx.compose.ui.unit.Dp, height: androidx.compose.ui.unit.Dp) {
+    Canvas(modifier = Modifier.size(width, height)) {
+        val barWidth = 2.dp.toPx()
+        drawRect(color = tint, topLeft = Offset(0f, 0f), size = Size(barWidth, size.height))
+        val path = Path().apply {
+            moveTo(size.width, 0f)
+            lineTo(barWidth + 2f, size.height / 2)
+            lineTo(size.width, size.height)
             close()
         }
         drawPath(path, color = tint)
@@ -584,87 +668,81 @@ fun PreviousIconCustom(tint: Color, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun NextIconCustom(tint: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier.size(24.dp)) {
-        val path = androidx.compose.ui.graphics.Path().apply {
-            moveTo(4f, 4f)
-            lineTo(15f, 12f)
-            lineTo(4f, 20f)
+fun NextIconCustom(tint: Color, width: androidx.compose.ui.unit.Dp, height: androidx.compose.ui.unit.Dp) {
+    Canvas(modifier = Modifier.size(width, height)) {
+        val barWidth = 2.dp.toPx()
+        val path = Path().apply {
+            moveTo(0f, 0f)
+            lineTo(size.width - barWidth - 2f, size.height / 2)
+            lineTo(0f, size.height)
             close()
         }
         drawPath(path, color = tint)
-        drawRect(color = tint, topLeft = androidx.compose.ui.geometry.Offset(17f, 4f), size = androidx.compose.ui.geometry.Size(3f, 16f))
+        drawRect(color = tint, topLeft = Offset(size.width - barWidth, 0f), size = Size(barWidth, size.height))
     }
 }
 
 @Composable
-fun FullscreenIconCustom(tint: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier.size(24.dp)) {
-        val w = size.width
-        val h = size.height
+fun CastIconCustom(tint: Color, width: androidx.compose.ui.unit.Dp, height: androidx.compose.ui.unit.Dp) {
+    Canvas(modifier = Modifier.size(width, height)) {
         val stroke = 2.dp.toPx()
-        drawLine(color = tint, start = androidx.compose.ui.geometry.Offset(2f, 2f), end = androidx.compose.ui.geometry.Offset(8f, 2f), strokeWidth = stroke)
-        drawLine(color = tint, start = androidx.compose.ui.geometry.Offset(2f, 2f), end = androidx.compose.ui.geometry.Offset(2f, 8f), strokeWidth = stroke)
-
-        drawLine(color = tint, start = androidx.compose.ui.geometry.Offset(w - 2f, 2f), end = androidx.compose.ui.geometry.Offset(w - 8f, 2f), strokeWidth = stroke)
-        drawLine(color = tint, start = androidx.compose.ui.geometry.Offset(w - 2f, 2f), end = androidx.compose.ui.geometry.Offset(w - 2f, 8f), strokeWidth = stroke)
-
-        drawLine(color = tint, start = androidx.compose.ui.geometry.Offset(2f, h - 2f), end = androidx.compose.ui.geometry.Offset(2f, h - 8f), strokeWidth = stroke)
-        drawLine(color = tint, start = androidx.compose.ui.geometry.Offset(2f, h - 2f), end = androidx.compose.ui.geometry.Offset(8f, h - 2f), strokeWidth = stroke)
-
-        drawLine(color = tint, start = androidx.compose.ui.geometry.Offset(w - 2f, h - 2f), end = androidx.compose.ui.geometry.Offset(w - 8f, h - 2f), strokeWidth = stroke)
-        drawLine(color = tint, start = androidx.compose.ui.geometry.Offset(w - 2f, h - 2f), end = androidx.compose.ui.geometry.Offset(w - 2f, h - 8f), strokeWidth = stroke)
-    }
-}
-
-@Composable
-fun CastIconCustom(tint: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier.size(24.dp)) {
-        val stroke = 2.dp.toPx()
-        drawRect(color = tint, topLeft = androidx.compose.ui.geometry.Offset(2f, 4f), size = androidx.compose.ui.geometry.Size(20f, 14f), style = Stroke(width = stroke))
-        drawLine(color = tint, start = androidx.compose.ui.geometry.Offset(6f, 14f), end = androidx.compose.ui.geometry.Offset(6f, 14f), strokeWidth = stroke * 1.5f)
-        drawLine(color = tint, start = androidx.compose.ui.geometry.Offset(9f, 14f), end = androidx.compose.ui.geometry.Offset(9f, 11f), strokeWidth = stroke)
-        drawLine(color = tint, start = androidx.compose.ui.geometry.Offset(12f, 14f), end = androidx.compose.ui.geometry.Offset(12f, 8f), strokeWidth = stroke)
-    }
-}
-
-@Composable
-fun SubtitleIconCustom(tint: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier.size(24.dp)) {
-        val stroke = 2.dp.toPx()
-        drawRoundRect(color = tint, topLeft = androidx.compose.ui.geometry.Offset(2f, 4f), size = androidx.compose.ui.geometry.Size(20f, 16f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(4f, 4f), style = Stroke(width = stroke))
-        drawLine(color = tint, start = androidx.compose.ui.geometry.Offset(6f, 11f), end = androidx.compose.ui.geometry.Offset(14f, 11f), strokeWidth = stroke)
-        drawLine(color = tint, start = androidx.compose.ui.geometry.Offset(6f, 15f), end = androidx.compose.ui.geometry.Offset(11f, 15f), strokeWidth = stroke)
-    }
-}
-
-@Composable
-fun RepeatIconCustom(tint: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier.size(24.dp)) {
-        val stroke = 2.dp.toPx()
-        val path = androidx.compose.ui.graphics.Path().apply {
-            moveTo(4f, 8f)
-            lineTo(16f, 8f)
-            moveTo(13f, 5f)
-            lineTo(16f, 8f)
-            lineTo(13f, 11f)
-
-            moveTo(20f, 16f)
-            lineTo(8f, 16f)
-            moveTo(11f, 13f)
-            lineTo(8f, 16f)
-            lineTo(11f, 19f)
+        drawRect(color = tint, topLeft = Offset(0f, 0f), size = Size(size.width, size.height - 4f), style = Stroke(width = stroke))
+        val path = Path().apply {
+            moveTo(2f, size.height)
+            quadraticBezierTo(size.width / 2, size.height - 8f, size.width - 2f, size.height)
         }
         drawPath(path, color = tint, style = Stroke(width = stroke, cap = StrokeCap.Round))
     }
 }
 
 @Composable
-fun MenuIconCustom(tint: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier.size(24.dp)) {
-        val radius = 2.dp.toPx()
-        drawCircle(color = tint, radius = radius, center = androidx.compose.ui.geometry.Offset(12f, 5f))
-        drawCircle(color = tint, radius = radius, center = androidx.compose.ui.geometry.Offset(12f, 12f))
-        drawCircle(color = tint, radius = radius, center = androidx.compose.ui.geometry.Offset(12f, 19f))
+fun SubtitleIconCustom(tint: Color, width: androidx.compose.ui.unit.Dp, height: androidx.compose.ui.unit.Dp) {
+    Canvas(modifier = Modifier.size(width, height)) {
+        val stroke = 2.dp.toPx()
+        drawRect(color = tint, topLeft = Offset(0f, 0f), size = Size(size.width, size.height), style = Stroke(width = stroke))
+        val lineY = size.height * 0.6f
+        drawLine(color = tint, start = Offset(size.width * 0.2f, lineY), end = Offset(size.width * 0.8f, lineY), strokeWidth = stroke)
+        drawLine(color = tint, start = Offset(size.width * 0.2f, lineY + 4.dp.toPx()), end = Offset(size.width * 0.5f, lineY + 4.dp.toPx()), strokeWidth = stroke)
+    }
+}
+
+@Composable
+fun RepeatIconCustom(tint: Color, width: androidx.compose.ui.unit.Dp, height: androidx.compose.ui.unit.Dp) {
+    Canvas(modifier = Modifier.size(width, height)) {
+        val stroke = 2.dp.toPx()
+        val path = Path().apply {
+            moveTo(4f, 4f)
+            lineTo(size.width - 4f, 4f)
+            moveTo(size.width - 8f, 1f)
+            lineTo(size.width - 4f, 4f)
+            lineTo(size.width - 8f, 7f)
+
+            moveTo(size.width - 4f, size.height - 4f)
+            lineTo(4f, size.height - 4f)
+            moveTo(8f, size.height - 7f)
+            lineTo(4f, size.height - 4f)
+            lineTo(8f, size.height - 1f)
+        }
+        drawPath(path, color = tint, style = Stroke(width = stroke, cap = StrokeCap.Round))
+    }
+}
+
+@Composable
+fun ProportionsIconCustom(tint: Color, width: androidx.compose.ui.unit.Dp, height: androidx.compose.ui.unit.Dp) {
+    Canvas(modifier = Modifier.size(width, height)) {
+        val stroke = 2.dp.toPx()
+        drawRect(color = tint, topLeft = Offset(0f, 0f), size = Size(size.width, size.height), style = Stroke(width = stroke))
+        // Inner dashed or framing rectangle representing aspect ratio resize
+        drawRect(color = tint, topLeft = Offset(size.width * 0.25f, size.height * 0.25f), size = Size(size.width * 0.5f, size.height * 0.5f), style = Stroke(width = stroke * 0.75f))
+    }
+}
+
+@Composable
+fun VerticalDotsIconCustom(tint: Color, width: androidx.compose.ui.unit.Dp, height: androidx.compose.ui.unit.Dp) {
+    Canvas(modifier = Modifier.size(width, height)) {
+        val radius = size.width / 2f
+        drawCircle(color = tint, radius = radius, center = Offset(radius, radius))
+        drawCircle(color = tint, radius = radius, center = Offset(radius, size.height / 2f))
+        drawCircle(color = tint, radius = radius, center = Offset(radius, size.height - radius))
     }
 }
