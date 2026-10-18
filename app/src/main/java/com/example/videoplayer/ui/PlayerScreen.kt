@@ -300,7 +300,7 @@ fun PlayerScreen(
                                     .background(Color(0xFF0B0B0F).copy(alpha = 0.8f), CircleShape),
                                 contentAlignment = Alignment.Center
                             ) {
-                                PlayIconCustom(tint = Color(0xFF03B6F7), modifier = Modifier.size(14.dp))
+                                PlayIconCustom(tint = Color(0xFF03B6F7), width = 14.dp, height = 14.dp)
                             }
 
                             Spacer(modifier = Modifier.width(12.dp))
