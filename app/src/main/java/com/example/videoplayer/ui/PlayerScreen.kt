@@ -72,19 +72,17 @@ fun PlayerScreen(
         return when {
             f < 0.5f -> {
                 val t = f * 2f
-                Color(
-                    red = 0x03 + (0x5F - 0x03) * t / 255f,
-                    green = 0xB6 + (0x6F - 0xB6) * t / 255f, // approx
-                    blue = 0xF7
-                )
+                val r = (0x03 + (0x5F - 0x03) * t).toInt()
+                val g = (0xB6 + (0x6F - 0xB6) * t).toInt()
+                val b = 0xF7
+                Color((0xFF shl 24) or (r shl 16) or (g shl 8) or b)
             }
             else -> {
                 val t = (f - 0.5f) * 2f
-                Color(
-                    red = 0x5F + (0xB1 - 0x5F) * t / 255f,
-                    green = 0x6B + (0x4B - 0x6B) * t / 255f,
-                    blue = 0xF7
-                )
+                val r = (0x5F + (0xB1 - 0x5F) * t).toInt()
+                val g = (0x6B + (0x4B - 0x6B) * t).toInt()
+                val b = 0xF7
+                Color((0xFF shl 24) or (r shl 16) or (g shl 8) or b)
             }
         }
     }
