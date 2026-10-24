@@ -1,6 +1,5 @@
 package com.example.videoplayer
 
-import android.app.Activity
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -21,6 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import com.example.videoplayer.security.SecureVaultScreen
 import com.example.videoplayer.ui.DarkBackground
 import com.example.videoplayer.ui.MoreHubView
 import com.example.videoplayer.ui.NeonOrange
@@ -49,6 +49,7 @@ class MainActivity : ComponentActivity() {
                     var selectedVideoUri by remember { mutableStateOf<String?>(null) }
                     var showSettings by remember { mutableStateOf(false) }
                     var showHub by remember { mutableStateOf(false) }
+                    var showSecureVault by remember { mutableStateOf(false) }
                     var customUrlDialog by remember { mutableStateOf(false) }
 
                     if (selectedVideoUri != null) {
@@ -65,6 +66,15 @@ class MainActivity : ComponentActivity() {
                             onOpenSettings = { showSettings = true },
                             onOpenCustomUrl = { customUrlDialog = true },
                             onOpenVideoLibrary = { showHub = false },
+                            onOpenSecureVault = { showSecureVault = true }
+                        )
+                    } else if (showSecureVault) {
+                        SecureVaultScreen(
+                            onBack = { showSecureVault = false },
+                            onOpenVaultFile = { decryptedPath ->
+                                showSecureVault = false
+                                selectedVideoUri = decryptedPath
+                            }
                         )
                     } else {
                         VideoLibraryScreen(

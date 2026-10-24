@@ -1,103 +1,304 @@
 package com.example.videoplayer.security
 
 import android.content.Context
-import android.util.Base64
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.videoplayer.ui.DarkBackground
+import com.example.videoplayer.ui.NeonOrange
 import java.io.File
-import java.io.FileOutputStream
-import java.util.UUID
 
-data class SecureVaultItem(
-    val id: String,
-    val displayName: String,
-    val file: File
-)
+@Composable
+fun SecureVaultScreen(
+    onBack: () -> Unit,
+    onOpenVaultFile: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val vaultRepository = remember { SecureVaultRepository(context) }
 
-class SecureVaultRepository(private val context: Context) {
-    private val rootDir = File(context.filesDir, "secure_vault").apply { mkdirs() }
-    private val prefs = context.getSharedPreferences("secure_vault_state", Context.MODE_PRIVATE)
+    var password by remember { mutableStateOf("") }
+    var isSetupMode by remember { mutableStateOf(!vaultRepository.isPasswordConfigured()) }
+    var isUnlocked by remember { mutableStateOf(false) }
+    var files by remember { mutableStateOf(vaultRepository.listItems()) }
+    var statusText by remember { mutableStateOf("") }
 
-    fun isPasswordConfigured(): Boolean {
-        val salt = prefs.getString("vault_password_salt", null)
-        val hash = prefs.getString("vault_password_hash", null)
-        return !salt.isNullOrBlank() && !hash.isNullOrBlank()
-    }
+    val filePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+        onResult = { uri: Uri? ->
+            if (uri == null) {
+                statusText = "Файл не выбран"
+                return@rememberLauncherForActivityResult
+            }
+            if (password.isBlank()) {
+                statusText = "Сначала введите пароль vault"
+                return@rememberLauncherForActivityResult
+            }
 
-    fun setupPassword(password: String) {
-        val salt = VaultCrypto.generateSalt()
-        val hash = VaultCrypto.hashPassword(password, salt)
-        prefs.edit()
-            .putString("vault_password_salt", Base64.encodeToString(salt, Base64.NO_WRAP))
-            .putString("vault_password_hash", Base64.encodeToString(hash, Base64.NO_WRAP))
-            .apply()
-    }
+            val tempFile = File.createTempFile("vault_import_", ".tmp", context.cacheDir)
+            try {
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    tempFile.outputStream().use { output -> input.copyTo(output) }
+                }
+                val originalName = uri.lastPathSegment ?: "vault_file"
+                vaultRepository.addFile(tempFile, password, originalName)
+                files = vaultRepository.listItems()
+                statusText = "Файл сохранён в защищённом vault"
+            } catch (_: Exception) {
+                statusText = "Не удалось сохранить файл в vault"
+            } finally {
+                tempFile.delete()
+            }
+        }
+    )
 
-    fun verifyPassword(password: String): Boolean {
-        val saltText = prefs.getString("vault_password_salt", null) ?: return false
-        val hashText = prefs.getString("vault_password_hash", null) ?: return false
-        val salt = Base64.decode(saltText, Base64.NO_WRAP)
-        val hash = Base64.decode(hashText, Base64.NO_WRAP)
-        return VaultCrypto.passwordMatches(password, salt, hash)
-    }
-
-    fun addFile(source: File, password: String, displayName: String): String {
-        if (!verifyPassword(password)) {
-            throw IllegalStateException("Invalid vault password")
+    fun unlockVault() {
+        if (isSetupMode) {
+            if (password.length < 6) {
+                statusText = "Пароль должен содержать минимум 6 символов"
+                return
+            }
+            vaultRepository.setupPassword(password)
+            isSetupMode = false
+            isUnlocked = true
+            files = vaultRepository.listItems()
+            statusText = "Vault создан. Теперь файлы будут храниться в закрытом шифрованном хранилище."
+            return
         }
 
-        val id = UUID.randomUUID().toString()
-        val payload = VaultCrypto.encrypt(source.readBytes(), password)
-        val combined = ByteArray(payload.salt.size + payload.iv.size + payload.cipherText.size)
-        var offset = 0
-
-        payload.salt.copyInto(combined, offset)
-        offset += payload.salt.size
-        payload.iv.copyInto(combined, offset)
-        offset += payload.iv.size
-        payload.cipherText.copyInto(combined, offset)
-
-        val targetFile = File(rootDir, "$id.enc")
-        FileOutputStream(targetFile).use { it.write(combined) }
-
-        prefs.edit().putString("name_$id", displayName).apply()
-        return id
-    }
-
-    fun listItems(): List<SecureVaultItem> {
-        val files = rootDir.listFiles()?.filter { it.isFile && it.name.endsWith(".enc") } ?: return emptyList()
-        return files.map { file ->
-            val id = file.nameWithoutExtension
-            val displayName = prefs.getString("name_$id", id) ?: id
-            SecureVaultItem(id, displayName, file)
+        if (vaultRepository.verifyPassword(password)) {
+            isUnlocked = true
+            files = vaultRepository.listItems()
+            statusText = "Vault разблокирован"
+        } else {
+            statusText = "Неверный пароль vault"
         }
     }
 
-    fun openFile(id: String, password: String): File {
-        if (!verifyPassword(password)) {
-            throw IllegalStateException("Invalid vault password")
+    if (!isUnlocked) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .background(DarkBackground)
+                .padding(20.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF171821)),
+                shape = RoundedCornerShape(18.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = if (isSetupMode) "Создать защищённый vault" else "Разблокировать vault",
+                        color = Color.White,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = if (isSetupMode) "Пароль используется для шифрования и хранится в Android Keystore-protected encrypted preferences." else "Введите пароль для доступа к файлам в vault.",
+                        color = Color(0xFFB6BDCB),
+                        fontSize = 14.sp
+                    )
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        label = { Text("Пароль") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = NeonOrange,
+                            unfocusedBorderColor = Color(0xFF2A2B35),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            cursorColor = NeonOrange
+                        )
+                    )
+                    if (statusText.isNotBlank()) {
+                        Text(statusText, color = Color(0xFFFFD166), fontSize = 12.sp)
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Button(
+                            onClick = onBack,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2A2B35))
+                        ) {
+                            Text("Назад")
+                        }
+                        Button(
+                            onClick = { unlockVault() },
+                            colors = ButtonDefaults.buttonColors(containerColor = NeonOrange)
+                        ) {
+                            Text("OK")
+                        }
+                    }
+                }
+            }
         }
-
-        val source = File(rootDir, "$id.enc")
-        val raw = source.readBytes()
-        val saltSize = 16
-        val ivSize = 12
-        val salt = raw.copyOfRange(0, saltSize)
-        val iv = raw.copyOfRange(saltSize, saltSize + ivSize)
-        val cipherText = raw.copyOfRange(saltSize + ivSize, raw.size)
-
-        val decrypted = VaultCrypto.decrypt(
-            EncryptedVaultPayload(salt = salt, iv = iv, cipherText = cipherText),
-            password
-        )
-
-        val outFile = File(context.cacheDir, "$id.decrypted")
-        outFile.writeBytes(decrypted)
-        return outFile
+        return
     }
 
-    fun deleteFile(id: String): Boolean {
-        val file = File(rootDir, "$id.enc")
-        val deleted = file.delete()
-        prefs.edit().remove("name_$id").apply()
-        return deleted
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(DarkBackground)
+            .padding(20.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Secure Vault", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                Button(
+                    onClick = onBack,
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonOrange)
+                ) {
+                    Text("Назад")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Button(
+                    onClick = { filePicker.launch(arrayOf("*/*")) },
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonOrange),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Добавить файл")
+                }
+                Button(
+                    onClick = {
+                        vaultRepository.clearTempDecryptedFiles()
+                        isUnlocked = false
+                        statusText = "Vault закрыт"
+                        password = ""
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2A2B35)),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Закрыть")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            if (statusText.isNotBlank()) {
+                Text(statusText, color = Color(0xFFFFD166), fontSize = 12.sp)
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            if (files.isEmpty()) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF171821)),
+                    shape = RoundedCornerShape(18.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Пока нет файлов в vault.",
+                        color = Color(0xFFB6BDCB),
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(18.dp)
+                    )
+                }
+            } else {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    items(files) { item ->
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF171821)),
+                            shape = RoundedCornerShape(18.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = item.displayName,
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Row {
+                                    Button(
+                                        onClick = {
+                                            try {
+                                                val decrypted = vaultRepository.openFile(item.id, password)
+                                                onOpenVaultFile(decrypted.absolutePath)
+                                                statusText = "Файл открыт только во время текущего сеанса"
+                                            } catch (_: Exception) {
+                                                statusText = "Не удалось открыть файл. Проверьте пароль."
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = NeonOrange)
+                                    ) {
+                                        Text("Открыть")
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Button(
+                                        onClick = {
+                                            vaultRepository.deleteFile(item.id)
+                                            files = vaultRepository.listItems()
+                                            statusText = "Файл удалён из vault"
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B3C4B))
+                                    ) {
+                                        Text("Удалить")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }

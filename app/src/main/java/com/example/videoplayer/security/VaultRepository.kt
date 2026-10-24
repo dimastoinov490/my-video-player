@@ -1,63 +1,124 @@
 package com.example.videoplayer.security
 
-import java.security.MessageDigest
-import java.security.SecureRandom
-import javax.crypto.Cipher
-import javax.crypto.SecretKeyFactory
-import javax.crypto.spec.GCMParameterSpec
-import javax.crypto.spec.PBEKeySpec
-import javax.crypto.spec.SecretKeySpec
+import android.content.Context
+import android.util.Base64
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
+import java.io.File
+import java.io.FileOutputStream
+import java.util.UUID
 
-private const val KEY_LENGTH = 256
-private const val ITERATIONS = 120_000
-private const val AES = "AES"
-private const val TRANSFORMATION = "AES/GCM/NoPadding"
-private const val TAG_LENGTH_BITS = 128
+private const val VAULT_DIR_NAME = "secure_vault"
 
-data class EncryptedVaultPayload(
-    val salt: ByteArray,
-    val iv: ByteArray,
-    val cipherText: ByteArray
-)
+class SecureVaultRepository(private val context: Context) {
+    private val rootDir = File(context.filesDir, VAULT_DIR_NAME).apply { mkdirs() }
 
-object VaultCrypto {
-    fun generateSalt(): ByteArray = ByteArray(16).apply { SecureRandom().nextBytes(this) }
+    private val prefs: android.content.SharedPreferences by lazy {
+        val masterKey = MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
 
-    fun generateIv(): ByteArray = ByteArray(12).apply { SecureRandom().nextBytes(this) }
-
-    fun deriveKey(password: String, salt: ByteArray): SecretKeySpec {
-        val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
-        val spec = PBEKeySpec(password.toCharArray(), salt, ITERATIONS, KEY_LENGTH)
-        val keyBytes = factory.generateSecret(spec).encoded
-        return SecretKeySpec(keyBytes, AES)
+        EncryptedSharedPreferences.create(
+            "secure_vault_state",
+            masterKey,
+            context,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
     }
 
-    fun encrypt(data: ByteArray, password: String): EncryptedVaultPayload {
-        val salt = generateSalt()
-        val iv = generateIv()
-        val key = deriveKey(password, salt)
-        val cipher = Cipher.getInstance(TRANSFORMATION)
-        val parameterSpec = GCMParameterSpec(TAG_LENGTH_BITS, iv)
-        cipher.init(Cipher.ENCRYPT_MODE, key, parameterSpec)
-        val encrypted = cipher.doFinal(data)
-        return EncryptedVaultPayload(salt, iv, encrypted)
+    data class SecureVaultItem(
+        val id: String,
+        val displayName: String,
+        val file: File
+    )
+
+    fun isPasswordConfigured(): Boolean {
+        val salt = prefs.getString("vault_password_salt", null)
+        val hash = prefs.getString("vault_password_hash", null)
+        return !salt.isNullOrBlank() && !hash.isNullOrBlank()
     }
 
-    fun decrypt(payload: EncryptedVaultPayload, password: String): ByteArray {
-        val key = deriveKey(password, payload.salt)
-        val cipher = Cipher.getInstance(TRANSFORMATION)
-        val parameterSpec = GCMParameterSpec(TAG_LENGTH_BITS, payload.iv)
-        cipher.init(Cipher.DECRYPT_MODE, key, parameterSpec)
-        return cipher.doFinal(payload.cipherText)
+    fun setupPassword(password: String) {
+        val salt = VaultCrypto.generateSalt()
+        val hash = VaultCrypto.hashPassword(password, salt)
+        prefs.edit()
+            .putString("vault_password_salt", Base64.encodeToString(salt, Base64.NO_WRAP))
+            .putString("vault_password_hash", Base64.encodeToString(hash, Base64.NO_WRAP))
+            .apply()
     }
 
-    fun hashPassword(password: String, salt: ByteArray): ByteArray {
-        val key = deriveKey(password, salt)
-        return MessageDigest.getInstance("SHA-256").digest(key.encoded)
+    fun verifyPassword(password: String): Boolean {
+        val saltText = prefs.getString("vault_password_salt", null) ?: return false
+        val hashText = prefs.getString("vault_password_hash", null) ?: return false
+        val salt = Base64.decode(saltText, Base64.NO_WRAP)
+        val hash = Base64.decode(hashText, Base64.NO_WRAP)
+        return VaultCrypto.passwordMatches(password, salt, hash)
     }
 
-    fun passwordMatches(password: String, salt: ByteArray, expectedHash: ByteArray): Boolean {
-        val actual = hashPassword(password, salt)
-        return MessageDigest.isEqual(actual, expectedHash)
+    fun addFile(source: File, password: String, displayName: String): String {
+        if (!verifyPassword(password)) {
+            throw IllegalStateException("Invalid vault password")
+        }
+
+        val payload = VaultCrypto.encrypt(source.readBytes(), password)
+        val combined = ByteArray(payload.salt.size + payload.iv.size + payload.cipherText.size)
+        var offset = 0
+
+        payload.salt.copyInto(combined, offset)
+        offset += payload.salt.size
+        payload.iv.copyInto(combined, offset)
+        offset += payload.iv.size
+        payload.cipherText.copyInto(combined, offset)
+
+        val id = UUID.randomUUID().toString()
+        val targetFile = File(rootDir, "$id.enc")
+        FileOutputStream(targetFile).use { it.write(combined) }
+
+        prefs.edit().putString("name_$id", displayName).apply()
+        return id
+    }
+
+    fun listItems(): List<SecureVaultItem> {
+        val files = rootDir.listFiles()?.filter { it.isFile && it.name.endsWith(".enc") } ?: return emptyList()
+        return files.map { file ->
+            val id = file.nameWithoutExtension
+            val displayName = prefs.getString("name_$id", id) ?: id
+            SecureVaultItem(id, displayName, file)
+        }
+    }
+
+    fun openFile(id: String, password: String): File {
+        if (!verifyPassword(password)) {
+            throw IllegalStateException("Invalid vault password")
+        }
+
+        val source = File(rootDir, "$id.enc")
+        val raw = source.readBytes()
+        val saltSize = 16
+        val ivSize = 12
+        val salt = raw.copyOfRange(0, saltSize)
+        val iv = raw.copyOfRange(saltSize, saltSize + ivSize)
+        val cipherText = raw.copyOfRange(saltSize + ivSize, raw.size)
+
+        val decrypted = VaultCrypto.decrypt(
+            EncryptedVaultPayload(salt = salt, iv = iv, cipherText = cipherText),
+            password
+        )
+
+        val outFile = File(context.cacheDir, "$id.decrypted")
+        outFile.writeBytes(decrypted)
+        return outFile
+    }
+
+    fun deleteFile(id: String): Boolean {
+        val file = File(rootDir, "$id.enc")
+        val deleted = file.delete()
+        prefs.edit().remove("name_$id").apply()
+        return deleted
+    }
+
+    fun clearTempDecryptedFiles() {
+        context.cacheDir.listFiles()?.filter { it.name.endsWith(".decrypted") }?.forEach { it.delete() }
     }
 }
