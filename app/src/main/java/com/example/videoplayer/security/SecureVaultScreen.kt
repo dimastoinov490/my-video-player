@@ -4,6 +4,8 @@ import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,6 +28,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,8 +40,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
 import com.example.videoplayer.ui.DarkBackground
 import com.example.videoplayer.ui.NeonOrange
+import kotlinx.coroutines.delay
 import java.io.File
 
 @Composable
@@ -49,22 +55,99 @@ fun SecureVaultScreen(
 ) {
     val context = LocalContext.current
     val vaultRepository = remember { SecureVaultRepository(context) }
+    val activity = context as? FragmentActivity
 
     var password by remember { mutableStateOf("") }
     var isSetupMode by remember { mutableStateOf(!vaultRepository.isPasswordConfigured()) }
     var isUnlocked by remember { mutableStateOf(false) }
     var files by remember { mutableStateOf(vaultRepository.listItems()) }
     var statusText by remember { mutableStateOf("") }
+    var biometricAvailable by remember { mutableStateOf(false) }
+    var lockDeadline by remember { mutableStateOf(System.currentTimeMillis() + 60_000L) }
+
+    LaunchedEffect(Unit) {
+        biometricAvailable = BiometricManager.from(context)
+            .canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) == BiometricManager.BIOMETRIC_SUCCESS
+    }
+
+    LaunchedEffect(isUnlocked) {
+        if (!isUnlocked) return@LaunchedEffect
+        while (isUnlocked) {
+            val remaining = lockDeadline - System.currentTimeMillis()
+            if (remaining <= 0L) {
+                vaultRepository.clearTempDecryptedFiles()
+                isUnlocked = false
+                password = ""
+                statusText = "Vault closed automatically after inactivity"
+                break
+            }
+            delay(1000L)
+        }
+    }
+
+    fun secureLock() {
+        vaultRepository.clearTempDecryptedFiles()
+        isUnlocked = false
+        password = ""
+        statusText = "Vault locked"
+    }
+
+    fun promptBiometricUnlock() {
+        val fragmentActivity = activity ?: run {
+            statusText = "Biometric unlock is unavailable on this device"
+            return
+        }
+
+        if (BiometricManager.from(context)
+                .canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) != BiometricManager.BIOMETRIC_SUCCESS
+        ) {
+            statusText = "Biometric authentication is not supported"
+            return
+        }
+
+        val executor = ContextCompat.getMainExecutor(context)
+        val prompt = BiometricPrompt(
+            fragmentActivity,
+            executor,
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    super.onAuthenticationSucceeded(result)
+                    isUnlocked = true
+                    lockDeadline = System.currentTimeMillis() + 60_000L
+                    files = vaultRepository.listItems()
+                    statusText = "Vault unlocked with biometric protection"
+                }
+
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    super.onAuthenticationError(errorCode, errString)
+                    statusText = "Biometric unlock failed: $errString"
+                }
+
+                override fun onAuthenticationFailed() {
+                    super.onAuthenticationFailed()
+                    statusText = "Biometric authentication failed. Try again."
+                }
+            }
+        )
+
+        val promptInfo = BiometricPrompt.PromptInfo.Builder()
+            .setTitle("Unlock Secure Vault")
+            .setSubtitle("Use biometric authentication")
+            .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+            .build()
+
+        prompt.authenticate(promptInfo)
+    }
 
     val filePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
         onResult = { uri: Uri? ->
             if (uri == null) {
-                statusText = "Файл не выбран"
+                statusText = "File not selected"
                 return@rememberLauncherForActivityResult
             }
             if (password.isBlank()) {
-                statusText = "Сначала введите пароль vault"
+                statusText = "Set or enter vault password first"
                 return@rememberLauncherForActivityResult
             }
 
@@ -76,9 +159,10 @@ fun SecureVaultScreen(
                 val originalName = uri.lastPathSegment ?: "vault_file"
                 vaultRepository.addFile(tempFile, password, originalName)
                 files = vaultRepository.listItems()
-                statusText = "Файл сохранён в защищённом vault"
+                statusText = "File saved to encrypted vault"
+                lockDeadline = System.currentTimeMillis() + 60_000L
             } catch (_: Exception) {
-                statusText = "Не удалось сохранить файл в vault"
+                statusText = "Unable to save file to vault"
             } finally {
                 tempFile.delete()
             }
@@ -88,23 +172,25 @@ fun SecureVaultScreen(
     fun unlockVault() {
         if (isSetupMode) {
             if (password.length < 6) {
-                statusText = "Пароль должен содержать минимум 6 символов"
+                statusText = "Password must be at least 6 characters"
                 return
             }
             vaultRepository.setupPassword(password)
             isSetupMode = false
             isUnlocked = true
             files = vaultRepository.listItems()
-            statusText = "Vault создан. Теперь файлы будут храниться в закрытом шифрованном хранилище."
+            statusText = "Vault created. Files are stored in encrypted app storage."
+            lockDeadline = System.currentTimeMillis() + 60_000L
             return
         }
 
         if (vaultRepository.verifyPassword(password)) {
             isUnlocked = true
             files = vaultRepository.listItems()
-            statusText = "Vault разблокирован"
+            statusText = "Vault unlocked"
+            lockDeadline = System.currentTimeMillis() + 60_000L
         } else {
-            statusText = "Неверный пароль vault"
+            statusText = "Incorrect vault password"
         }
     }
 
@@ -128,20 +214,20 @@ fun SecureVaultScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        text = if (isSetupMode) "Создать защищённый vault" else "Разблокировать vault",
+                        text = if (isSetupMode) "Create Secure Vault" else "Unlock Secure Vault",
                         color = Color.White,
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = if (isSetupMode) "Пароль используется для шифрования и хранится в Android Keystore-protected encrypted preferences." else "Введите пароль для доступа к файлам в vault.",
+                        text = if (isSetupMode) "Strong vault mode: password + AES-GCM + app-private storage + biometric unlock option." else "Enter your password or unlock with biometrics.",
                         color = Color(0xFFB6BDCB),
                         fontSize = 14.sp
                     )
                     OutlinedTextField(
                         value = password,
                         onValueChange = { password = it },
-                        label = { Text("Пароль") },
+                        label = { Text("Password") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -157,19 +243,30 @@ fun SecureVaultScreen(
                     }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Button(
                             onClick = onBack,
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2A2B35))
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2A2B35)),
+                            modifier = Modifier.weight(1f)
                         ) {
-                            Text("Назад")
+                            Text("Back")
                         }
                         Button(
                             onClick = { unlockVault() },
-                            colors = ButtonDefaults.buttonColors(containerColor = NeonOrange)
+                            colors = ButtonDefaults.buttonColors(containerColor = NeonOrange),
+                            modifier = Modifier.weight(1f)
                         ) {
-                            Text("OK")
+                            Text("Unlock")
+                        }
+                    }
+                    if (biometricAvailable) {
+                        Button(
+                            onClick = { promptBiometricUnlock() },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3A3B4A)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Use biometrics")
                         }
                     }
                 }
@@ -192,10 +289,10 @@ fun SecureVaultScreen(
             ) {
                 Text("Secure Vault", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
                 Button(
-                    onClick = onBack,
+                    onClick = { secureLock() },
                     colors = ButtonDefaults.buttonColors(containerColor = NeonOrange)
                 ) {
-                    Text("Назад")
+                    Text("Lock")
                 }
             }
 
@@ -210,19 +307,17 @@ fun SecureVaultScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = NeonOrange),
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("Добавить файл")
+                    Text("Add file")
                 }
                 Button(
                     onClick = {
-                        vaultRepository.clearTempDecryptedFiles()
-                        isUnlocked = false
-                        statusText = "Vault закрыт"
-                        password = ""
+                        secureLock()
+                        onBack()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2A2B35)),
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("Закрыть")
+                    Text("Close")
                 }
             }
 
@@ -240,7 +335,7 @@ fun SecureVaultScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "Пока нет файлов в vault.",
+                        text = "No files in vault yet.",
                         color = Color(0xFFB6BDCB),
                         fontSize = 14.sp,
                         modifier = Modifier.padding(18.dp)
@@ -272,26 +367,27 @@ fun SecureVaultScreen(
                                         onClick = {
                                             try {
                                                 val decrypted = vaultRepository.openFile(item.id, password)
+                                                lockDeadline = System.currentTimeMillis() + 60_000L
                                                 onOpenVaultFile(decrypted.absolutePath)
-                                                statusText = "Файл открыт только во время текущего сеанса"
+                                                statusText = "File opened in app memory only. It is not exposed outside the app."
                                             } catch (_: Exception) {
-                                                statusText = "Не удалось открыть файл. Проверьте пароль."
+                                                statusText = "Unable to open file. Check password."
                                             }
                                         },
                                         colors = ButtonDefaults.buttonColors(containerColor = NeonOrange)
                                     ) {
-                                        Text("Открыть")
+                                        Text("Open")
                                     }
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Button(
                                         onClick = {
                                             vaultRepository.deleteFile(item.id)
                                             files = vaultRepository.listItems()
-                                            statusText = "Файл удалён из vault"
+                                            statusText = "File removed from vault"
                                         },
                                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B3C4B))
                                     ) {
-                                        Text("Удалить")
+                                        Text("Delete")
                                     }
                                 }
                             }
