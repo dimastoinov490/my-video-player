@@ -15,7 +15,7 @@ class VlcPlayerManager(context: Context) {
         add("-v")
     }
 
-    val libVLC = LibVLC(context, options)
+    val libVLC = LibVLC(context.applicationContext, options)
     val mediaPlayer = MediaPlayer(libVLC)
 
     var onStatusChanged: ((String) -> Unit)? = null
@@ -23,12 +23,24 @@ class VlcPlayerManager(context: Context) {
 
     private val eventListener = MediaPlayer.EventListener { event ->
         when (event.type) {
-            MediaPlayer.Event.Playing -> onStatusChanged?.invoke("Playing")
-            MediaPlayer.Event.Paused -> onStatusChanged?.invoke("Paused")
-            MediaPlayer.Event.Stopped -> onStatusChanged?.invoke("Stopped")
-            MediaPlayer.Event.EndReached -> onStatusChanged?.invoke("End Reached")
-            MediaPlayer.Event.EncounteredError -> onStatusChanged?.invoke("Error: Encountered Error")
-            MediaPlayer.Event.Buffering -> onStatusChanged?.invoke("Buffering: ${event.buffering}%")
+            MediaPlayer.Event.Playing -> {
+                onStatusChanged?.invoke("Playing")
+            }
+            MediaPlayer.Event.Paused -> {
+                onStatusChanged?.invoke("Paused")
+            }
+            MediaPlayer.Event.Stopped -> {
+                onStatusChanged?.invoke("Stopped")
+            }
+            MediaPlayer.Event.EndReached -> {
+                onStatusChanged?.invoke("End Reached")
+            }
+            MediaPlayer.Event.EncounteredError -> {
+                onStatusChanged?.invoke("Error: Encountered Error")
+            }
+            MediaPlayer.Event.Buffering -> {
+                onStatusChanged?.invoke("Buffering: ${event.buffering}%")
+            }
             MediaPlayer.Event.TimeChanged -> {
                 onTimeChanged?.invoke(mediaPlayer.time, mediaPlayer.length)
             }
@@ -64,10 +76,16 @@ class VlcPlayerManager(context: Context) {
     }
 
     fun playUrl(context: Context, urlOrUri: String) {
+        val normalized = urlOrUri.trim()
+        if (normalized.isEmpty()) {
+            onStatusChanged?.invoke("Error: empty URL")
+            return
+        }
+
         try {
             mediaPlayer.stop()
-            val media = if (urlOrUri.startsWith("content://")) {
-                val uri = Uri.parse(urlOrUri)
+            val media = if (normalized.startsWith("content://")) {
+                val uri = Uri.parse(normalized)
                 val pfd = context.contentResolver.openFileDescriptor(uri, "r")
                 if (pfd != null) {
                     Media(libVLC, pfd.fileDescriptor)
@@ -75,17 +93,66 @@ class VlcPlayerManager(context: Context) {
                     Media(libVLC, uri)
                 }
             } else {
-                Media(libVLC, Uri.parse(urlOrUri))
+                Media(libVLC, Uri.parse(normalized))
             }
 
             media.setHWDecoderEnabled(true, false)
             mediaPlayer.media = media
             media.release()
             mediaPlayer.play()
-            onStatusChanged?.invoke("Starting playback...")
+            onStatusChanged?.invoke("Playing")
         } catch (e: Exception) {
             e.printStackTrace()
             onStatusChanged?.invoke("Error: ${e.localizedMessage}")
+        }
+    }
+
+    fun togglePlayback() {
+        if (mediaPlayer.isPlaying) {
+            pause()
+        } else {
+            resume()
+        }
+    }
+
+    fun pause() {
+        if (mediaPlayer.isPlaying) {
+            mediaPlayer.pause()
+            onStatusChanged?.invoke("Paused")
+        }
+    }
+
+    fun resume() {
+        if (!mediaPlayer.isPlaying) {
+            mediaPlayer.play()
+            onStatusChanged?.invoke("Playing")
+        }
+    }
+
+    fun switchAspectRatio(mode: AspectRatioMode) {
+        val ratio = when (mode) {
+            AspectRatioMode.ORIGINAL -> ""
+            AspectRatioMode.RATIO_16_9 -> "16:9"
+            AspectRatioMode.RATIO_1_1 -> "1.1"
+        }
+        try {
+            mediaPlayer.setAspectRatio(ratio)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun loadSubtitleUrl(url: String) {
+        if (url.isBlank()) return
+        try {
+            val uri = Uri.parse(url)
+            val media = Media(libVLC, uri)
+            mediaPlayer.media = media
+            media.release()
+            onStatusChanged?.invoke("Subtitle loaded")
+        } catch (e: Exception) {
+            e.printStackTrace()
+            onStatusChanged?.invoke("Error: subtitle unavailable")
         }
     }
 
@@ -98,28 +165,9 @@ class VlcPlayerManager(context: Context) {
         mediaPlayer.time = newTime
     }
 
-    fun setRate(rate: Float) {
-        try {
-            mediaPlayer.rate = rate
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    fun pause() {
-        if (mediaPlayer.isPlaying) {
-            mediaPlayer.pause()
-        }
-    }
-
-    fun resume() {
-        if (!mediaPlayer.isPlaying) {
-            mediaPlayer.play()
-        }
-    }
-
     fun stop() {
         mediaPlayer.stop()
+        onStatusChanged?.invoke("Stopped")
     }
 
     fun release() {
@@ -132,4 +180,10 @@ class VlcPlayerManager(context: Context) {
             e.printStackTrace()
         }
     }
+}
+
+enum class AspectRatioMode {
+    ORIGINAL,
+    RATIO_16_9,
+    RATIO_1_1
 }
