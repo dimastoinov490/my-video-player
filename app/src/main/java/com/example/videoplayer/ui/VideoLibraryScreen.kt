@@ -1,165 +1,267 @@
-package com.example.videoplayer.player
+package com.example.videoplayer.ui
 
+import android.Manifest
+import android.content.ContentUris
 import android.content.Context
+import android.content.pm.PackageManager
 import android.net.Uri
-import android.view.SurfaceView
-import org.videolan.libvlc.LibVLC
-import org.videolan.libvlc.Media
-import org.videolan.libvlc.MediaPlayer
+import android.os.Build
+import android.provider.MediaStore
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import com.example.videoplayer.model.VideoItem
 
-class VlcPlayerManager(context: Context) {
-    private val options = ArrayList<String>().apply {
-        add("--no-drop-late-frames")
-        add("--no-skip-frames")
-        add("--rtsp-tcp")
-        add("-v")
-    }
+val DarkBackground = Color(0xFF0B0F14)
+val NeonOrange = Color(0xFFFF8A00)
+val SurfaceCardColor = Color(0xFF1B212B)
 
-    val libVLC = LibVLC(context, options)
-    val mediaPlayer = MediaPlayer(libVLC)
+@Composable
+fun VideoLibraryScreen(
+    onVideoSelected: (String) -> Unit,
+    onOpenCustomUrl: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenHub: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    var videos by remember { mutableStateOf<List<VideoItem>>(emptyList()) }
+    var isRefreshing by remember { mutableStateOf(false) }
 
-    var onStatusChanged: ((String) -> Unit)? = null
-    var onTimeChanged: ((Long, Long) -> Unit)? = null
-
-    private val eventListener = MediaPlayer.EventListener { event ->
-        when (event.type) {
-            MediaPlayer.Event.Playing -> onStatusChanged?.invoke("Playing")
-            MediaPlayer.Event.Paused -> onStatusChanged?.invoke("Paused")
-            MediaPlayer.Event.Stopped -> onStatusChanged?.invoke("Stopped")
-            MediaPlayer.Event.EndReached -> onStatusChanged?.invoke("End Reached")
-            MediaPlayer.Event.EncounteredError -> onStatusChanged?.invoke("Error: Encountered Error")
-            MediaPlayer.Event.Buffering -> onStatusChanged?.invoke("Buffering: ${event.buffering}%")
-            MediaPlayer.Event.TimeChanged -> onTimeChanged?.invoke(mediaPlayer.time, mediaPlayer.length)
-            MediaPlayer.Event.PositionChanged -> onTimeChanged?.invoke(mediaPlayer.time, mediaPlayer.length)
-            else -> {}
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        val granted = result.all { it.value }
+        if (granted) {
+            videos = queryLocalVideos(context)
+            isRefreshing = false
         }
     }
 
-    init {
-        mediaPlayer.setEventListener(eventListener)
-    }
-
-    fun attachSurface(surfaceView: SurfaceView) {
-        val vout = mediaPlayer.vlcVout
-        if (!vout.areViewsAttached()) {
-            vout.setVideoView(surfaceView)
-            vout.attachViews()
-        }
-    }
-
-    fun detachSurface() {
-        val vout = mediaPlayer.vlcVout
-        if (vout.areViewsAttached()) {
-            vout.detachViews()
-        }
-    }
-
-    fun updateWindowSize(width: Int, height: Int) {
-        mediaPlayer.updateVideoSurfaces()
-        mediaPlayer.vlcVout.setWindowSize(width, height)
-    }
-
-    fun playUrl(context: Context, urlOrUri: String) {
-        val normalized = urlOrUri.trim()
-        if (normalized.isEmpty()) {
-            onStatusChanged?.invoke("Error: empty URL")
-            return
+    fun loadVideos() {
+        val hasReadPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED
+        } else {
+            ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
         }
 
-        try {
-            mediaPlayer.stop()
-            val resolvedUri = if (normalized.startsWith("content://")) {
-                Uri.parse(normalized)
+        if (hasReadPermission) {
+            isRefreshing = true
+            videos = queryLocalVideos(context)
+            isRefreshing = false
+        } else {
+            val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                arrayOf(Manifest.permission.READ_MEDIA_VIDEO)
             } else {
-                Uri.parse(normalized)
+                arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
             }
-            val media = Media(libVLC, resolvedUri)
-            media.setHWDecoderEnabled(true, false)
-            mediaPlayer.media = media
-            media.release()
-            mediaPlayer.play()
-            onStatusChanged?.invoke("Starting playback...")
-        } catch (e: Exception) {
-            e.printStackTrace()
-            onStatusChanged?.invoke("Error: ${e.localizedMessage}")
+            permissionLauncher.launch(permissions)
         }
     }
 
-    fun switchAspectRatio(mode: AspectRatioMode) {
-        val ratio = when (mode) {
-            AspectRatioMode.ORIGINAL -> ""
-            AspectRatioMode.RATIO_16_9 -> "16:9"
-            AspectRatioMode.RATIO_1_1 -> "1.1"
-        }
-        try {
-            mediaPlayer.setAspectRatio(ratio)
-            onStatusChanged?.invoke("Aspect ratio: ${mode.name}")
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+    LaunchedEffect(Unit) {
+        loadVideos()
     }
 
-    fun loadSubtitleUrl(url: String) {
-        if (url.isBlank()) return
-        try {
-            val uri = Uri.parse(url)
-            val media = Media(libVLC, uri)
-            mediaPlayer.media = media
-            media.release()
-            onStatusChanged?.invoke("Subtitle loaded")
-        } catch (e: Exception) {
-            e.printStackTrace()
-            onStatusChanged?.invoke("Error: subtitle unavailable")
-        }
-    }
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(DarkBackground)
+            .pointerInput(Unit) {
+                detectDragGestures { _, dragAmount ->
+                    if (dragAmount.y > 0f) {
+                        loadVideos()
+                    }
+                }
+            }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Медиатека", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = onOpenCustomUrl,
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonOrange)
+                    ) {
+                        Text("URL")
+                    }
+                    Button(
+                        onClick = onOpenHub,
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonOrange)
+                    ) {
+                        Text("Hub")
+                    }
+                    Button(
+                        onClick = onOpenSettings,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1F2731))
+                    ) {
+                        Text("Settings")
+                    }
+                }
+            }
 
-    fun seekTo(timeMs: Long) {
-        mediaPlayer.time = timeMs
-    }
+            Spacer(modifier = Modifier.height(12.dp))
 
-    fun seekRelative(offsetMs: Long) {
-        val newTime = (mediaPlayer.time + offsetMs).coerceIn(0, mediaPlayer.length)
-        mediaPlayer.time = newTime
-    }
+            if (isRefreshing) {
+                Text("Обновление медиатеки…", color = NeonOrange, fontSize = 14.sp)
+            }
 
-    fun setRate(rate: Float) {
-        try {
-            mediaPlayer.rate = rate
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    fun pause() {
-        if (mediaPlayer.isPlaying) {
-            mediaPlayer.pause()
-        }
-    }
-
-    fun resume() {
-        if (!mediaPlayer.isPlaying) {
-            mediaPlayer.play()
-        }
-    }
-
-    fun stop() {
-        mediaPlayer.stop()
-    }
-
-    fun release() {
-        try {
-            mediaPlayer.stop()
-            detachSurface()
-            mediaPlayer.release()
-            libVLC.release()
-        } catch (e: Exception) {
-            e.printStackTrace()
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(videos) { video ->
+                    VideoCard(
+                        item = video,
+                        onClick = { onVideoSelected(video.uri.toString()) }
+                    )
+                }
+            }
         }
     }
 }
 
-enum class AspectRatioMode {
-    ORIGINAL,
-    RATIO_16_9,
-    RATIO_1_1
+@Composable
+private fun VideoCard(item: VideoItem, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = SurfaceCardColor),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFF2C3440)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("▶", color = NeonOrange, fontSize = 26.sp)
+            }
+
+            Spacer(modifier = Modifier.size(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(item.displayName, color = Color.White, fontWeight = FontWeight.SemiBold)
+                Text(item.resolution, color = Color(0xFFB4BBC8), fontSize = 12.sp)
+                Text("${item.duration / 1000}s", color = Color(0xFF8A92A6), fontSize = 12.sp)
+            }
+        }
+    }
+}
+
+private fun queryLocalVideos(context: Context): List<VideoItem> {
+    val projection = arrayOf(
+        MediaStore.Video.Media._ID,
+        MediaStore.Video.Media.DISPLAY_NAME,
+        MediaStore.Video.Media.DURATION,
+        MediaStore.Video.Media.SIZE,
+        MediaStore.Video.Media.WIDTH,
+        MediaStore.Video.Media.HEIGHT,
+        MediaStore.Video.Media.DATE_ADDED,
+        MediaStore.Video.Media.MIME_TYPE
+    )
+
+    val sortOrder = "${MediaStore.Video.Media.DATE_ADDED} DESC"
+    val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+    } else {
+        MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+    }
+
+    val result = mutableListOf<VideoItem>()
+    val cursor = context.contentResolver.query(collection, projection, null, null, sortOrder) ?: return emptyList()
+
+    cursor.use {
+        val idColumn = it.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
+        val nameColumn = it.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
+        val durationColumn = it.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
+        val sizeColumn = it.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
+        val widthColumn = it.getColumnIndexOrThrow(MediaStore.Video.Media.WIDTH)
+        val heightColumn = it.getColumnIndexOrThrow(MediaStore.Video.Media.HEIGHT)
+        val addedColumn = it.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_ADDED)
+
+        while (it.moveToNext()) {
+            val id = it.getLong(idColumn)
+            val displayName = it.getString(nameColumn) ?: "video"
+            val duration = it.getLong(durationColumn)
+            val size = it.getLong(sizeColumn)
+            val width = it.getInt(widthColumn)
+            val height = it.getInt(heightColumn)
+            val dateAdded = it.getLong(addedColumn)
+            val uri = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id)
+
+            result.add(
+                VideoItem(
+                    id = id,
+                    title = displayName,
+                    displayName = displayName,
+                    uri = uri,
+                    duration = duration,
+                    resolution = "$width x $height",
+                    width = width,
+                    height = height,
+                    dateAdded = dateAdded,
+                    size = size,
+                    thumbnailResId = null
+                )
+            )
+        }
+    }
+
+    return result
 }
