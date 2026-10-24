@@ -63,7 +63,7 @@ fun PlayerScreen(
     var currentVideoUri by remember { mutableStateOf(videoUri) }
     var videos by remember { mutableStateOf<List<VideoItem>>(MediaStoreHelper.getSampleVideos()) }
 
-    var isPlaying by remember { mutableStateOf(true) }
+    var isPlaying by remember { mutableStateOf(playerManager.mediaPlayer.isPlaying) }
     var currentPosition by remember { mutableStateOf(0L) }
     var duration by remember { mutableStateOf(0L) }
     var playerStatus by remember { mutableStateOf("Buffering...") }
@@ -374,13 +374,7 @@ fun PlayerScreen(
                         .align(Alignment.Center)
                         .size(160.dp)
                         .clickable {
-                            if (isPlaying) {
-                                playerManager.pause()
-                                isPlaying = false
-                            } else {
-                                playerManager.resume()
-                                isPlaying = true
-                            }
+                            playerManager.togglePlayback()
                         },
                     contentAlignment = Alignment.Center
                 ) {
@@ -474,7 +468,7 @@ fun PlayerScreen(
                             )
                         }
 
-                        if (isPlaying) {
+                        if (playerManager.mediaPlayer.isPlaying) {
                             PauseIconSolid(tint = Color.White, width = 24.dp, height = 28.dp)
                         } else {
                             PlayIconSolid(tint = Color.White, width = 26.dp, height = 28.dp)
@@ -683,13 +677,7 @@ fun PlayerScreen(
                                     .clip(CircleShape)
                                     .background(Color(0xFF090A14))
                                     .clickable {
-                                        if (isPlaying) {
-                                            playerManager.pause()
-                                            isPlaying = false
-                                        } else {
-                                            playerManager.resume()
-                                            isPlaying = true
-                                        }
+                                        playerManager.togglePlayback()
                                     },
                                 contentAlignment = Alignment.Center
                             ) {
@@ -704,7 +692,7 @@ fun PlayerScreen(
                                         style = Stroke(width = strokeWidth)
                                     )
                                 }
-                                if (isPlaying) {
+                                if (playerManager.mediaPlayer.isPlaying) {
                                     PauseIconSolid(tint = Color(0xFF7585FF), width = 16.dp, height = 18.dp)
                                 } else {
                                     PlayIconSolid(tint = Color(0xFF7585FF), width = 18.dp, height = 18.dp)
@@ -760,9 +748,9 @@ fun PlayerScreen(
     }
 }
 
-// -------------------------------------------------------------
+// -----------------------------------------------------
 // HIGH-FIDELITY CUSTOM VECTOR ICONS MATCHING SCREENSHOTS
-// -------------------------------------------------------------
+// -----------------------------------------------------
 
 @Composable
 fun PlayIconSolid(tint: Color, width: Dp, height: Dp) {
