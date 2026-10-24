@@ -129,33 +129,6 @@ class VlcPlayerManager(context: Context) {
         }
     }
 
-    fun switchAspectRatio(mode: AspectRatioMode) {
-        val ratio = when (mode) {
-            AspectRatioMode.ORIGINAL -> ""
-            AspectRatioMode.RATIO_16_9 -> "16:9"
-            AspectRatioMode.RATIO_1_1 -> "1.1"
-        }
-        try {
-            mediaPlayer.setAspectRatio(ratio)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    fun loadSubtitleUrl(url: String) {
-        if (url.isBlank()) return
-        try {
-            val uri = Uri.parse(url)
-            val media = Media(libVLC, uri)
-            mediaPlayer.media = media
-            media.release()
-            onStatusChanged?.invoke("Subtitle loaded")
-        } catch (e: Exception) {
-            e.printStackTrace()
-            onStatusChanged?.invoke("Error: subtitle unavailable")
-        }
-    }
-
     fun seekTo(timeMs: Long) {
         mediaPlayer.time = timeMs
     }
@@ -163,6 +136,14 @@ class VlcPlayerManager(context: Context) {
     fun seekRelative(offsetMs: Long) {
         val newTime = (mediaPlayer.time + offsetMs).coerceIn(0, mediaPlayer.length)
         mediaPlayer.time = newTime
+    }
+
+    fun setRate(rate: Float) {
+        try {
+            mediaPlayer.rate = rate
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     fun stop() {
@@ -180,10 +161,4 @@ class VlcPlayerManager(context: Context) {
             e.printStackTrace()
         }
     }
-}
-
-enum class AspectRatioMode {
-    ORIGINAL,
-    RATIO_16_9,
-    RATIO_1_1
 }
