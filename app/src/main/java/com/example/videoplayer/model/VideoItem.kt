@@ -12,5 +12,6 @@ data class VideoItem(
     val width: Int,
     val height: Int,
     val dateAdded: Long,
-    val size: Long
+    val size: Long,
+    val thumbnailResId: Int? = null
 )

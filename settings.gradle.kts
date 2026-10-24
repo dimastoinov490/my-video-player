@@ -13,5 +13,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "VideoPlayer"
+rootProject.name = "Nexora"
 include(":app")

@@ -21,38 +21,50 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.videoplayer.R
 import com.example.videoplayer.model.MediaStoreHelper
+import com.example.videoplayer.model.PlaylistManager
 import com.example.videoplayer.model.VideoItem
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-val DarkBackground = Color(0xFF08080C)
-val NeonOrange = Color(0xFFFF7A00)
-val NeonOrangeGradient = Brush.horizontalGradient(listOf(Color(0xFFFF9E00), Color(0xFFFF5500)))
-val SurfaceCardColor = Color(0xFF14141A)
-val GrayText = Color(0xFF9E9EAE)
+val DarkBackground = Color(0xFF09090D)
+val NeonOrange = Color(0xFFFF8A00)
+val GoldenYellow = Color(0xFFFF9500)
+val GoldenYellowLight = Color(0xFFFFAE33)
+val GoldenYellowGlow = Color(0xFFFF7A00)
+val GoldenYellowGradient = Brush.horizontalGradient(
+    listOf(Color(0xFFFFAE33), Color(0xFFFF851A), Color(0xFFFF6D00))
+)
+val NeonOrangeGradient = Brush.horizontalGradient(
+    listOf(Color(0xFFFFA526), Color(0xFFFF7000))
+)
+val SurfaceCardColor = Color(0xFF131319)
+val GrayText = Color(0xFF8E8E9E)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,7 +75,7 @@ fun VideoLibraryScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var videos by remember { mutableStateOf<List<VideoItem>>(emptyList()) }
+    var videos by remember { mutableStateOf<List<VideoItem>>(MediaStoreHelper.getSampleVideos()) }
     var searchQuery by remember { mutableStateOf("") }
     var isSearchActive by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
@@ -71,6 +83,7 @@ fun VideoLibraryScreen(
     var bottomNavIndex by remember { mutableStateOf(0) } // 0: Video, 1: Audio, 2: Browse, 3: Playlists, 4: More
     var videoToDelete by remember { mutableStateOf<VideoItem?>(null) }
     var videoCardMenuExpandedId by remember { mutableStateOf<Long?>(null) }
+    var videoToAddToPlaylist by remember { mutableStateOf<VideoItem?>(null) }
 
     val prefs = remember { context.getSharedPreferences("video_prefs", Context.MODE_PRIVATE) }
     val lastPlayedUri = prefs.getString("last_played_uri", null)
@@ -164,7 +177,9 @@ fun VideoLibraryScreen(
         }
     }
 
-    val filteredVideos = videos.filter { it.title.contains(searchQuery, ignoreCase = true) || it.displayName.contains(searchQuery, ignoreCase = true) }
+    val filteredVideos = videos.filter {
+        it.title.contains(searchQuery, ignoreCase = true) || it.displayName.contains(searchQuery, ignoreCase = true)
+    }
 
     Scaffold(
         containerColor = DarkBackground,
@@ -173,93 +188,167 @@ fun VideoLibraryScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(DarkBackground)
+                    .statusBarsPadding()
             ) {
-                // Header Top Bar (Height 52.dp)
-                Row(
+                // Header Top Bar with Glowing Decorative Light Wave
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp)
-                        .padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                        .height(64.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Image(
-                            painter = painterResource(id = R.mipmap.ic_launcher),
-                            contentDescription = "App Logo",
-                            modifier = Modifier
-                                .size(28.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                        )
-                        Text(
-                            text = "Nexora",
-                            color = Color.White,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold
+                    // Subtle glowing orange light sweep in the background
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val path = Path().apply {
+                            moveTo(size.width * 0.5f, 0f)
+                            quadraticBezierTo(
+                                size.width * 0.75f, size.height * 0.9f,
+                                size.width, size.height * 0.4f
+                            )
+                        }
+                        drawPath(
+                            path = path,
+                            color = GoldenYellowGlow.copy(alpha = 0.55f),
+                            style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round)
                         )
                     }
 
                     Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        IconButton(
-                            onClick = { isSearchActive = !isSearchActive },
-                            modifier = Modifier.size(22.dp)
+                        // Nexora App Icon & Title
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            SearchIconCustom(tint = NeonOrange)
-                        }
-                        IconButton(
-                            onClick = { Toast.makeText(context, "История", Toast.LENGTH_SHORT).show() },
-                            modifier = Modifier.size(22.dp)
-                        ) {
-                            HistoryIconCustom(tint = NeonOrange)
-                        }
-                        Box {
-                            IconButton(
-                                onClick = { showMenu = true },
-                                modifier = Modifier.size(22.dp)
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color(0xFF14141F))
+                                    .border(
+                                        1.dp,
+                                        Brush.radialGradient(
+                                            listOf(GoldenYellowLight.copy(alpha = 0.8f), GoldenYellowGlow.copy(alpha = 0.3f))
+                                        ),
+                                        RoundedCornerShape(12.dp)
+                                    ),
+                                contentAlignment = Alignment.Center
                             ) {
-                                ThreeDotsIconCustom(tint = NeonOrange)
+                                Image(
+                                    painter = painterResource(id = R.drawable.ic_nexora),
+                                    contentDescription = "Nexora Icon",
+                                    modifier = Modifier
+                                        .size(34.dp)
+                                        .clip(RoundedCornerShape(10.dp)),
+                                    contentScale = ContentScale.Crop
+                                )
                             }
-                            DropdownMenu(
-                                expanded = showMenu,
-                                onDismissRequest = { showMenu = false },
-                                modifier = Modifier.background(SurfaceCardColor)
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "NEXORA",
+                                        color = Color.White,
+                                        fontSize = 20.sp,
+                                        fontWeight = FontWeight.Black,
+                                        letterSpacing = 1.sp
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(GoldenYellowGradient)
+                                            .padding(horizontal = 5.dp, vertical = 1.5.dp)
+                                    ) {
+                                        Text(
+                                            text = "PRO",
+                                            color = Color.Black,
+                                            fontSize = 8.5.sp,
+                                            fontWeight = FontWeight.Black
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = "ADVANCED MEDIA SUITE",
+                                    color = GoldenYellowLight.copy(alpha = 0.9f),
+                                    fontSize = 8.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 2.sp
+                                )
+                            }
+                        }
+
+                        // Right 3 Circular Action Buttons (Search, History, Menu)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            // Search Button
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF1B1B24))
+                                    .clickable { isSearchActive = !isSearchActive },
+                                contentAlignment = Alignment.Center
                             ) {
-                                DropdownMenuItem(
-                                    text = { Text("Открыть по ссылке", color = Color.White) },
-                                    onClick = {
-                                        showMenu = false
-                                        onOpenCustomUrl()
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Настройки", color = Color.White) },
-                                    onClick = {
-                                        showMenu = false
-                                        onOpenSettings()
-                                    }
-                                )
+                                SearchIconPill(tint = Color.White, iconSize = 19.dp)
+                            }
+
+                            // History Button
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF1B1B24))
+                                    .clickable { Toast.makeText(context, "История воспроизведения", Toast.LENGTH_SHORT).show() },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                HistoryIconPill(tint = Color(0xFFFF9E00), iconSize = 19.dp)
+                            }
+
+                            // Menu Button
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF1B1B24))
+                                    .clickable { showMenu = true },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                ThreeDotsIconPill(tint = Color.White, iconSize = 18.dp)
+
+                                DropdownMenu(
+                                    expanded = showMenu,
+                                    onDismissRequest = { showMenu = false },
+                                    modifier = Modifier.background(SurfaceCardColor)
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Открыть по ссылке", color = Color.White) },
+                                        onClick = {
+                                            showMenu = false
+                                            onOpenCustomUrl()
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Настройки", color = Color.White) },
+                                        onClick = {
+                                            showMenu = false
+                                            onOpenSettings()
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
                 }
 
-                // Neon orange divider line with soft glow under top bar
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(1.5.dp)
-                        .background(NeonOrangeGradient)
-                )
-
+                // Search Bar Expandable
                 if (isSearchActive) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
                         OutlinedTextField(
                             value = searchQuery,
                             onValueChange = { searchQuery = it },
@@ -268,38 +357,42 @@ fun VideoLibraryScreen(
                             modifier = Modifier.fillMaxWidth(),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = NeonOrange,
-                                unfocusedBorderColor = Color.DarkGray,
+                                unfocusedBorderColor = Color(0xFF282834),
                                 focusedTextColor = Color.White,
                                 unfocusedTextColor = Color.White,
                                 cursorColor = NeonOrange
                             )
                         )
                     }
-                    Spacer(modifier = Modifier.height(6.dp))
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
-                // Top Navigation Tabs ("Видео", "Плейлисты")
+                // TOP TABS: "Видео" and "Плейлисты" (50% / 50% split with rounded capsule sides)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    NeonTabButton(
+                    // Tab 1: Видео (50% width)
+                    TabPillButton(
                         text = "Видео",
-                        icon = { tint -> VideoCameraIconCustom(tint = tint, size = 18.dp) },
-                        isSelected = currentTab == 0,
+                        icon = { tint -> VideoCameraIconCustom(tint = tint, iconSize = 20.dp) },
+                        isSelected = currentTab == 0 && bottomNavIndex == 0,
+                        modifier = Modifier.weight(1f),
                         onClick = {
                             currentTab = 0
                             bottomNavIndex = 0
                         }
                     )
-                    NeonTabButton(
+
+                    // Tab 2: Плейлисты (50% width)
+                    TabPillButton(
                         text = "Плейлисты",
-                        icon = { tint -> PlaylistTabIconCustom(tint = tint, size = 18.dp) },
-                        isSelected = currentTab == 1,
+                        icon = { tint -> MusicNoteTabIcon(tint = tint, iconSize = 20.dp) },
+                        isSelected = currentTab == 1 || bottomNavIndex == 3,
+                        modifier = Modifier.weight(1f),
                         onClick = {
                             currentTab = 1
                             bottomNavIndex = 3
@@ -307,76 +400,122 @@ fun VideoLibraryScreen(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
             }
         },
         bottomBar = {
-            // Bottom Navigation Bar (Height 72.dp, Custom Row/Box with neon glowing top & bottom lines)
-            Surface(
-                color = DarkBackground,
-                modifier = Modifier.fillMaxWidth()
+            // FLOATING ROUNDED BOTTOM NAVIGATION BAR WITH ROUNDED SIDES AND GLOWING AMBIENT CONTOUR
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 14.dp, vertical = 6.dp)
             ) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(1.5.dp)
-                            .background(NeonOrangeGradient)
-                    )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(70.dp)
-                            .padding(horizontal = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceAround,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        BottomNavItemCustom(
-                            label = "Видео",
-                            icon = { tint -> VideoNavIcon(tint) },
-                            isSelected = bottomNavIndex == 0,
-                            onClick = {
-                                bottomNavIndex = 0
-                                currentTab = 0
-                            }
+                // Outer soft glowing aura following the rounded pill contour
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clip(RoundedCornerShape(34.dp))
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    GoldenYellowGlow.copy(alpha = 0.22f),
+                                    Color.Transparent
+                                )
+                            )
                         )
-                        BottomNavItemCustom(
-                            label = "Аудио",
-                            icon = { tint -> AudioNavIcon(tint) },
-                            isSelected = bottomNavIndex == 1,
-                            onClick = { bottomNavIndex = 1 }
+                )
+
+                Surface(
+                    color = Color(0xFF101017),
+                    shape = RoundedCornerShape(32.dp),
+                    border = BorderStroke(
+                        1.5.dp,
+                        Brush.horizontalGradient(
+                            listOf(
+                                Color(0xFF242436),
+                                GoldenYellowGlow.copy(alpha = 0.85f),
+                                GoldenYellowLight,
+                                GoldenYellowGlow.copy(alpha = 0.85f),
+                                Color(0xFF242436)
+                            )
                         )
-                        BottomNavItemCustom(
-                            label = "Обзор",
-                            icon = { tint -> BrowseNavIcon(tint) },
-                            isSelected = bottomNavIndex == 2,
-                            onClick = { bottomNavIndex = 2 }
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        // Glowing golden-yellow top line along the curve
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(2.5.dp)
+                                .background(
+                                    Brush.horizontalGradient(
+                                        listOf(
+                                            GoldenYellowGlow.copy(alpha = 0.05f),
+                                            GoldenYellowLight,
+                                            GoldenYellow,
+                                            GoldenYellowLight,
+                                            GoldenYellowGlow.copy(alpha = 0.05f)
+                                        )
+                                    )
+                                )
                         )
-                        BottomNavItemCustom(
-                            label = "Плейлисты",
-                            icon = { tint -> PlaylistNavIcon(tint) },
-                            isSelected = bottomNavIndex == 3,
-                            onClick = {
-                                bottomNavIndex = 3
-                                currentTab = 1
-                            }
-                        )
-                        BottomNavItemCustom(
-                            label = "Ещё",
-                            icon = { tint -> MoreNavIcon(tint) },
-                            isSelected = bottomNavIndex == 4,
-                            onClick = {
-                                bottomNavIndex = 4
-                                onOpenSettings()
-                            }
-                        )
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(66.dp)
+                                .padding(horizontal = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceAround,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            BottomNavItemModern(
+                                label = "Видео",
+                                icon = { tint -> VideoNavIcon(tint) },
+                                isSelected = bottomNavIndex == 0 && currentTab == 0,
+                                onClick = {
+                                    bottomNavIndex = 0
+                                    currentTab = 0
+                                }
+                            )
+                            BottomNavItemModern(
+                                label = "Аудио",
+                                icon = { tint -> AudioNavIcon(tint) },
+                                isSelected = bottomNavIndex == 1,
+                                onClick = {
+                                    bottomNavIndex = 1
+                                    currentTab = 0
+                                }
+                            )
+                            BottomNavItemModern(
+                                label = "Обзор",
+                                icon = { tint -> BrowseNavIcon(tint) },
+                                isSelected = bottomNavIndex == 2,
+                                onClick = {
+                                    bottomNavIndex = 2
+                                    currentTab = 0
+                                }
+                            )
+                            BottomNavItemModern(
+                                label = "Плейлисты",
+                                icon = { tint -> PlaylistNavIcon(tint) },
+                                isSelected = bottomNavIndex == 3 || currentTab == 1,
+                                onClick = {
+                                    bottomNavIndex = 3
+                                    currentTab = 1
+                                }
+                            )
+                            BottomNavItemModern(
+                                label = "Ещё",
+                                icon = { tint -> MoreNavIcon(tint) },
+                                isSelected = bottomNavIndex == 4,
+                                onClick = {
+                                    bottomNavIndex = 4
+                                }
+                            )
+                        }
                     }
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(1.5.dp)
-                            .background(NeonOrangeGradient)
-                    )
                 }
             }
         }
@@ -396,7 +535,7 @@ fun VideoLibraryScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        Text("Необходим доступ к хранилищу", color = Color.White, fontSize = 16.sp)
+                        Text("Необходим доступ к медиафайлам", color = Color.White, fontSize = 16.sp)
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(
                             onClick = {
@@ -409,22 +548,38 @@ fun VideoLibraryScreen(
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = NeonOrange)
                         ) {
-                            Text("Разрешить доступ", color = Color.White)
+                            Text("Предоставить доступ", color = Color.White)
                         }
                     }
                 }
-                bottomNavIndex == 1 || bottomNavIndex == 2 || (bottomNavIndex == 3 && currentTab == 1) -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Скоро",
-                            color = NeonOrange,
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                bottomNavIndex == 1 -> {
+                    // Audio Browser Screen
+                    AudioBrowserView(
+                        onAudioSelected = onVideoSelected
+                    )
+                }
+                bottomNavIndex == 2 -> {
+                    // Custom In-App File Explorer Screen
+                    FileExplorerView(
+                        onMediaSelected = onVideoSelected
+                    )
+                }
+                bottomNavIndex == 3 || currentTab == 1 -> {
+                    // Playlists Screen
+                    PlaylistsView(
+                        onMediaSelected = onVideoSelected
+                    )
+                }
+                bottomNavIndex == 4 -> {
+                    // Additional Tools & Features Hub (FTP Server, Quick Share, Settings, Stream URL)
+                    MoreHubView(
+                        onOpenSettings = onOpenSettings,
+                        onOpenCustomUrl = onOpenCustomUrl,
+                        onOpenVideoLibrary = {
+                            bottomNavIndex = 0
+                            currentTab = 0
+                        }
+                    )
                 }
                 else -> {
                     if (filteredVideos.isEmpty()) {
@@ -432,23 +587,24 @@ fun VideoLibraryScreen(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("Видео не найдены", color = GrayText, fontSize = 16.sp)
+                            Text("Видеозаписи не найдены", color = GrayText, fontSize = 16.sp)
                         }
                     } else {
                         LazyVerticalGrid(
                             columns = GridCells.Fixed(2),
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                                .padding(horizontal = 14.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
                             items(filteredVideos, key = { it.id }) { video ->
-                                VideoCardItem(
+                                VideoCardItemModern(
                                     video = video,
                                     prefs = prefs,
                                     onClick = { onVideoSelected(video.uri.toString()) },
                                     onDelete = { videoToDelete = video },
+                                    onAddToPlaylist = { videoToAddToPlaylist = video },
                                     isMenuExpanded = videoCardMenuExpandedId == video.id,
                                     onMenuExpandedChange = { expanded ->
                                         videoCardMenuExpandedId = if (expanded) video.id else null
@@ -460,23 +616,47 @@ fun VideoLibraryScreen(
                 }
             }
 
-            // Floating Play Button (FAB) in bottom right above bottom bar
-            if (lastPlayedUri != null && bottomNavIndex == 0) {
+            // FLOATING ACTION BUTTON (FAB) IN BOTTOM-RIGHT (Only in Videos tab)
+            if (bottomNavIndex == 0 && currentTab == 0) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(16.dp)
-                        .size(60.dp)
+                        .padding(end = 18.dp, bottom = 18.dp)
+                        .size(64.dp)
                         .clip(CircleShape)
-                        .background(NeonOrangeGradient)
-                        .clickable { onVideoSelected(lastPlayedUri) },
+                        .background(
+                            Brush.radialGradient(
+                                listOf(
+                                    Color(0xFFFFA000),
+                                    Color(0xFFFF5A00),
+                                    Color(0xFFD93800)
+                                )
+                            )
+                        )
+                        .clickable {
+                            if (lastPlayedUri != null) {
+                                onVideoSelected(lastPlayedUri)
+                            } else if (videos.isNotEmpty()) {
+                                onVideoSelected(videos.first().uri.toString())
+                            } else {
+                                Toast.makeText(context, "Нет видео", Toast.LENGTH_SHORT).show()
+                            }
+                        },
                     contentAlignment = Alignment.Center
                 ) {
+                    // Soft outer glow shadow
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        drawCircle(
+                            color = NeonOrange.copy(alpha = 0.25f),
+                            radius = size.width * 0.65f
+                        )
+                    }
+                    // Solid white Play triangle
                     Canvas(modifier = Modifier.size(24.dp)) {
-                        val path = androidx.compose.ui.graphics.Path().apply {
-                            moveTo(6f, 4f)
-                            lineTo(20f, 12f)
-                            lineTo(6f, 20f)
+                        val path = Path().apply {
+                            moveTo(6.dp.toPx(), 4.dp.toPx())
+                            lineTo(20.dp.toPx(), 12.dp.toPx())
+                            lineTo(6.dp.toPx(), 20.dp.toPx())
                             close()
                         }
                         drawPath(path, color = Color.White)
@@ -490,8 +670,8 @@ fun VideoLibraryScreen(
     if (videoToDelete != null) {
         AlertDialog(
             onDismissRequest = { videoToDelete = null },
-            title = { Text("Удалить файл", color = Color.White) },
-            text = { Text("Удалить файл с телефона? Это нельзя отменить.", color = GrayText) },
+            title = { Text("Удалить видео?", color = Color.White) },
+            text = { Text("Видео будет удалено с устройства без возможности восстановления.", color = GrayText) },
             containerColor = SurfaceCardColor,
             confirmButton = {
                 TextButton(
@@ -511,38 +691,136 @@ fun VideoLibraryScreen(
             }
         )
     }
+
+    // Add to Playlist Dialog
+    if (videoToAddToPlaylist != null) {
+        val targetVideo = videoToAddToPlaylist!!
+        val playlists = remember { PlaylistManager.getPlaylists(context) }
+        AlertDialog(
+            onDismissRequest = { videoToAddToPlaylist = null },
+            containerColor = Color(0xFF161622),
+            title = {
+                Text("Добавить в плейлист", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(text = targetVideo.displayName, color = GoldenYellowLight, fontSize = 13.sp, maxLines = 1)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    playlists.forEach { pl ->
+                        Surface(
+                            onClick = {
+                                PlaylistManager.addItemToPlaylist(context, pl.id, targetVideo.uri.toString())
+                                Toast.makeText(context, "Добавлено в '${pl.name}'", Toast.LENGTH_SHORT).show()
+                                videoToAddToPlaylist = null
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFF1F1F2E),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = when (pl.iconType) {
+                                        "favorites" -> "⭐"
+                                        "movie" -> "🎬"
+                                        "music" -> "🎵"
+                                        else -> "📁"
+                                    },
+                                    fontSize = 18.sp
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(text = pl.name, color = Color.White, fontSize = 14.sp)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { videoToAddToPlaylist = null }) {
+                    Text("Закрыть", color = Color.White)
+                }
+            }
+        )
+    }
 }
 
 @Composable
-fun NeonTabButton(
+fun TabPillButton(
     text: String,
     icon: @Composable (Color) -> Unit,
     isSelected: Boolean,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    val backgroundColor = if (isSelected) SurfaceCardColor else Color.Transparent
-    val contentColor = if (isSelected) NeonOrange else GrayText
+    val backgroundColor = if (isSelected) Color(0xFF241A0A) else Color(0xFF13131A).copy(alpha = 0.6f)
+    val contentColor = if (isSelected) GoldenYellow else GrayText
 
     Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
+        modifier = modifier
+            .height(48.dp)
+            .clip(RoundedCornerShape(26.dp))
             .background(backgroundColor)
-            .border(
-                border = BorderStroke(1.5.dp, if (isSelected) NeonOrange else Color.DarkGray.copy(alpha = 0.5f)),
-                shape = RoundedCornerShape(12.dp)
+            .then(
+                if (isSelected) {
+                    Modifier.border(
+                        border = BorderStroke(1.5.dp, GoldenYellow),
+                        shape = RoundedCornerShape(26.dp)
+                    )
+                } else {
+                    Modifier.border(
+                        border = BorderStroke(1.dp, Color(0xFF262634)),
+                        shape = RoundedCornerShape(26.dp)
+                    )
+                }
             )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
     ) {
+        // Glowing warm golden-yellow indicator when selected
+        if (isSelected) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val glowBrush = Brush.radialGradient(
+                    colors = listOf(
+                        GoldenYellowGlow.copy(alpha = 0.35f),
+                        GoldenYellow.copy(alpha = 0.15f),
+                        Color.Transparent
+                    ),
+                    center = Offset(size.width / 2, size.height),
+                    radius = size.width * 0.55f
+                )
+                drawCircle(brush = glowBrush)
+
+                // Golden-yellow bottom accent line
+                drawLine(
+                    brush = Brush.horizontalGradient(
+                        listOf(
+                            GoldenYellowGlow.copy(alpha = 0.15f),
+                            GoldenYellowLight,
+                            GoldenYellow,
+                            GoldenYellowGlow.copy(alpha = 0.15f)
+                        )
+                    ),
+                    start = Offset(size.width * 0.18f, size.height - 2.dp.toPx()),
+                    end = Offset(size.width * 0.82f, size.height - 2.dp.toPx()),
+                    strokeWidth = 2.5.dp.toPx(),
+                    cap = StrokeCap.Round
+                )
+            }
+        }
+
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.Center,
+            modifier = Modifier.padding(horizontal = 12.dp)
         ) {
             icon(contentColor)
+            Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = text,
                 color = contentColor,
-                fontSize = 14.sp,
+                fontSize = 15.sp,
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
             )
         }
@@ -550,38 +828,39 @@ fun NeonTabButton(
 }
 
 @Composable
-fun BottomNavItemCustom(
+fun BottomNavItemModern(
     label: String,
     icon: @Composable (Color) -> Unit,
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
-    val tint = if (isSelected) NeonOrange else GrayText.copy(alpha = 0.7f)
+    val tint = if (isSelected) GoldenYellow else GrayText
     Column(
         modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .padding(horizontal = 10.dp, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         icon(tint)
-        Spacer(modifier = Modifier.height(3.dp))
+        Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = label,
             color = tint,
-            fontSize = 11.sp,
-            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+            fontSize = 11.5.sp,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
         )
     }
 }
 
 @Composable
-fun VideoCardItem(
+fun VideoCardItemModern(
     video: VideoItem,
     prefs: android.content.SharedPreferences,
     onClick: () -> Unit,
     onDelete: () -> Unit,
+    onAddToPlaylist: () -> Unit,
     isMenuExpanded: Boolean,
     onMenuExpandedChange: (Boolean) -> Unit
 ) {
@@ -599,82 +878,103 @@ fun VideoCardItem(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .border(BorderStroke(1.dp, NeonOrangeGradient), RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(16.dp))
+            .border(BorderStroke(1.dp, Color(0xFF22222E)), RoundedCornerShape(16.dp))
             .background(SurfaceCardColor)
             .clickable(onClick = onClick)
     ) {
         Column {
+            // Thumbnail Area
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(115.dp)
-                    .background(Color.Black)
+                    .height(125.dp)
+                    .background(Color(0xFF0F0F14))
             ) {
-                if (bitmap != null) {
+                if (video.thumbnailResId != null) {
+                    Image(
+                        painter = painterResource(id = video.thumbnailResId),
+                        contentDescription = video.displayName,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else if (bitmap != null) {
                     Image(
                         bitmap = bitmap!!.asImageBitmap(),
                         contentDescription = video.displayName,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
                     )
+                } else {
+                    // Dark placeholder with movie icon
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        VideoCameraIconCustom(tint = Color(0xFF333344), iconSize = 32.dp)
+                    }
                 }
 
-                // Light black overlay on preview
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.15f))
-                )
-
-                // SD / HD badge in top-left (dark oval block)
+                // SD / HD badge in top-left
                 Surface(
-                    color = Color.Black.copy(alpha = 0.7f),
-                    shape = RoundedCornerShape(50),
+                    color = Color.Black.copy(alpha = 0.75f),
+                    shape = RoundedCornerShape(6.dp),
                     modifier = Modifier
                         .align(Alignment.TopStart)
-                        .padding(6.dp)
+                        .padding(8.dp)
                 ) {
                     Text(
                         text = if (isHD) "HD" else "SD",
                         color = Color.White,
-                        fontSize = 10.sp,
+                        fontSize = 10.5.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                     )
                 }
 
+                // Top right 3-dots button on preview
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(4.dp)
+                        .size(36.dp)
+                        .clickable { onMenuExpandedChange(true) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    ThreeDotsIconPill(tint = Color.White, iconSize = 16.dp)
+                }
+
                 // Duration in bottom-right
                 Surface(
-                    color = Color.Black.copy(alpha = 0.7f),
-                    shape = RoundedCornerShape(50),
+                    color = Color.Black.copy(alpha = 0.75f),
+                    shape = RoundedCornerShape(6.dp),
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(6.dp)
+                        .padding(8.dp)
                 ) {
                     Text(
                         text = formatDuration(video.duration),
                         color = Color.White,
-                        fontSize = 10.sp,
+                        fontSize = 10.5.sp,
                         fontWeight = FontWeight.Medium,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                     )
                 }
 
-                // Progress bar if watched
+                // Orange progress bar if watched
                 if (progressFraction > 0f) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(3.dp)
                             .align(Alignment.BottomCenter)
-                            .background(Color.Gray.copy(alpha = 0.5f))
+                            .background(Color(0xFF282834))
                     ) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth(progressFraction)
                                 .fillMaxHeight()
-                                .background(NeonOrange)
+                                .background(NeonOrangeGradient)
                         )
                     }
                 }
@@ -684,24 +984,22 @@ fun VideoCardItem(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(10.dp),
+                    .padding(horizontal = 10.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Column(
-                    modifier = Modifier.weight(1f)
-                ) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = video.displayName.ifEmpty { video.title },
                         color = Color.White,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "${formatSize(video.size)} • ${formatDate(video.dateAdded)}",
+                        text = "${formatSize(video.size)}  •  ${formatDate(video.dateAdded)}",
                         color = GrayText,
                         fontSize = 11.sp,
                         maxLines = 1,
@@ -714,8 +1012,9 @@ fun VideoCardItem(
                         onClick = { onMenuExpandedChange(true) },
                         modifier = Modifier.size(24.dp)
                     ) {
-                        ThreeDotsIconCustom(tint = GrayText)
+                        ThreeDotsIconPill(tint = GrayText, iconSize = 16.dp)
                     }
+
                     DropdownMenu(
                         expanded = isMenuExpanded,
                         onDismissRequest = { onMenuExpandedChange(false) },
@@ -726,6 +1025,13 @@ fun VideoCardItem(
                             onClick = {
                                 onMenuExpandedChange(false)
                                 onClick()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("В плейлист", color = GoldenYellowLight) },
+                            onClick = {
+                                onMenuExpandedChange(false)
+                                onAddToPlaylist()
                             }
                         )
                         DropdownMenuItem(
@@ -770,43 +1076,139 @@ fun formatDate(dateAddedSeconds: Long): String {
     return sdf.format(Date(dateAddedSeconds * 1000L))
 }
 
-// Custom Custom Canvas Icons
+// -------------------------------------------------------------
+// HIGH QUALITY CUSTOM VECTOR ICONS MATCHING SCREENSHOT
+// -------------------------------------------------------------
+
 @Composable
-fun VideoCameraIconCustom(tint: Color, size: androidx.compose.ui.unit.Dp) {
-    Canvas(modifier = Modifier.size(size)) {
-        val w = size.toPx()
-        val h = size.toPx()
-        // Draw video camera shape
-        drawRect(color = tint, topLeft = androidx.compose.ui.geometry.Offset(2f, 5f), size = androidx.compose.ui.geometry.Size(w * 0.6f, h * 0.6f), style = androidx.compose.ui.graphics.drawscope.Stroke(1.5f))
-        val path = androidx.compose.ui.graphics.Path().apply {
-            moveTo(w * 0.62f, h * 0.3f)
-            lineTo(w - 2f, h * 0.15f)
-            lineTo(w - 2f, h * 0.85f)
-            lineTo(w * 0.62f, h * 0.7f)
+fun VideoCameraIconCustom(tint: Color, iconSize: Dp) {
+    Canvas(modifier = Modifier.size(iconSize)) {
+        val w = size.width
+        val h = size.height
+        val stroke = 2.dp.toPx()
+        // Video camera body
+        drawRoundRect(
+            color = tint,
+            topLeft = Offset(2.dp.toPx(), 4.dp.toPx()),
+            size = Size(w * 0.6f, h * 0.6f),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx()),
+            style = Stroke(width = stroke)
+        )
+        // Video camera lens
+        val lensPath = Path().apply {
+            moveTo(w * 0.62f, h * 0.35f)
+            lineTo(w - 2.dp.toPx(), h * 0.22f)
+            lineTo(w - 2.dp.toPx(), h * 0.78f)
+            lineTo(w * 0.62f, h * 0.65f)
             close()
         }
-        drawPath(path, color = tint)
+        drawPath(lensPath, color = tint)
     }
 }
 
 @Composable
-fun PlaylistTabIconCustom(tint: Color, size: androidx.compose.ui.unit.Dp) {
-    Canvas(modifier = Modifier.size(size)) {
-        val w = size.toPx()
-        val h = size.toPx()
-        drawLine(color = tint, start = androidx.compose.ui.geometry.Offset(2f, h * 0.25f), end = androidx.compose.ui.geometry.Offset(w - 2f, h * 0.25f), strokeWidth = 1.5f)
-        drawLine(color = tint, start = androidx.compose.ui.geometry.Offset(2f, h * 0.5f), end = androidx.compose.ui.geometry.Offset(w - 2f, h * 0.5f), strokeWidth = 1.5f)
-        drawLine(color = tint, start = androidx.compose.ui.geometry.Offset(2f, h * 0.75f), end = androidx.compose.ui.geometry.Offset(w - 2f, h * 0.75f), strokeWidth = 1.5f)
+fun MusicNoteTabIcon(tint: Color, iconSize: Dp) {
+    Canvas(modifier = Modifier.size(iconSize)) {
+        val stroke = 2.dp.toPx()
+        drawCircle(color = tint, radius = 3.dp.toPx(), center = Offset(size.width * 0.35f, size.height * 0.75f))
+        drawLine(
+            color = tint,
+            start = Offset(size.width * 0.44f, size.height * 0.75f),
+            end = Offset(size.width * 0.44f, size.height * 0.25f),
+            strokeWidth = stroke
+        )
+        drawLine(
+            color = tint,
+            start = Offset(size.width * 0.44f, size.height * 0.25f),
+            end = Offset(size.width * 0.8f, size.height * 0.25f),
+            strokeWidth = stroke
+        )
+        drawCircle(color = tint, radius = 3.dp.toPx(), center = Offset(size.width * 0.71f, size.height * 0.65f))
+        drawLine(
+            color = tint,
+            start = Offset(size.width * 0.8f, size.height * 0.65f),
+            end = Offset(size.width * 0.8f, size.height * 0.25f),
+            strokeWidth = stroke
+        )
+    }
+}
+
+@Composable
+fun SearchIconPill(tint: Color, iconSize: Dp) {
+    Canvas(modifier = Modifier.size(iconSize)) {
+        val stroke = 2.dp.toPx()
+        drawCircle(
+            color = tint,
+            radius = size.width * 0.32f,
+            center = Offset(size.width * 0.42f, size.height * 0.42f),
+            style = Stroke(width = stroke)
+        )
+        drawLine(
+            color = tint,
+            start = Offset(size.width * 0.65f, size.height * 0.65f),
+            end = Offset(size.width * 0.9f, size.height * 0.9f),
+            strokeWidth = stroke,
+            cap = StrokeCap.Round
+        )
+    }
+}
+
+@Composable
+fun HistoryIconPill(tint: Color, iconSize: Dp) {
+    Canvas(modifier = Modifier.size(iconSize)) {
+        val stroke = 2.dp.toPx()
+        drawCircle(
+            color = tint,
+            radius = size.width * 0.42f,
+            center = Offset(size.width / 2, size.height / 2),
+            style = Stroke(width = stroke)
+        )
+        // Clock hands pointing to ~10:10
+        drawLine(
+            color = tint,
+            start = Offset(size.width / 2, size.height / 2),
+            end = Offset(size.width / 2, size.height * 0.25f),
+            strokeWidth = stroke,
+            cap = StrokeCap.Round
+        )
+        drawLine(
+            color = tint,
+            start = Offset(size.width / 2, size.height / 2),
+            end = Offset(size.width * 0.7f, size.height * 0.55f),
+            strokeWidth = stroke,
+            cap = StrokeCap.Round
+        )
+    }
+}
+
+@Composable
+fun ThreeDotsIconPill(tint: Color, iconSize: Dp) {
+    Canvas(modifier = Modifier.size(iconSize)) {
+        val radius = 1.8.dp.toPx()
+        val centerX = size.width / 2
+        drawCircle(color = tint, radius = radius, center = Offset(centerX, size.height * 0.22f))
+        drawCircle(color = tint, radius = radius, center = Offset(centerX, size.height * 0.5f))
+        drawCircle(color = tint, radius = radius, center = Offset(centerX, size.height * 0.78f))
     }
 }
 
 @Composable
 fun VideoNavIcon(tint: Color) {
-    Canvas(modifier = Modifier.size(24.dp)) {
-        val path = androidx.compose.ui.graphics.Path().apply {
-            moveTo(6f, 4f)
-            lineTo(20f, 12f)
-            lineTo(6f, 20f)
+    Canvas(modifier = Modifier.size(26.dp)) {
+        val stroke = 2.dp.toPx()
+        // Smooth rounded filmstrip
+        drawRoundRect(
+            color = tint,
+            topLeft = Offset(2.dp.toPx(), 4.dp.toPx()),
+            size = Size(size.width - 4.dp.toPx(), size.height - 8.dp.toPx()),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(6.dp.toPx()),
+            style = Stroke(width = stroke)
+        )
+        // Center smooth play triangle
+        val path = Path().apply {
+            moveTo(size.width * 0.42f, size.height * 0.35f)
+            lineTo(size.width * 0.65f, size.height * 0.5f)
+            lineTo(size.width * 0.42f, size.height * 0.65f)
             close()
         }
         drawPath(path, color = tint)
@@ -815,64 +1217,84 @@ fun VideoNavIcon(tint: Color) {
 
 @Composable
 fun AudioNavIcon(tint: Color) {
-    Canvas(modifier = Modifier.size(24.dp)) {
-        drawCircle(color = tint, radius = 3.5f, center = androidx.compose.ui.geometry.Offset(8f, 18f))
-        drawRect(color = tint, topLeft = androidx.compose.ui.geometry.Offset(10.5f, 6f), size = androidx.compose.ui.geometry.Size(2f, 12f))
-        drawRect(color = tint, topLeft = androidx.compose.ui.geometry.Offset(10.5f, 6f), size = androidx.compose.ui.geometry.Size(7.5f, 3f))
+    Canvas(modifier = Modifier.size(26.dp)) {
+        val stroke = 2.dp.toPx()
+        // Left note head
+        drawCircle(color = tint, radius = 3.6.dp.toPx(), center = Offset(7.5.dp.toPx(), 18.dp.toPx()))
+        // Right note head
+        drawCircle(color = tint, radius = 3.6.dp.toPx(), center = Offset(18.5.dp.toPx(), 15.dp.toPx()))
+        // Left vertical stem
+        drawLine(
+            color = tint,
+            start = Offset(10.5.dp.toPx(), 18.dp.toPx()),
+            end = Offset(10.5.dp.toPx(), 6.dp.toPx()),
+            strokeWidth = stroke,
+            cap = StrokeCap.Round
+        )
+        // Right vertical stem
+        drawLine(
+            color = tint,
+            start = Offset(21.5.dp.toPx(), 15.dp.toPx()),
+            end = Offset(21.5.dp.toPx(), 3.5.dp.toPx()),
+            strokeWidth = stroke,
+            cap = StrokeCap.Round
+        )
+        // Connecting curved beam
+        drawLine(
+            color = tint,
+            start = Offset(9.5.dp.toPx(), 6.dp.toPx()),
+            end = Offset(22.5.dp.toPx(), 3.5.dp.toPx()),
+            strokeWidth = 3.dp.toPx(),
+            cap = StrokeCap.Round
+        )
     }
 }
 
 @Composable
 fun BrowseNavIcon(tint: Color) {
-    Canvas(modifier = Modifier.size(24.dp)) {
-        drawRect(color = tint, topLeft = androidx.compose.ui.geometry.Offset(2f, 5f), size = androidx.compose.ui.geometry.Size(20f, 14f), style = androidx.compose.ui.graphics.drawscope.Stroke(2f))
-        drawRect(color = tint, topLeft = androidx.compose.ui.geometry.Offset(2f, 3f), size = androidx.compose.ui.geometry.Size(8f, 3f))
+    Canvas(modifier = Modifier.size(26.dp)) {
+        val stroke = 2.dp.toPx()
+        // Rounded folder body
+        drawRoundRect(
+            color = tint,
+            topLeft = Offset(2.5.dp.toPx(), 6.5.dp.toPx()),
+            size = Size(size.width - 5.dp.toPx(), size.height - 10.dp.toPx()),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(4.5.dp.toPx()),
+            style = Stroke(width = stroke)
+        )
+        // Rounded folder tab
+        drawRoundRect(
+            color = tint,
+            topLeft = Offset(4.dp.toPx(), 3.5.dp.toPx()),
+            size = Size(9.dp.toPx(), 5.dp.toPx()),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx()),
+            style = Stroke(width = stroke)
+        )
     }
 }
 
 @Composable
 fun PlaylistNavIcon(tint: Color) {
-    Canvas(modifier = Modifier.size(24.dp)) {
-        drawLine(color = tint, start = androidx.compose.ui.geometry.Offset(6f, 6f), end = androidx.compose.ui.geometry.Offset(20f, 6f), strokeWidth = 2f)
-        drawLine(color = tint, start = androidx.compose.ui.geometry.Offset(6f, 12f), end = androidx.compose.ui.geometry.Offset(20f, 12f), strokeWidth = 2f)
-        drawLine(color = tint, start = androidx.compose.ui.geometry.Offset(6f, 18f), end = androidx.compose.ui.geometry.Offset(20f, 18f), strokeWidth = 2f)
-        drawCircle(color = tint, radius = 1.5f, center = androidx.compose.ui.geometry.Offset(3f, 6f))
-        drawCircle(color = tint, radius = 1.5f, center = androidx.compose.ui.geometry.Offset(3f, 12f))
-        drawCircle(color = tint, radius = 1.5f, center = androidx.compose.ui.geometry.Offset(3f, 18f))
+    Canvas(modifier = Modifier.size(26.dp)) {
+        val stroke = 2.2.dp.toPx()
+        // Smooth rounded pill lines
+        drawLine(color = tint, start = Offset(8.dp.toPx(), 7.dp.toPx()), end = Offset(21.dp.toPx(), 7.dp.toPx()), strokeWidth = stroke, cap = StrokeCap.Round)
+        drawLine(color = tint, start = Offset(8.dp.toPx(), 13.dp.toPx()), end = Offset(21.dp.toPx(), 13.dp.toPx()), strokeWidth = stroke, cap = StrokeCap.Round)
+        drawLine(color = tint, start = Offset(8.dp.toPx(), 19.dp.toPx()), end = Offset(17.dp.toPx(), 19.dp.toPx()), strokeWidth = stroke, cap = StrokeCap.Round)
+        // Rounded bullets
+        drawCircle(color = tint, radius = 2.dp.toPx(), center = Offset(4.dp.toPx(), 7.dp.toPx()))
+        drawCircle(color = tint, radius = 2.dp.toPx(), center = Offset(4.dp.toPx(), 13.dp.toPx()))
+        drawCircle(color = tint, radius = 2.dp.toPx(), center = Offset(4.dp.toPx(), 19.dp.toPx()))
     }
 }
 
 @Composable
 fun MoreNavIcon(tint: Color) {
-    Canvas(modifier = Modifier.size(24.dp)) {
-        drawCircle(color = tint, radius = 2f, center = androidx.compose.ui.geometry.Offset(12f, 5f))
-        drawCircle(color = tint, radius = 2f, center = androidx.compose.ui.geometry.Offset(12f, 12f))
-        drawCircle(color = tint, radius = 2f, center = androidx.compose.ui.geometry.Offset(12f, 19f))
-    }
-}
-
-@Composable
-fun SearchIconCustom(tint: Color) {
-    Canvas(modifier = Modifier.size(22.dp)) {
-        drawCircle(color = tint, radius = 6f, center = androidx.compose.ui.geometry.Offset(9f, 9f), style = androidx.compose.ui.graphics.drawscope.Stroke(2f))
-        drawLine(color = tint, start = androidx.compose.ui.geometry.Offset(13.5f, 13.5f), end = androidx.compose.ui.geometry.Offset(19.5f, 19.5f), strokeWidth = 2f)
-    }
-}
-
-@Composable
-fun HistoryIconCustom(tint: Color) {
-    Canvas(modifier = Modifier.size(22.dp)) {
-        drawCircle(color = tint, radius = 8f, center = androidx.compose.ui.geometry.Offset(11f, 11f), style = androidx.compose.ui.graphics.drawscope.Stroke(2f))
-        drawLine(color = tint, start = androidx.compose.ui.geometry.Offset(11f, 6f), end = androidx.compose.ui.geometry.Offset(11f, 11f), strokeWidth = 2f)
-        drawLine(color = tint, start = androidx.compose.ui.geometry.Offset(11f, 11f), end = androidx.compose.ui.geometry.Offset(15f, 13f), strokeWidth = 2f)
-    }
-}
-
-@Composable
-fun ThreeDotsIconCustom(tint: Color) {
-    Canvas(modifier = Modifier.size(22.dp)) {
-        drawCircle(color = tint, radius = 2f, center = androidx.compose.ui.geometry.Offset(11f, 5f))
-        drawCircle(color = tint, radius = 2f, center = androidx.compose.ui.geometry.Offset(11f, 11f))
-        drawCircle(color = tint, radius = 2f, center = androidx.compose.ui.geometry.Offset(11f, 17f))
+    Canvas(modifier = Modifier.size(26.dp)) {
+        val radius = 2.6.dp.toPx()
+        val centerY = size.height / 2
+        drawCircle(color = tint, radius = radius, center = Offset(5.dp.toPx(), centerY))
+        drawCircle(color = tint, radius = radius, center = Offset(size.width / 2, centerY))
+        drawCircle(color = tint, radius = radius, center = Offset(size.width - 5.dp.toPx(), centerY))
     }
 }

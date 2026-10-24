@@ -1,7 +1,7 @@
 package com.example.videoplayer.ui
 
 import android.content.Context
-import androidx.compose.foundation.background
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -11,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -23,17 +24,26 @@ fun SettingsScreen(
     val prefs = remember { context.getSharedPreferences("video_prefs", Context.MODE_PRIVATE) }
     var showBuffering by remember { mutableStateOf(prefs.getBoolean("show_buffering_status", false)) }
 
+    BackHandler {
+        onBack()
+    }
+
     Scaffold(
-        containerColor = Color(0xFF121212),
+        containerColor = DarkBackground,
         topBar = {
             TopAppBar(
-                title = { Text("Настройки", color = Color.White) },
+                title = { Text("Настройки", color = Color.White, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
+                        Icon(
+                            imageVector = Icons.Default.ArrowBack,
+                            contentDescription = "Назад",
+                            tint = Color.White
+                        )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF121212))
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground),
+                modifier = Modifier.statusBarsPadding()
             )
         }
     ) { innerPadding ->
@@ -41,32 +51,40 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(16.dp)
+                .navigationBarsPadding()
+                .padding(20.dp)
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+            Surface(
+                color = SurfaceCardColor,
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text(
-                    text = "Показывать статус воспроизведения (Buffering и т.п.)",
-                    color = Color.White,
-                    fontSize = 14.sp,
-                    modifier = Modifier.weight(1f)
-                )
-                Switch(
-                    checked = showBuffering,
-                    onCheckedChange = { newValue ->
-                        showBuffering = newValue
-                        prefs.edit().putBoolean("show_buffering_status", newValue).apply()
-                    },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color(0xFFFF8800),
-                        checkedTrackColor = Color(0xFFFF8800).copy(alpha = 0.5f)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Показывать статус воспроизведения",
+                        color = Color.White,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.weight(1f)
                     )
-                )
+                    Switch(
+                        checked = showBuffering,
+                        onCheckedChange = { newValue ->
+                            showBuffering = newValue
+                            prefs.edit().putBoolean("show_buffering_status", newValue).apply()
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = NeonOrange,
+                            checkedTrackColor = NeonOrange.copy(alpha = 0.5f)
+                        )
+                    )
+                }
             }
         }
     }
