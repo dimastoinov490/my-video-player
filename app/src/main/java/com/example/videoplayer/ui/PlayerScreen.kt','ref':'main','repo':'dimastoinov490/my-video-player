@@ -1,0 +1,162 @@
+package com.example.videoplayer.player
+
+import android.content.Context
+import android.net.Uri
+import android.view.SurfaceView
+import org.videolan.libvlc.LibVLC
+import org.videolan.libvlc.Media
+import org.videolan.libvlc.MediaPlayer
+
+class VlcPlayerManager(context: Context) {
+    private val options = ArrayList<String>().apply {
+        add("--no-drop-late-frames")
+        add("--no-skip-frames")
+        add("--rtsp-tcp")
+        add("-v")
+    }
+
+    val libVLC = LibVLC(context, options)
+    val mediaPlayer = MediaPlayer(libVLC)
+
+    var onStatusChanged: ((String) -> Unit)? = null
+    var onTimeChanged: ((Long, Long) -> Unit)? = null
+
+    private val eventListener = MediaPlayer.EventListener { event ->
+        when (event.type) {
+            MediaPlayer.Event.Playing -> onStatusChanged?.invoke("Playing")
+            MediaPlayer.Event.Paused -> onStatusChanged?.invoke("Paused")
+            MediaPlayer.Event.Stopped -> onStatusChanged?.invoke("Stopped")
+            MediaPlayer.Event.EndReached -> onStatusChanged?.invoke("End Reached")
+            MediaPlayer.Event.EncounteredError -> onStatusChanged?.invoke("Error: Encountered Error")
+            MediaPlayer.Event.Buffering -> onStatusChanged?.invoke("Buffering: ${event.buffering}%")
+            MediaPlayer.Event.TimeChanged -> onTimeChanged?.invoke(mediaPlayer.time, mediaPlayer.length)
+            MediaPlayer.Event.PositionChanged -> onTimeChanged?.invoke(mediaPlayer.time, mediaPlayer.length)
+            else -> {}
+        }
+    }
+
+    init {
+        mediaPlayer.setEventListener(eventListener)
+    }
+
+    fun attachSurface(surfaceView: SurfaceView) {
+        val vout = mediaPlayer.vlcVout
+        if (!vout.areViewsAttached()) {
+            vout.setVideoView(surfaceView)
+            vout.attachViews()
+        }
+    }
+
+    fun detachSurface() {
+        val vout = mediaPlayer.vlcVout
+        if (vout.areViewsAttached()) {
+            vout.detachViews()
+        }
+    }
+
+    fun updateWindowSize(width: Int, height: Int) {
+        mediaPlayer.updateVideoSurfaces()
+        mediaPlayer.vlcVout.setWindowSize(width, height)
+    }
+
+    fun playUrl(context: Context, urlOrUri: String) {
+        val normalized = urlOrUri.trim()
+        if (normalized.isEmpty()) {
+            onStatusChanged?.invoke("Error: empty URL")
+            return
+        }
+
+        try {
+            mediaPlayer.stop()
+            val mediaUri = when {
+                normalized.startsWith("content://") -> Uri.parse(normalized)
+                normalized.startsWith("http://") || normalized.startsWith("https://") ||
+                    normalized.startsWith("rtsp://") || normalized.startsWith("rtmp://") ||
+                    normalized.startsWith("udp://") || normalized.startsWith("tcp://") -> Uri.parse(normalized)
+                else -> Uri.parse(normalized)
+            }
+
+            val media = Media(libVLC, mediaUri)
+            media.setHWDecoderEnabled(true, false)
+            mediaPlayer.media = media
+            media.release()
+            mediaPlayer.play()
+            onStatusChanged?.invoke("Starting playback...")
+        } catch (e: Exception) {
+            e.printStackTrace()
+            onStatusChanged?.invoke("Error: ${e.localizedMessage}")
+        }
+    }
+
+    fun setAspectRatio(ratio: Float) {
+        val normalized = when {
+            ratio <= 0f -> ""
+            kotlin.math.abs(ratio - 1.1f) < 0.05f -> "1.1"
+            kotlin.math.abs(ratio - (16f / 9f)) < 0.05f -> "16:9"
+            else -> ""
+        }
+        try {
+            mediaPlayer.setAspectRatio(normalized)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun loadSubtitleUrl(subtitleUrl: String) {
+        if (subtitleUrl.isBlank()) return
+        try {
+            val uri = Uri.parse(subtitleUrl)
+            val media = Media(libVLC, uri)
+            mediaPlayer.setMedia(media)
+            media.release()
+            onStatusChanged?.invoke("Subtitle loaded")
+        } catch (e: Exception) {
+            e.printStackTrace()
+            onStatusChanged?.invoke("Error: subtitle unavailable")
+        }
+    }
+
+    fun seekTo(timeMs: Long) {
+        mediaPlayer.time = timeMs
+    }
+
+    fun seekRelative(offsetMs: Long) {
+        val newTime = (mediaPlayer.time + offsetMs).coerceIn(0, mediaPlayer.length)
+        mediaPlayer.time = newTime
+    }
+
+    fun setRate(rate: Float) {
+        try {
+            mediaPlayer.rate = rate
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun pause() {
+        if (mediaPlayer.isPlaying) {
+            mediaPlayer.pause()
+        }
+    }
+
+    fun resume() {
+        if (!mediaPlayer.isPlaying) {
+            mediaPlayer.play()
+        }
+    }
+
+    fun stop() {
+        mediaPlayer.stop()
+    }
+
+    fun release() {
+        try {
+            mediaPlayer.stop()
+            detachSurface()
+            mediaPlayer.release()
+            libVLC.release()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+}
