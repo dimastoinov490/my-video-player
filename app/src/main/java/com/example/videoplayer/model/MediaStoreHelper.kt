@@ -1,296 +1,165 @@
-package com.example.videoplayer.ui
+package com.example.videoplayer.model
 
+import android.content.ContentUris
 import android.content.Context
-import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.PlayCircle
-import androidx.compose.material.icons.filled.ScreenRotation
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.example.videoplayer.ui.theme.*
+import android.graphics.Bitmap
+import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
+import android.util.Size
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun SettingsScreen(
-    onBack: () -> Unit,
-    onThemeChanged: (Boolean) -> Unit = {}
-) {
-    val context = LocalContext.current
-    val prefs = remember { context.getSharedPreferences("video_prefs", Context.MODE_PRIVATE) }
+object MediaStoreHelper {
 
-    var hardwareAccel by remember { mutableStateOf(prefs.getBoolean("hw_accel", true)) }
-    var backgroundPlay by remember { mutableStateOf(prefs.getBoolean("bg_play", false)) }
-    var showBuffering by remember { mutableStateOf(prefs.getBoolean("show_buffering_status", false)) }
-    var autoRotate by remember { mutableStateOf(prefs.getBoolean("auto_rotate", true)) }
-    var currentTheme by remember {
-        val saved = prefs.getBoolean("app_dark_theme", true)
-        mutableStateOf(if (saved) "Ночной Неон" else "Светлый Сет")
+    fun getVideos(context: Context): List<VideoItem> {
+        val videoList = mutableListOf<VideoItem>()
+        val projection = arrayOf(
+            MediaStore.Video.Media._ID,
+            MediaStore.Video.Media.TITLE,
+            MediaStore.Video.Media.DISPLAY_NAME,
+            MediaStore.Video.Media.DURATION,
+            MediaStore.Video.Media.WIDTH,
+            MediaStore.Video.Media.HEIGHT,
+            MediaStore.Video.Media.DATE_ADDED,
+            MediaStore.Video.Media.SIZE
+        )
+
+        try {
+            val cursor = context.contentResolver.query(
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                projection,
+                null,
+                null,
+                "${MediaStore.Video.Media.DATE_ADDED} DESC"
+            )
+
+            cursor?.use {
+                val idCol = it.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
+                val titleCol = it.getColumnIndexOrThrow(MediaStore.Video.Media.TITLE)
+                val nameCol = it.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
+                val durCol = it.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
+                val widthCol = it.getColumnIndexOrThrow(MediaStore.Video.Media.WIDTH)
+                val heightCol = it.getColumnIndexOrThrow(MediaStore.Video.Media.HEIGHT)
+                val dateCol = it.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_ADDED)
+                val sizeCol = it.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
+
+                while (it.moveToNext()) {
+                    val id = it.getLong(idCol)
+                    val title = it.getString(titleCol) ?: "Video $id"
+                    val displayName = it.getString(nameCol) ?: title
+                    val duration = it.getLong(durCol)
+                    val width = it.getInt(widthCol)
+                    val height = it.getInt(heightCol)
+                    val dateAdded = it.getLong(dateCol)
+                    val size = it.getLong(sizeCol)
+                    val contentUri = ContentUris.withAppendedId(
+                        MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                        id
+                    )
+
+                    val resolution = if (width > 0 && height > 0) "${width}x${height}" else "HD"
+                    videoList.add(
+                        VideoItem(
+                            id = id,
+                            title = title,
+                            displayName = displayName,
+                            uri = contentUri,
+                            duration = duration,
+                            resolution = resolution,
+                            width = width,
+                            height = height,
+                            dateAdded = dateAdded,
+                            size = size
+                        )
+                    )
+                }
+            }
+        } catch (_: Exception) {
+            return emptyList()
+        }
+
+        return videoList
     }
 
-    BackHandler { onBack() }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        "Настройки",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 20.sp
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Назад",
-                            tint = NeonOrange
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
+    fun loadThumbnail(context: Context, id: Long): Bitmap? {
+        if (id <= 0L) return null
+        return try {
+            val contentUri = ContentUris.withAppendedId(
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                id
             )
-        },
-        containerColor = DarkBackground
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            item {
-                Text(
-                    "ВОСПРОИЗВЕДЕНИЕ",
-                    color = NeonOrange,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = 1.sp
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                context.contentResolver.loadThumbnail(contentUri, Size(320, 180), null)
+            } else {
+                @Suppress("DEPRECATION")
+                MediaStore.Video.Thumbnails.getThumbnail(
+                    context.contentResolver,
+                    id,
+                    MediaStore.Video.Thumbnails.MINI_KIND,
+                    null
                 )
             }
-
-            item {
-                SettingsCard {
-                    SettingsSwitchItem(
-                        icon = Icons.Default.PlayCircle,
-                        title = "Аппаратное декодирование",
-                        subtitle = "Использовать аппаратный декодер LibVLC",
-                        checked = hardwareAccel,
-                        onCheckedChange = {
-                            hardwareAccel = it
-                            prefs.edit().putBoolean("hw_accel", it).apply()
-                        }
-                    )
-                    HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
-                    SettingsSwitchItem(
-                        icon = Icons.Default.Settings,
-                        title = "Фоновое воспроизведение",
-                        subtitle = "Продолжать звук при блокировке экрана",
-                        checked = backgroundPlay,
-                        onCheckedChange = {
-                            backgroundPlay = it
-                            prefs.edit().putBoolean("bg_play", it).apply()
-                        }
-                    )
-                    HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
-                    SettingsSwitchItem(
-                        icon = Icons.Default.PlayCircle,
-                        title = "Отображать буферизацию",
-                        subtitle = "Индикатор процентов кэша во время проигрывания",
-                        checked = showBuffering,
-                        onCheckedChange = {
-                            showBuffering = it
-                            prefs.edit().putBoolean("show_buffering_status", it).apply()
-                        }
-                    )
-                    HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
-                    SettingsSwitchItem(
-                        icon = Icons.Default.ScreenRotation,
-                        title = "Автоповорот в полноэкранном",
-                        subtitle = "Автоматически поворачивать в альбомный режим",
-                        checked = autoRotate,
-                        onCheckedChange = {
-                            autoRotate = it
-                            prefs.edit().putBoolean("auto_rotate", it).apply()
-                        }
-                    )
-                }
-            }
-
-            item {
-                Text(
-                    "ИНТЕРФЕЙС И ОФОРМЛЕНИЕ",
-                    color = NeonOrange,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = 1.sp
-                )
-            }
-
-            item {
-                SettingsCard {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Palette,
-                            contentDescription = null,
-                            tint = NeonOrange,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                "Цветовой стиль",
-                                color = Color.White,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                currentTheme,
-                                color = GrayText,
-                                fontSize = 13.sp
-                            )
-                        }
-                        TextButton(
-                            onClick = {
-                                val nextDark = prefs.getBoolean("app_dark_theme", true).not()
-                                currentTheme = if (nextDark) "Ночной Неон" else "Светлый Сет"
-                                prefs.edit().putBoolean("app_dark_theme", nextDark).apply()
-                                onThemeChanged(nextDark)
-                            }
-                        ) {
-                            Text("Изменить", color = GoldenYellowLight)
-                        }
-                    }
-                }
-            }
-
-            item {
-                Text(
-                    "О ПРИЛОЖЕНИИ",
-                    color = NeonOrange,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = 1.sp
-                )
-            }
-
-            item {
-                SettingsCard {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = null,
-                            tint = NeonOrange,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Column {
-                            Text(
-                                "Nexora Video Player",
-                                color = Color.White,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                "Версия 1.0.0 (LibVLC 3.6.0)",
-                                color = GrayText,
-                                fontSize = 13.sp
-                            )
-                            Text(
-                                "Современный мультимедийный проигрыватель",
-                                color = GrayText,
-                                fontSize = 12.sp
-                            )
-                        }
-                    }
-                }
-            }
+        } catch (_: Exception) {
+            null
         }
     }
-}
 
-@Composable
-private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        color = SurfaceCardColor
-    ) {
-        Column(content = content)
-    }
-}
-
-@Composable
-private fun SettingsSwitchItem(
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = NeonOrange,
-            modifier = Modifier.size(24.dp)
+    fun getAudios(context: Context): List<AudioItem> {
+        val audioList = mutableListOf<AudioItem>()
+        val projection = arrayOf(
+            MediaStore.Audio.Media._ID,
+            MediaStore.Audio.Media.TITLE,
+            MediaStore.Audio.Media.ARTIST,
+            MediaStore.Audio.Media.ALBUM,
+            MediaStore.Audio.Media.DURATION,
+            MediaStore.Audio.Media.SIZE,
+            MediaStore.Audio.Media.DATE_ADDED
         )
-        Spacer(modifier = Modifier.width(16.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                title,
-                color = Color.White,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium
+
+        try {
+            val cursor = context.contentResolver.query(
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                projection,
+                null,
+                null,
+                "${MediaStore.Audio.Media.DATE_ADDED} DESC"
             )
-            Text(
-                subtitle,
-                color = GrayText,
-                fontSize = 12.sp
-            )
+
+            cursor?.use {
+                val idCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+                val titleCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+                val artistCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+                val albumCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
+                val durCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+                val sizeCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)
+                val dateCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
+
+                while (it.moveToNext()) {
+                    val id = it.getLong(idCol)
+                    val title = it.getString(titleCol) ?: "Audio $id"
+                    val artist = it.getString(artistCol) ?: "Unknown Artist"
+                    val album = it.getString(albumCol) ?: "Unknown Album"
+                    val duration = it.getLong(durCol)
+                    val size = it.getLong(sizeCol)
+                    val dateAdded = it.getLong(dateCol)
+
+                    audioList.add(
+                        AudioItem(
+                            id = id,
+                            title = title,
+                            artist = artist,
+                            album = album,
+                            duration = duration,
+                            uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id),
+                            size = size,
+                            dateAdded = dateAdded
+                        )
+                    )
+                }
+            }
+        } catch (_: Exception) {
+            return emptyList()
         }
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = NeonOrange,
-                uncheckedThumbColor = GrayText,
-                uncheckedTrackColor = Color.White.copy(alpha = 0.1f)
-            )
-        )
+
+        return audioList
     }
 }

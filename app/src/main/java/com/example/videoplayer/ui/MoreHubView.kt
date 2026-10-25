@@ -3,9 +3,11 @@ package com.example.videoplayer.ui
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.graphics.Bitmap
+import android.os.Environment
 import android.widget.Toast
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -20,52 +22,66 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.videoplayer.service.LocalFtpServer
+import com.example.videoplayer.service.LocalHttpShareServer
 import com.example.videoplayer.ui.theme.*
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.MultiFormatWriter
+import com.google.zxing.common.BitMatrix
+import java.io.File
 
 val HubOrange = Color(0xFFFF8800)
 val HubAmberLight = Color(0xFFFFB300)
 val HubCardBg = Color(0xFF1E1E1E)
 val HubBorder = Color(0x33FF8800)
 
+private fun generateQrCodeBitmap(text: String, size: Int = 512): Bitmap {
+    val matrix: BitMatrix = MultiFormatWriter().encode(text, BarcodeFormat.QR_CODE, size, size)
+    val pixels = IntArray(size * size)
+    for (y in 0 until size) {
+        val offset = y * size
+        for (x in 0 until size) {
+            pixels[offset + x] = if (matrix[x, y]) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
+        }
+    }
+    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    bitmap.setPixels(pixels, 0, size, 0, 0, size, size)
+    return bitmap
+}
+
 @Composable
 fun MoreHubView(
     onOpenSettings: () -> Unit,
     onOpenCustomUrl: () -> Unit,
     onOpenVideoLibrary: () -> Unit,
+    onOpenProtectedVault: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
 
-    var isFtpEnabled by remember { mutableStateOf(LocalFtpServer.isRunning) }
-    var ftpAddress by remember {
-        mutableStateOf("ftp://${LocalFtpServer.getLocalIpAddress()}:${LocalFtpServer.port}")
+    var httpEnabled by remember { mutableStateOf(LocalHttpShareServer.isRunning(context)) }
+    var httpAddress by remember { mutableStateOf(LocalHttpShareServer.getServerUrl(context)) }
+    var showQrDialog by remember { mutableStateOf(false) }
+    var qrContent by remember { mutableStateOf(httpAddress) }
+    var qrTitle by remember { mutableStateOf("Подключение к сети") }
+
+    val defaultShareFile = remember {
+        File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "nexora_share_example.mp4")
     }
-
-    // Quick share state
-    var showQuickShareModal by remember { mutableStateOf(false) }
-    var quickShareMode by remember { mutableStateOf("send") } // "send" or "receive"
-    var transferStep by remember { mutableStateOf(1) } // 1: Bluetooth Scan, 2: Pairing, 3: Wi-Fi Direct Hotspot, 4: Transferring, 5: Done
-    var selectedDevice by remember { mutableStateOf("Pixel 8 Pro") }
-    var transferProgress by remember { mutableFloatStateOf(0f) }
-    var transferSpeed by remember { mutableStateOf("24.5 МБ/с") }
-    var transferFileName by remember { mutableStateOf("Video_2026_4K.mp4") }
-    var transferFileSize by remember { mutableStateOf("1.4 ГБ") }
+    val shareUrl = remember(httpEnabled, httpAddress) {
+        if (httpEnabled) LocalHttpShareServer.getDownloadUrl(context, defaultShareFile) else ""
+    }
 
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(DarkBackground)
     ) {
-        // Top Header
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -94,16 +110,12 @@ fun MoreHubView(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // FTP Server Card
             item {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(22.dp),
                     color = HubCardBg,
-                    border = BorderStroke(
-                        1.dp,
-                        if (isFtpEnabled) HubOrange.copy(alpha = 0.8f) else HubBorder
-                    )
+                    border = BorderStroke(1.dp, if (httpEnabled) HubOrange.copy(alpha = 0.8f) else HubBorder)
                 ) {
                     Column(modifier = Modifier.padding(18.dp)) {
                         Row(
@@ -114,16 +126,13 @@ fun MoreHubView(
                                 modifier = Modifier
                                     .size(46.dp)
                                     .clip(RoundedCornerShape(14.dp))
-                                    .background(
-                                        if (isFtpEnabled) HubOrange.copy(alpha = 0.2f)
-                                        else Color.White.copy(alpha = 0.06f)
-                                    ),
+                                    .background(if (httpEnabled) HubOrange.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.06f)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Dns,
+                                    imageVector = Icons.Default.Wifi,
                                     contentDescription = null,
-                                    tint = if (isFtpEnabled) HubAmberLight else GrayText,
+                                    tint = if (httpEnabled) HubAmberLight else GrayText,
                                     modifier = Modifier.size(24.dp)
                                 )
                             }
@@ -132,35 +141,31 @@ fun MoreHubView(
 
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    "Локальный FTP-сервер",
+                                    "Локальный HTTP-сервер",
                                     color = Color.White,
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    if (isFtpEnabled) "Сервер активен в локальной сети"
-                                    else "Доступ к файлам устройства по Wi-Fi",
-                                    color = if (isFtpEnabled) Color(0xFF4CAF50) else GrayText,
+                                    if (httpEnabled) "Сервер активен в локальной сети" else "Обмен файлами по Wi‑Fi через HTTP",
+                                    color = if (httpEnabled) Color(0xFF4CAF50) else GrayText,
                                     fontSize = 12.sp
                                 )
                             }
 
                             Switch(
-                                checked = isFtpEnabled,
+                                checked = httpEnabled,
                                 onCheckedChange = { checked ->
                                     if (checked) {
-                                        val started = LocalFtpServer.start(context, 2121)
-                                        isFtpEnabled = started
-                                        ftpAddress = "ftp://${LocalFtpServer.getLocalIpAddress()}:${LocalFtpServer.port}"
-                                        Toast.makeText(
-                                            context,
-                                            if (started) "FTP-сервер запущен" else "Ошибка запуска FTP",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
+                                        val started = LocalHttpShareServer.start(context, 8765)
+                                        httpEnabled = started
+                                        httpAddress = LocalHttpShareServer.getServerUrl(context)
+                                        Toast.makeText(context, if (started) "HTTP-сервер запущен" else "Ошибка запуска HTTP-сервера", Toast.LENGTH_SHORT).show()
                                     } else {
-                                        LocalFtpServer.stop()
-                                        isFtpEnabled = false
-                                        Toast.makeText(context, "FTP-сервер остановлен", Toast.LENGTH_SHORT).show()
+                                        LocalHttpShareServer.stop()
+                                        httpEnabled = false
+                                        httpAddress = LocalHttpShareServer.getServerUrl(context)
+                                        Toast.makeText(context, "HTTP-сервер остановлен", Toast.LENGTH_SHORT).show()
                                     }
                                 },
                                 colors = SwitchDefaults.colors(
@@ -172,7 +177,7 @@ fun MoreHubView(
                             )
                         }
 
-                        if (isFtpEnabled) {
+                        if (httpEnabled) {
                             Spacer(modifier = Modifier.height(14.dp))
                             Surface(
                                 modifier = Modifier.fillMaxWidth(),
@@ -188,13 +193,9 @@ fun MoreHubView(
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     Column {
+                                        Text("Адрес подключения:", color = GrayText, fontSize = 11.sp)
                                         Text(
-                                            "Адрес подключения:",
-                                            color = GrayText,
-                                            fontSize = 11.sp
-                                        )
-                                        Text(
-                                            ftpAddress,
+                                            httpAddress,
                                             color = HubAmberLight,
                                             fontSize = 14.sp,
                                             fontWeight = FontWeight.SemiBold
@@ -204,9 +205,9 @@ fun MoreHubView(
                                     IconButton(
                                         onClick = {
                                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                            val clip = ClipData.newPlainText("FTP Address", ftpAddress)
+                                            val clip = ClipData.newPlainText("HTTP address", httpAddress)
                                             clipboard.setPrimaryClip(clip)
-                                            Toast.makeText(context, "Адрес скопирован в буфер", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, "Адрес скопирован", Toast.LENGTH_SHORT).show()
                                         }
                                     ) {
                                         Icon(
@@ -223,7 +224,6 @@ fun MoreHubView(
                 }
             }
 
-            // Quick Share Card
             item {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
@@ -244,7 +244,7 @@ fun MoreHubView(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Share,
+                                    imageVector = Icons.Default.QrCodeScanner,
                                     contentDescription = null,
                                     tint = HubAmberLight,
                                     modifier = Modifier.size(24.dp)
@@ -255,13 +255,13 @@ fun MoreHubView(
 
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    "Быстрая отправка файлов",
+                                    "Передача по QR",
                                     color = Color.White,
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    "Сопряжение по Bluetooth + Wi-Fi Hotspot",
+                                    "Подключение и передача файла через локальную сеть",
                                     color = GrayText,
                                     fontSize = 12.sp
                                 )
@@ -276,31 +276,29 @@ fun MoreHubView(
                         ) {
                             Button(
                                 onClick = {
-                                    quickShareMode = "send"
-                                    transferStep = 1
-                                    transferProgress = 0f
-                                    showQuickShareModal = true
+                                    qrTitle = "Подключение к сети"
+                                    qrContent = httpAddress.ifBlank { "http://127.0.0.1:8765" }
+                                    showQrDialog = true
                                 },
                                 modifier = Modifier.weight(1f),
                                 colors = ButtonDefaults.buttonColors(containerColor = HubOrange),
                                 shape = RoundedCornerShape(14.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.ArrowUpward,
+                                    imageVector = Icons.Default.ConnectWithoutContact,
                                     contentDescription = null,
                                     tint = Color.Black,
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Отправить", color = Color.Black, fontWeight = FontWeight.Bold)
+                                Text("QR сети", color = Color.Black, fontWeight = FontWeight.Bold)
                             }
 
                             OutlinedButton(
                                 onClick = {
-                                    quickShareMode = "receive"
-                                    transferStep = 1
-                                    transferProgress = 0f
-                                    showQuickShareModal = true
+                                    qrTitle = "Прямая передача файла"
+                                    qrContent = shareUrl.ifBlank { "http://127.0.0.1:8765/download/nexora_share_example.mp4" }
+                                    showQrDialog = true
                                 },
                                 modifier = Modifier.weight(1f),
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = HubAmberLight),
@@ -308,20 +306,19 @@ fun MoreHubView(
                                 shape = RoundedCornerShape(14.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.ArrowDownward,
+                                    imageVector = Icons.Default.AttachFile,
                                     contentDescription = null,
                                     tint = HubAmberLight,
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Принять", color = HubAmberLight, fontWeight = FontWeight.Bold)
+                                Text("QR файла", color = HubAmberLight, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
                 }
             }
 
-            // Other Hub actions
             item {
                 Text(
                     "НАВИГАЦИЯ И ИНСТРУМЕНТЫ",
@@ -330,6 +327,15 @@ fun MoreHubView(
                     fontWeight = FontWeight.SemiBold,
                     letterSpacing = 1.sp,
                     modifier = Modifier.padding(start = 4.dp, top = 8.dp)
+                )
+            }
+
+            item {
+                HubActionCard(
+                    icon = Icons.Default.Lock,
+                    title = "Защищенная папка",
+                    subtitle = "Скрытое хранилище с шифрованием и безопасным доступом",
+                    onClick = onOpenProtectedVault
                 )
             }
 
@@ -362,256 +368,46 @@ fun MoreHubView(
         }
     }
 
-    // Quick Share Modal Dialog
-    if (showQuickShareModal) {
-        val scope = rememberCoroutineScope()
-
+    if (showQrDialog) {
+        val qrBitmap = remember(qrContent) { generateQrCodeBitmap(qrContent) }
         AlertDialog(
-            onDismissRequest = { showQuickShareModal = false },
+            onDismissRequest = { showQrDialog = false },
             title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Sensors,
-                        contentDescription = null,
-                        tint = HubOrange,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        if (quickShareMode == "send") "Быстрая отправка" else "Приём файлов",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp
-                    )
-                }
+                Text(qrTitle, color = Color.White, fontWeight = FontWeight.Bold)
             },
             text = {
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    when (transferStep) {
-                        1 -> {
-                            // Step 1: Bluetooth Discovery / Radar
-                            RadarAnimation()
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                "Поиск ближайших устройств по Bluetooth...",
-                                color = Color.White,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                "Убедитесь, что на втором телефоне включен Bluetooth",
-                                color = GrayText,
-                                fontSize = 12.sp
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Button(
-                                onClick = {
-                                    transferStep = 2
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = HubOrange),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Text("Найдено устройство: $selectedDevice", color = Color.Black, fontWeight = FontWeight.Bold)
-                            }
-                        }
-
-                        2 -> {
-                            // Step 2: Pairing & Hotspot Handshake
-                            CircularProgressIndicator(color = HubOrange, modifier = Modifier.size(48.dp))
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                "Сопряжение с $selectedDevice...",
-                                color = Color.White,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                "Включение безопасной точки доступа Wi-Fi...",
-                                color = HubAmberLight,
-                                fontSize = 12.sp
-                            )
-                            LaunchedEffect(Unit) {
-                                delay(1200)
-                                transferStep = 3
-                            }
-                        }
-
-                        3 -> {
-                            // Step 3: Direct Wi-Fi Connection Established
-                            Icon(
-                                imageVector = Icons.Default.WifiTethering,
-                                contentDescription = null,
-                                tint = Color(0xFF4CAF50),
-                                modifier = Modifier.size(48.dp)
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                "Wi-Fi Direct подключен!",
-                                color = Color(0xFF4CAF50),
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                "Начало высокоскоростной передачи...",
-                                color = GrayText,
-                                fontSize = 12.sp
-                            )
-                            LaunchedEffect(Unit) {
-                                delay(800)
-                                transferStep = 4
-                            }
-                        }
-
-                        4 -> {
-                            // Step 4: Transfer in progress with %
-                            LaunchedEffect(Unit) {
-                                while (transferProgress < 1f) {
-                                    delay(80)
-                                    transferProgress += 0.03f
-                                }
-                                transferProgress = 1f
-                                transferStep = 5
-                            }
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(transferFileName, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                                Text("${(transferProgress * 100).toInt()}%", color = HubAmberLight, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                            }
-
-                            Spacer(modifier = Modifier.height(8.dp))
-
-                            LinearProgressIndicator(
-                                progress = { transferProgress.coerceIn(0f, 1f) },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(10.dp)
-                                    .clip(RoundedCornerShape(5.dp)),
-                                color = HubOrange,
-                                trackColor = Color.White.copy(alpha = 0.1f)
-                            )
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("Скорость: $transferSpeed", color = GrayText, fontSize = 12.sp)
-                                Text("Размер: $transferFileSize", color = GrayText, fontSize = 12.sp)
-                            }
-                        }
-
-                        5 -> {
-                            // Step 5: Transfer Complete
-                            Icon(
-                                imageVector = Icons.Default.CheckCircle,
-                                contentDescription = null,
-                                tint = Color(0xFF4CAF50),
-                                modifier = Modifier.size(54.dp)
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                "Передача успешно завершена!",
-                                color = Color.White,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                "Файл сохранён в памяти устройства",
-                                color = GrayText,
-                                fontSize = 12.sp
-                            )
-                        }
-                    }
+                    Image(
+                        bitmap = qrBitmap.asImageBitmap(),
+                        contentDescription = qrTitle,
+                        modifier = Modifier.size(220.dp)
+                    )
+                    Text(
+                        qrContent,
+                        color = GrayText,
+                        fontSize = 11.sp
+                    )
                 }
             },
             confirmButton = {
-                if (transferStep == 5) {
-                    Button(
-                        onClick = { showQuickShareModal = false },
-                        colors = ButtonDefaults.buttonColors(containerColor = HubOrange)
-                    ) {
-                        Text("Готово", color = Color.Black, fontWeight = FontWeight.Bold)
-                    }
+                Button(
+                    onClick = { showQrDialog = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = HubOrange)
+                ) {
+                    Text("Готово", color = Color.Black, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showQuickShareModal = false }) {
+                TextButton(onClick = { showQrDialog = false }) {
                     Text("Закрыть", color = GrayText)
                 }
             },
             containerColor = DarkBackground
         )
-    }
-}
-
-@Composable
-fun RadarAnimation(modifier: Modifier = Modifier) {
-    val infiniteTransition = rememberInfiniteTransition(label = "radar")
-    val wave1 by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "w1"
-    )
-    val wave2 by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2000, delayMillis = 600, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "w2"
-    )
-
-    Box(
-        modifier = modifier
-            .size(110.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
-            val center = this.center
-            val maxRadius = size.minDimension / 2
-
-            // outer wave 1
-            drawCircle(
-                color = HubOrange.copy(alpha = (1f - wave1) * 0.4f),
-                radius = maxRadius * wave1
-            )
-            // outer wave 2
-            drawCircle(
-                color = HubAmberLight.copy(alpha = (1f - wave2) * 0.4f),
-                radius = maxRadius * wave2
-            )
-        }
-
-        Box(
-            modifier = Modifier
-                .size(46.dp)
-                .clip(CircleShape)
-                .background(HubOrange),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.BluetoothSearching,
-                contentDescription = null,
-                tint = Color.Black,
-                modifier = Modifier.size(24.dp)
-            )
-        }
     }
 }
 

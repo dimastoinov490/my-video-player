@@ -13,6 +13,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
+import com.example.videoplayer.security.SecureVaultScreen
 import com.example.videoplayer.ui.PlayerScreen
 import com.example.videoplayer.ui.SettingsScreen
 import com.example.videoplayer.ui.VideoLibraryScreen
@@ -32,6 +33,7 @@ class MainActivity : FragmentActivity() {
                     var selectedVideoUri by remember { mutableStateOf<String?>(null) }
                     var showCustomUrlDialog by remember { mutableStateOf(false) }
                     var showSettingsScreen by remember { mutableStateOf(false) }
+                    var showProtectedVault by remember { mutableStateOf(false) }
 
                     if (selectedVideoUri != null) {
                         PlayerScreen(
@@ -42,11 +44,17 @@ class MainActivity : FragmentActivity() {
                         SettingsScreen(
                             onBack = { showSettingsScreen = false }
                         )
+                    } else if (showProtectedVault) {
+                        SecureVaultScreen(
+                            onBack = { showProtectedVault = false },
+                            onOpenVaultFile = { path -> selectedVideoUri = path }
+                        )
                     } else {
                         VideoLibraryScreen(
                             onVideoSelected = { uri -> selectedVideoUri = uri },
                             onOpenCustomUrl = { showCustomUrlDialog = true },
-                            onOpenSettings = { showSettingsScreen = true }
+                            onOpenSettings = { showSettingsScreen = true },
+                            onOpenProtectedVault = { showProtectedVault = true }
                         )
 
                         if (showCustomUrlDialog) {

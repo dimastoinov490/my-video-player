@@ -1,166 +1,63 @@
-package com.example.videoplayer.model
+package com.example.videoplayer.network
 
-import android.content.ContentUris
 import android.content.Context
-import android.graphics.Bitmap
+import android.content.Intent
 import android.net.Uri
 import android.os.Build
-import android.provider.MediaStore
-import android.util.Size
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import androidx.core.app.ShareCompat
+import androidx.core.content.FileProvider
+import java.io.File
+import java.net.NetworkInterface
 
-object MediaStoreHelper {
+object TransferManager {
 
-    suspend fun getVideos(context: Context): List<VideoItem> = withContext(Dispatchers.IO) {
-        val videoList = mutableListOf<VideoItem>()
-        val projection = arrayOf(
-            MediaStore.Video.Media._ID,
-            MediaStore.Video.Media.TITLE,
-            MediaStore.Video.Media.DISPLAY_NAME,
-            MediaStore.Video.Media.DURATION,
-            MediaStore.Video.Media.WIDTH,
-            MediaStore.Video.Media.HEIGHT,
-            MediaStore.Video.Media.DATE_ADDED,
-            MediaStore.Video.Media.SIZE
-        )
+    private const val HTTP_PORT = 8765
 
+    fun shareUrl(context: Context, url: String) {
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_SUBJECT, "Video URL")
+            putExtra(Intent.EXTRA_TEXT, url)
+        }
+        context.startActivity(Intent.createChooser(intent, "Send video URL"))
+    }
+
+    fun shareFile(context: Context, file: File, mimeType: String = "video/*") {
+        val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
+        } else {
+            @Suppress("DEPRECATION")
+            Uri.fromFile(file)
+        }
+
+        val intent = ShareCompat.IntentBuilder(context)
+            .setType(mimeType)
+            .setStream(uri)
+            .setChooserTitle("Share video")
+            .createChooserIntent()
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+
+        context.startActivity(intent)
+    }
+
+    fun buildLocalDownloadUrl(file: File): String {
+        val host = localIpAddress()
+        val safeName = file.name.replace(" ", "%20")
+        return "http://$host:$HTTP_PORT/download/$safeName"
+    }
+
+    private fun localIpAddress(): String {
         try {
-            val cursor = context.contentResolver.query(
-                MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-                projection,
-                null,
-                null,
-                "${MediaStore.Video.Media.DATE_ADDED} DESC"
-            )
-
-            cursor?.use {
-                val idCol = it.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
-                val titleCol = it.getColumnIndexOrThrow(MediaStore.Video.Media.TITLE)
-                val nameCol = it.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
-                val durCol = it.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
-                val widthCol = it.getColumnIndexOrThrow(MediaStore.Video.Media.WIDTH)
-                val heightCol = it.getColumnIndexOrThrow(MediaStore.Video.Media.HEIGHT)
-                val dateCol = it.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_ADDED)
-                val sizeCol = it.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
-
-                while (it.moveToNext()) {
-                    val id = it.getLong(idCol)
-                    val title = it.getString(titleCol) ?: "Video $id"
-                    val displayName = it.getString(nameCol) ?: title
-                    val duration = it.getLong(durCol)
-                    val width = it.getInt(widthCol)
-                    val height = it.getInt(heightCol)
-                    val dateAdded = it.getLong(dateCol)
-                    val size = it.getLong(sizeCol)
-                    val contentUri = ContentUris.withAppendedId(
-                        MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-                        id
-                    )
-
-                    val resolution = if (width > 0 && height > 0) "${width}x${height}" else "HD"
-                    videoList.add(
-                        VideoItem(
-                            id = id,
-                            title = title,
-                            displayName = displayName,
-                            uri = contentUri,
-                            duration = duration,
-                            resolution = resolution,
-                            width = width,
-                            height = height,
-                            dateAdded = dateAdded,
-                            size = size
-                        )
-                    )
+            NetworkInterface.getNetworkInterfaces()?.toList()?.forEach { network ->
+                network.inetAddresses?.toList()?.forEach { address ->
+                    if (!address.isLoopbackAddress && address.hostAddress != null && address.hostAddress.contains('.') && !address.hostAddress.contains(':')) {
+                        return address.hostAddress
+                    }
                 }
             }
         } catch (_: Exception) {
-            return@withContext emptyList()
+            // fallback
         }
-
-        videoList
-    }
-
-    suspend fun loadThumbnail(context: Context, id: Long): Bitmap? = withContext(Dispatchers.IO) {
-        if (id <= 0L) return@withContext null
-        try {
-            val contentUri = ContentUris.withAppendedId(
-                MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-                id
-            )
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                context.contentResolver.loadThumbnail(contentUri, Size(320, 180), null)
-            } else {
-                MediaStore.Video.Thumbnails.getThumbnail(
-                    context.contentResolver,
-                    id,
-                    MediaStore.Video.Thumbnails.MINI_KIND,
-                    null
-                )
-            }
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    suspend fun getAudios(context: Context): List<AudioItem> = withContext(Dispatchers.IO) {
-        val audioList = mutableListOf<AudioItem>()
-        val projection = arrayOf(
-            MediaStore.Audio.Media._ID,
-            MediaStore.Audio.Media.TITLE,
-            MediaStore.Audio.Media.ARTIST,
-            MediaStore.Audio.Media.ALBUM,
-            MediaStore.Audio.Media.DURATION,
-            MediaStore.Audio.Media.SIZE,
-            MediaStore.Audio.Media.DATE_ADDED
-        )
-
-        try {
-            val cursor = context.contentResolver.query(
-                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                projection,
-                null,
-                null,
-                "${MediaStore.Audio.Media.DATE_ADDED} DESC"
-            )
-
-            cursor?.use {
-                val idCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-                val titleCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
-                val artistCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
-                val albumCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
-                val durCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
-                val sizeCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)
-                val dateCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
-
-                while (it.moveToNext()) {
-                    val id = it.getLong(idCol)
-                    val title = it.getString(titleCol) ?: "Audio $id"
-                    val artist = it.getString(artistCol) ?: "Unknown Artist"
-                    val album = it.getString(albumCol) ?: "Unknown Album"
-                    val duration = it.getLong(durCol)
-                    val size = it.getLong(sizeCol)
-                    val dateAdded = it.getLong(dateCol)
-
-                    audioList.add(
-                        AudioItem(
-                            id = id,
-                            title = title,
-                            artist = artist,
-                            album = album,
-                            duration = duration,
-                            uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id),
-                            size = size,
-                            dateAdded = dateAdded
-                        )
-                    )
-                }
-            }
-        } catch (_: Exception) {
-            return@withContext emptyList()
-        }
-
-        audioList
+        return "127.0.0.1"
     }
 }

@@ -89,6 +89,7 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
+    implementation("com.google.accompanist:accompanist-swiperefresh:0.34.0")
 
     implementation("org.videolan.android:libvlc-all:3.6.0-eap13")
     implementation("org.apache.ftpserver:ftpserver-core:1.2.0")
