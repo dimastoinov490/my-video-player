@@ -1,166 +1,275 @@
 package com.example.videoplayer.ui
 
-import android.Manifest
-import android.content.ContentUris
 import android.content.Context
-import android.content.pm.PackageManager
-import android.net.Uri
-import android.os.Build
-import android.provider.MediaStore
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import android.graphics.Bitmap
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
+import com.example.videoplayer.R
+import com.example.videoplayer.model.MediaStoreHelper
 import com.example.videoplayer.model.VideoItem
+import com.example.videoplayer.ui.theme.*
+import java.util.Locale
 
-val DarkBackground = Color(0xFF0B0F14)
-val NeonOrange = Color(0xFFFF8A00)
-val SurfaceCardColor = Color(0xFF1B212B)
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VideoLibraryScreen(
     onVideoSelected: (String) -> Unit,
     onOpenCustomUrl: () -> Unit,
-    onOpenSettings: () -> Unit,
-    onOpenHub: () -> Unit,
-    modifier: Modifier = Modifier
+    onOpenSettings: () -> Unit
 ) {
     val context = LocalContext.current
+
+    var currentTab by remember { mutableIntStateOf(0) } // 0: Видео, 1: Плейлисты
+    var bottomNavIndex by remember { mutableIntStateOf(0) } // 0: Видео, 1: Аудио, 2: Проводник, 3: Плейлисты, 4: Еще
+    var searchQuery by remember { mutableStateOf("") }
+    var isSearchActive by remember { mutableStateOf(false) }
+
     var videos by remember { mutableStateOf<List<VideoItem>>(emptyList()) }
-    var isRefreshing by remember { mutableStateOf(false) }
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { result ->
-        val granted = result.all { it.value }
-        if (granted) {
-            videos = queryLocalVideos(context)
-            isRefreshing = false
-        }
-    }
-
-    fun loadVideos() {
-        val hasReadPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED
-        } else {
-            ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
-        }
-
-        if (hasReadPermission) {
-            isRefreshing = true
-            videos = queryLocalVideos(context)
-            isRefreshing = false
-        } else {
-            val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                arrayOf(Manifest.permission.READ_MEDIA_VIDEO)
-            } else {
-                arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
-            }
-            permissionLauncher.launch(permissions)
-        }
-    }
 
     LaunchedEffect(Unit) {
-        loadVideos()
+        videos = MediaStoreHelper.getVideos(context)
     }
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(DarkBackground)
-            .pointerInput(Unit) {
-                detectDragGestures { _, dragAmount ->
-                    if (dragAmount.y > 0f) {
-                        loadVideos()
-                    }
+    val filteredVideos = remember(videos, searchQuery) {
+        if (searchQuery.isBlank()) {
+            videos
+        } else {
+            videos.filter { it.displayName.contains(searchQuery, ignoreCase = true) }
+        }
+    }
+
+    Scaffold(
+        containerColor = DarkBackground,
+        bottomBar = {
+            // Modern rounded floating bottom bar with smooth corners and soft amber glow
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .shadow(
+                        elevation = 16.dp,
+                        shape = RoundedCornerShape(28.dp),
+                        spotColor = GoldenYellowGlow,
+                        ambientColor = GoldenYellowGlow
+                    ),
+                shape = RoundedCornerShape(28.dp),
+                color = SurfaceCardColor,
+                border = BorderStroke(1.dp, GoldenYellowLight.copy(alpha = 0.25f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceAround,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    BottomNavRoundedItem(
+                        icon = Icons.Default.PlayCircle,
+                        label = "Видео",
+                        isSelected = bottomNavIndex == 0,
+                        onClick = {
+                            bottomNavIndex = 0
+                            currentTab = 0
+                        }
+                    )
+                    BottomNavRoundedItem(
+                        icon = Icons.Default.MusicNote,
+                        label = "Аудио",
+                        isSelected = bottomNavIndex == 1,
+                        onClick = { bottomNavIndex = 1 }
+                    )
+                    BottomNavRoundedItem(
+                        icon = Icons.Default.Folder,
+                        label = "Обзор",
+                        isSelected = bottomNavIndex == 2,
+                        onClick = { bottomNavIndex = 2 }
+                    )
+                    BottomNavRoundedItem(
+                        icon = Icons.Default.PlaylistPlay,
+                        label = "Плейлист",
+                        isSelected = bottomNavIndex == 3,
+                        onClick = { bottomNavIndex = 3 }
+                    )
+                    BottomNavRoundedItem(
+                        icon = Icons.Default.MoreHoriz,
+                        label = "Ещё",
+                        isSelected = bottomNavIndex == 4,
+                        onClick = { bottomNavIndex = 4 }
+                    )
                 }
             }
-    ) {
-        Column(
+        }
+    ) { innerPadding ->
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp)
+                .padding(innerPadding)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Медиатека", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = onOpenCustomUrl,
-                        colors = ButtonDefaults.buttonColors(containerColor = NeonOrange)
-                    ) {
-                        Text("URL")
-                    }
-                    Button(
-                        onClick = onOpenHub,
-                        colors = ButtonDefaults.buttonColors(containerColor = NeonOrange)
-                    ) {
-                        Text("Hub")
-                    }
-                    Button(
-                        onClick = onOpenSettings,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1F2731))
-                    ) {
-                        Text("Settings")
+            when (bottomNavIndex) {
+                0 -> {
+                    // Main Video Screen with 50/50 header
+                    if (currentTab == 1) {
+                        PlaylistsView(onMediaSelected = onVideoSelected)
+                    } else {
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            // Top Bar with Nexora Logo
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 18.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Image(
+                                        painter = painterResource(id = R.drawable.ic_nexora),
+                                        contentDescription = "Nexora Logo",
+                                        modifier = Modifier
+                                            .size(38.dp)
+                                            .clip(CircleShape)
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
+                                        Text(
+                                            "NEXORA",
+                                            color = Color.White,
+                                            fontSize = 18.sp,
+                                            fontWeight = FontWeight.Black,
+                                            letterSpacing = 1.5.sp
+                                        )
+                                        Text(
+                                            "Медиаплеер",
+                                            color = GoldenYellowLight,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                }
+
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(onClick = { isSearchActive = !isSearchActive }) {
+                                        Icon(
+                                            imageVector = Icons.Default.Search,
+                                            contentDescription = "Поиск",
+                                            tint = GoldenYellowLight
+                                        )
+                                    }
+                                    IconButton(onClick = onOpenCustomUrl) {
+                                        Icon(
+                                            imageVector = Icons.Default.Link,
+                                            contentDescription = "Поток",
+                                            tint = NeonOrange
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Search bar if active
+                            if (isSearchActive) {
+                                OutlinedTextField(
+                                    value = searchQuery,
+                                    onValueChange = { searchQuery = it },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                                    placeholder = { Text("Поиск видео...", color = GrayText) },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(20.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = NeonOrange,
+                                        unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
+                                        focusedTextColor = Color.White,
+                                        unfocusedTextColor = Color.White
+                                    )
+                                )
+                            }
+
+                            // 50% / 50% Top Tab Buttons with Golden Glow & Rounded Corners
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                // 50% Video Button
+                                TopTabPillButton(
+                                    text = "Видео",
+                                    icon = Icons.Default.Movie,
+                                    isSelected = currentTab == 0,
+                                    onClick = { currentTab = 0 },
+                                    modifier = Modifier.weight(1f)
+                                )
+
+                                // 50% Playlist Button
+                                TopTabPillButton(
+                                    text = "Плейлисты",
+                                    icon = Icons.Default.PlaylistPlay,
+                                    isSelected = currentTab == 1,
+                                    onClick = { currentTab = 1 },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+
+                            // Grid of Videos
+                            LazyVerticalGrid(
+                                columns = GridCells.Fixed(2),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth(),
+                                contentPadding = PaddingValues(16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                items(filteredVideos, key = { it.id }) { video ->
+                                    VideoCardItem(
+                                        video = video,
+                                        onClick = { onVideoSelected(video.uri.toString()) }
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            if (isRefreshing) {
-                Text("Обновление медиатеки…", color = NeonOrange, fontSize = 14.sp)
-            }
-
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(videos) { video ->
-                    VideoCard(
-                        item = video,
-                        onClick = { onVideoSelected(video.uri.toString()) }
+                1 -> {
+                    AudioBrowserView(onAudioSelected = onVideoSelected)
+                }
+                2 -> {
+                    FileExplorerView(onMediaSelected = onVideoSelected)
+                }
+                3 -> {
+                    PlaylistsView(onMediaSelected = onVideoSelected)
+                }
+                4 -> {
+                    MoreHubView(
+                        onOpenSettings = onOpenSettings,
+                        onOpenCustomUrl = onOpenCustomUrl,
+                        onOpenVideoLibrary = { bottomNavIndex = 0 }
                     )
                 }
             }
@@ -169,99 +278,228 @@ fun VideoLibraryScreen(
 }
 
 @Composable
-private fun VideoCard(item: VideoItem, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = SurfaceCardColor),
-        shape = RoundedCornerShape(16.dp)
+fun TopTabPillButton(
+    text: String,
+    icon: ImageVector,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier
+            .height(48.dp)
+            .shadow(
+                elevation = if (isSelected) 8.dp else 0.dp,
+                shape = RoundedCornerShape(24.dp),
+                spotColor = GoldenYellowGlow,
+                ambientColor = GoldenYellowGlow
+            ),
+        shape = RoundedCornerShape(24.dp),
+        color = if (isSelected) NeonOrange else SurfaceCardColor,
+        border = BorderStroke(
+            1.dp,
+            if (isSelected) GoldenYellowLight else Color.White.copy(alpha = 0.08f)
+        )
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
+            modifier = Modifier.fillMaxSize(),
+            horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (isSelected) Color.Black else GrayText,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = text,
+                color = if (isSelected) Color.Black else Color.White,
+                fontSize = 14.sp,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+            )
+        }
+    }
+}
+
+@Composable
+fun BottomNavRoundedItem(
+    icon: ImageVector,
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp)),
+        shape = RoundedCornerShape(20.dp),
+        color = if (isSelected) NeonOrange.copy(alpha = 0.18f) else Color.Transparent
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = if (isSelected) GoldenYellowLight else GrayText,
+                modifier = Modifier.size(22.dp)
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = label,
+                color = if (isSelected) GoldenYellowLight else GrayText,
+                fontSize = 11.sp,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+            )
+        }
+    }
+}
+
+@Composable
+fun VideoCardItem(
+    video: VideoItem,
+    onClick: () -> Unit
+) {
+    val context = LocalContext.current
+    var bitmapThumbnail by remember { mutableStateOf<Bitmap?>(null) }
+
+    LaunchedEffect(video.id) {
+        if (video.thumbnailResId == null && video.id > 0) {
+            bitmapThumbnail = MediaStoreHelper.loadThumbnail(context, video.id)
+        }
+    }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        color = SurfaceCardColor,
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.06f))
+    ) {
+        Column {
             Box(
                 modifier = Modifier
-                    .size(64.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFF2C3440)),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .height(115.dp)
+                    .background(Color(0xFF151515))
             ) {
-                Text("▶", color = NeonOrange, fontSize = 26.sp)
+                if (video.thumbnailResId != null) {
+                    Image(
+                        painter = painterResource(id = video.thumbnailResId),
+                        contentDescription = video.title,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else if (bitmapThumbnail != null) {
+                    Image(
+                        bitmap = bitmapThumbnail!!.asImageBitmap(),
+                        contentDescription = video.title,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Movie,
+                            contentDescription = null,
+                            tint = NeonOrange.copy(alpha = 0.6f),
+                            modifier = Modifier.size(40.dp)
+                        )
+                    }
+                }
+
+                // Duration badge
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(6.dp),
+                    shape = RoundedCornerShape(6.dp),
+                    color = Color.Black.copy(alpha = 0.75f)
+                ) {
+                    Text(
+                        text = formatDuration(video.duration),
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                    )
+                }
+
+                // Resolution badge
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(6.dp),
+                    shape = RoundedCornerShape(6.dp),
+                    color = NeonOrange.copy(alpha = 0.85f)
+                ) {
+                    Text(
+                        text = video.resolution,
+                        color = Color.Black,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                    )
+                }
             }
 
-            Spacer(modifier = Modifier.size(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(item.displayName, color = Color.White, fontWeight = FontWeight.SemiBold)
-                Text(item.resolution, color = Color(0xFFB4BBC8), fontSize = 12.sp)
-                Text("${item.duration / 1000}s", color = Color(0xFF8A92A6), fontSize = 12.sp)
+            Column(modifier = Modifier.padding(10.dp)) {
+                Text(
+                    text = video.displayName,
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(3.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = formatSize(video.size),
+                        color = GrayText,
+                        fontSize = 11.sp
+                    )
+                    Text(
+                        text = "MP4",
+                        color = GoldenYellowLight,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
     }
 }
 
-private fun queryLocalVideos(context: Context): List<VideoItem> {
-    val projection = arrayOf(
-        MediaStore.Video.Media._ID,
-        MediaStore.Video.Media.DISPLAY_NAME,
-        MediaStore.Video.Media.DURATION,
-        MediaStore.Video.Media.SIZE,
-        MediaStore.Video.Media.WIDTH,
-        MediaStore.Video.Media.HEIGHT,
-        MediaStore.Video.Media.DATE_ADDED,
-        MediaStore.Video.Media.MIME_TYPE
-    )
-
-    val sortOrder = "${MediaStore.Video.Media.DATE_ADDED} DESC"
-    val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+fun formatDuration(ms: Long): String {
+    val totalSec = ms / 1000
+    val sec = totalSec % 60
+    val min = (totalSec / 60) % 60
+    val hour = totalSec / 3600
+    return if (hour > 0) {
+        String.format(Locale.getDefault(), "%d:%02d:%02d", hour, min, sec)
     } else {
-        MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        String.format(Locale.getDefault(), "%02d:%02d", min, sec)
     }
+}
 
-    val result = mutableListOf<VideoItem>()
-    val cursor = context.contentResolver.query(collection, projection, null, null, sortOrder) ?: return emptyList()
-
-    cursor.use {
-        val idColumn = it.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
-        val nameColumn = it.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
-        val durationColumn = it.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
-        val sizeColumn = it.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
-        val widthColumn = it.getColumnIndexOrThrow(MediaStore.Video.Media.WIDTH)
-        val heightColumn = it.getColumnIndexOrThrow(MediaStore.Video.Media.HEIGHT)
-        val addedColumn = it.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_ADDED)
-
-        while (it.moveToNext()) {
-            val id = it.getLong(idColumn)
-            val displayName = it.getString(nameColumn) ?: "video"
-            val duration = it.getLong(durationColumn)
-            val size = it.getLong(sizeColumn)
-            val width = it.getInt(widthColumn)
-            val height = it.getInt(heightColumn)
-            val dateAdded = it.getLong(addedColumn)
-            val uri = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id)
-
-            result.add(
-                VideoItem(
-                    id = id,
-                    title = displayName,
-                    displayName = displayName,
-                    uri = uri,
-                    duration = duration,
-                    resolution = "$width x $height",
-                    width = width,
-                    height = height,
-                    dateAdded = dateAdded,
-                    size = size,
-                    thumbnailResId = null
-                )
-            )
-        }
+fun formatSize(bytes: Long): String {
+    val mb = bytes / (1024.0 * 1024.0)
+    return if (mb >= 1024.0) {
+        String.format(Locale.getDefault(), "%.1f GB", mb / 1024.0)
+    } else {
+        String.format(Locale.getDefault(), "%.1f MB", mb)
     }
-
-    return result
 }

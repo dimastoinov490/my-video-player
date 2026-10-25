@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:background="@android:color/black"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:keepScreenOn="true">
+    <FrameLayout
+        android:fitsSystemWindows="false"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+        <FrameLayout
+            android:layout_gravity="center"
+            android:id="@+id/remote_player_surface_frame"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:foregroundGravity="clip_vertical|clip_horizontal">
+            <SurfaceView
+                android:id="@+id/remote_player_surface"
+                android:layout_width="1dp"
+                android:layout_height="1dp"/>
+            <SurfaceView
+                android:id="@+id/remote_subtitles_surface"
+                android:layout_width="1dp"
+                android:layout_height="1dp"/>
+        </FrameLayout>
+    </FrameLayout>
+</RelativeLayout>

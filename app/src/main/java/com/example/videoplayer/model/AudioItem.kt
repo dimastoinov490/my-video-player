@@ -1,6 +1,7 @@
 package com.example.videoplayer.model
 
 import android.net.Uri
+import java.util.Locale
 
 data class AudioItem(
     val id: Long,
@@ -12,21 +13,19 @@ data class AudioItem(
     val size: Long,
     val dateAdded: Long
 ) {
-    val formattedDuration: String
-        get() {
-            val totalSeconds = duration / 1000
-            val minutes = totalSeconds / 60
-            val seconds = totalSeconds % 60
-            return String.format("%02d:%02d", minutes, seconds)
-        }
+    fun getFormattedDuration(): String {
+        val totalSec = duration / 1000
+        val m = totalSec / 60
+        val s = totalSec % 60
+        return String.format(Locale.getDefault(), "%02d:%02d", m, s)
+    }
 
-    val formattedSize: String
-        get() {
-            val mb = size / (1024.0 * 1024.0)
-            return if (mb >= 1024) {
-                String.format("%.1f GB", mb / 1024.0)
-            } else {
-                String.format("%.1f MB", mb)
-            }
+    fun getFormattedSize(): String {
+        val mb = size / (1024.0 * 1024.0)
+        return if (mb >= 1024.0) {
+            String.format(Locale.getDefault(), "%.1f GB", mb / 1024.0)
+        } else {
+            String.format(Locale.getDefault(), "%.1f MB", mb)
         }
+    }
 }

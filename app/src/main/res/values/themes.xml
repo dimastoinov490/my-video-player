@@ -1,6 +1,0 @@
-<resources>
-    <style name="Theme.VideoPlayer" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:windowBackground">#121212</item>
-        <item name="android:colorPrimary">#FF8800</item>
-    </style>
-</resources>

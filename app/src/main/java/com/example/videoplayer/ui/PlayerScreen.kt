@@ -2,214 +2,361 @@ package com.example.videoplayer.ui
 
 import android.app.Activity
 import android.content.Context
-import android.content.pm.ActivityInfo
-import android.media.AudioManager
-import android.os.Build
+import android.content.Intent
+import android.view.SurfaceHolder
 import android.view.SurfaceView
-import android.widget.Toast
+import android.view.WindowManager
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.videoplayer.player.VlcPlayerManager
+import com.example.videoplayer.ui.theme.*
+import kotlinx.coroutines.delay
+import java.util.Locale
 
 @Composable
-fun PlayerScreen(videoUri: String, onBack: () -> Unit) {
+fun PlayerScreen(
+    videoUri: String,
+    onBack: () -> Unit
+) {
     val context = LocalContext.current
-    val activity = context as? Activity
-    val player = remember { VlcPlayerManager(context.applicationContext) }
+    val playerManager = remember { VlcPlayerManager(context) }
 
-    var playing by remember { mutableStateOf(false) }
-    var aspectMode by remember { mutableStateOf("Original") }
-    var subtitleText by remember { mutableStateOf("Подсказка: для субтитров используйте .srt/.vtt с тем же именем файла.") }
-    var isLocked by remember { mutableStateOf(false) }
-    var isLandscape by remember { mutableStateOf(false) }
+    var isPlaying by remember { mutableStateOf(true) }
+    var currentTimeMs by remember { mutableLongStateOf(0L) }
+    var totalDurationMs by remember { mutableLongStateOf(0L) }
+    var showControls by remember { mutableStateOf(true) }
+    var statusText by remember { mutableStateOf("Загрузка...") }
+    var isControlsLocked by remember { mutableStateOf(false) }
+    var currentSpeed by remember { mutableFloatStateOf(1.0f) }
+    var showSpeedMenu by remember { mutableStateOf(false) }
 
-    BackHandler { onBack() }
-
-    LaunchedEffect(videoUri) {
-        player.playUrl(context, videoUri)
-        playing = true
-        val currentRatios = listOf("", "16:9", "1.1")
-        val idx = currentRatios.indexOfFirst { it == "" }
-        if (idx >= 0) player.setAspectRatio(currentRatios[idx])
+    BackHandler {
+        playerManager.release()
+        onBack()
     }
 
-    DisposableEffect(player) {
+    // Keep screen on
+    DisposableEffect(Unit) {
+        val window = (context as? Activity)?.window
+        window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         onDispose {
-            player.detachSurface()
-            player.mediaPlayer.stop()
-            player.mediaPlayer.release()
-            player.libVLC.release()
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            playerManager.release()
         }
+    }
+
+    // Auto-hide controls timer
+    LaunchedEffect(showControls, isPlaying) {
+        if (showControls && isPlaying && !isControlsLocked) {
+            delay(4000)
+            showControls = false
+        }
+    }
+
+    // Callbacks
+    DisposableEffect(playerManager) {
+        playerManager.onStatusChanged = { status ->
+            statusText = status
+            if (status == "Playing") isPlaying = true
+            else if (status == "Paused" || status == "Stopped") isPlaying = false
+        }
+        playerManager.onTimeChanged = { time, length ->
+            currentTimeMs = time
+            if (length > 0) totalDurationMs = length
+        }
+        onDispose {}
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
+            .pointerInput(Unit) {
+                detectDragGestures { change, dragAmount ->
+                    change.consume()
+                }
+            }
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) {
+                if (!isControlsLocked) {
+                    showControls = !showControls
+                } else {
+                    showControls = true
+                }
+            }
     ) {
+        // VLC Video View
         AndroidView(
             factory = { ctx ->
                 SurfaceView(ctx).apply {
-                    player.attachSurface(this)
+                    holder.addCallback(object : SurfaceHolder.Callback {
+                        override fun surfaceCreated(holder: SurfaceHolder) {
+                            playerManager.attachSurface(this@apply)
+                            playerManager.playUrl(videoUri)
+                        }
+
+                        override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+                            playerManager.updateWindowSize(width, height)
+                        }
+
+                        override fun surfaceDestroyed(holder: SurfaceHolder) {
+                            playerManager.detachSurface()
+                        }
+                    })
                 }
             },
             modifier = Modifier.fillMaxSize()
         )
 
-        if (!isLocked) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = onBack) {
-                        Text("←")
-                    }
-                    Text("${videoUri}", color = Color.White, fontSize = 12.sp, maxLines = 1)
-                }
-
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Color(0x66000000)),
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            ControlButton(label = if (playing) "Pause" else "Play") {
-                                if (playing) {
-                                    player.mediaPlayer.pause()
-                                    playing = false
-                                } else {
-                                    player.mediaPlayer.play()
-                                    playing = true
-                                }
-                            }
-
-                            ControlButton(label = "16:9") {
-                                player.setAspectRatio("16:9")
-                                aspectMode = "16:9"
-                            }
-                            ControlButton(label = "1.1") {
-                                player.setAspectRatio("1.1")
-                                aspectMode = "1.1"
-                            }
-                            ControlButton(label = "Original") {
-                                player.setAspectRatio("")
-                                aspectMode = "Original"
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            ControlButton(label = "Rotate") {
-                                isLandscape = !isLandscape
-                                val orientation = if (isLandscape) ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-                                activity?.requestedOrientation = orientation
-                            }
-
-                            ControlButton(label = "Subtitles") {
-                                Toast.makeText(context, "Subtitle file should be loaded from .srt or .vtt", Toast.LENGTH_SHORT).show()
-                            }
-
-                            ControlButton(label = "Cast") {
-                                val intent = android.content.Intent(Intent.ACTION_SEND).apply {
-                                    type = "video/*"
-                                    putExtra(android.content.Intent.EXTRA_TEXT, videoUri)
-                                    putExtra(android.content.Intent.EXTRA_TITLE, "Play on TV")
-                                }
-                                context.startActivity(Intent.createChooser(intent, "Cast video"))
-                            }
-
-                            ControlButton(label = if (isLocked) "Unlock" else "Lock") {
-                                isLocked = !isLocked
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if (isLocked) {
+        // Overlay controls
+        AnimatedVisibility(
+            visible = showControls,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.fillMaxSize()
+        ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color(0xAA000000)),
-                contentAlignment = Alignment.Center
+                    .background(Color.Black.copy(alpha = 0.5f))
             ) {
-                Button(
-                    onClick = { isLocked = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = NeonOrange)
+                // Top bar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Unlock screen")
+                    IconButton(
+                        onClick = {
+                            playerManager.release()
+                            onBack()
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Назад",
+                            tint = Color.White
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Text(
+                        text = videoUri.substringAfterLast('/').substringBefore('?'),
+                        color = Color.White,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    // Share button
+                    IconButton(
+                        onClick = {
+                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, videoUri)
+                            }
+                            context.startActivity(Intent.createChooser(shareIntent, "Поделиться видео"))
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Поделиться",
+                            tint = Color.White
+                        )
+                    }
+
+                    // Speed button
+                    Box {
+                        TextButton(
+                            onClick = { showSpeedMenu = true }
+                        ) {
+                            Text(
+                                "${currentSpeed}x",
+                                color = GoldenYellowLight,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                        }
+
+                        DropdownMenu(
+                            expanded = showSpeedMenu,
+                            onDismissRequest = { showSpeedMenu = false },
+                            modifier = Modifier.background(SurfaceCardColor)
+                        ) {
+                            listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f).forEach { speed ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            "${speed}x",
+                                            color = if (currentSpeed == speed) NeonOrange else Color.White
+                                        )
+                                    },
+                                    onClick = {
+                                        currentSpeed = speed
+                                        playerManager.setRate(speed)
+                                        showSpeedMenu = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Center playback actions
+                if (!isControlsLocked) {
+                    Row(
+                        modifier = Modifier.align(Alignment.Center),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(32.dp)
+                    ) {
+                        // Rewind -10s
+                        IconButton(
+                            onClick = { playerManager.seekRelative(-10000L) },
+                            modifier = Modifier
+                                .size(52.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.15f))
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Replay10,
+                                contentDescription = "-10 сек",
+                                tint = Color.White,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+
+                        // Play / Pause
+                        IconButton(
+                            onClick = {
+                                if (isPlaying) {
+                                    playerManager.pause()
+                                    isPlaying = false
+                                } else {
+                                    playerManager.resume()
+                                    isPlaying = true
+                                }
+                            },
+                            modifier = Modifier
+                                .size(68.dp)
+                                .clip(CircleShape)
+                                .background(NeonOrange)
+                        ) {
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = if (isPlaying) "Пауза" else "Играть",
+                                tint = Color.Black,
+                                modifier = Modifier.size(36.dp)
+                            )
+                        }
+
+                        // Forward +10s
+                        IconButton(
+                            onClick = { playerManager.seekRelative(10000L) },
+                            modifier = Modifier
+                                .size(52.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.15f))
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Forward10,
+                                contentDescription = "+10 сек",
+                                tint = Color.White,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                    }
+                }
+
+                // Bottom bar
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                ) {
+                    // Time and lock
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${formatTime(currentTimeMs)} / ${formatTime(totalDurationMs)}",
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+
+                        IconButton(
+                            onClick = { isControlsLocked = !isControlsLocked }
+                        ) {
+                            Icon(
+                                imageVector = if (isControlsLocked) Icons.Default.Lock else Icons.Default.LockOpen,
+                                contentDescription = "Блокировка",
+                                tint = if (isControlsLocked) NeonOrange else Color.White
+                            )
+                        }
+                    }
+
+                    if (!isControlsLocked) {
+                        Slider(
+                            value = if (totalDurationMs > 0) (currentTimeMs.toFloat() / totalDurationMs.toFloat()).coerceIn(0f, 1f) else 0f,
+                            onValueChange = { frac ->
+                                val targetTime = (frac * totalDurationMs).toLong()
+                                currentTimeMs = targetTime
+                                playerManager.seekTo(targetTime)
+                            },
+                            colors = SliderDefaults.colors(
+                                thumbColor = NeonOrange,
+                                activeTrackColor = NeonOrange,
+                                inactiveTrackColor = Color.White.copy(alpha = 0.25f)
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
             }
         }
-
-        Text(
-            text = subtitleText,
-            color = Color.White,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 160.dp),
-            fontSize = 14.sp
-        )
     }
 }
 
-@Composable
-private fun ControlButton(label: String, onClick: () -> Unit) {
-    Button(
-        onClick = onClick,
-        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E2A35)),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Text(label, color = Color.White)
+private fun formatTime(ms: Long): String {
+    if (ms <= 0) return "00:00"
+    val totalSec = ms / 1000
+    val sec = totalSec % 60
+    val min = (totalSec / 60) % 60
+    val hour = totalSec / 3600
+    return if (hour > 0) {
+        String.format(Locale.getDefault(), "%d:%02d:%02d", hour, min, sec)
+    } else {
+        String.format(Locale.getDefault(), "%02d:%02d", min, sec)
     }
 }

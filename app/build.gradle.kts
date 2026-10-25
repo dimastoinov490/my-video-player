@@ -1,3 +1,5 @@
+import java.util.Base64
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -13,15 +15,38 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
-
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        vectorDrawables {
-            useSupportLibrary = true
+    }
+
+    signingConfigs {
+        create("debugConfig") {
+            val keystoreFile = file("${rootDir}/debug.keystore")
+            val base64File = file("${rootDir}/debug.keystore.base64")
+            if (!keystoreFile.exists() && base64File.exists()) {
+                try {
+                    val bytes = Base64.getDecoder().decode(base64File.readText().trim())
+                    keystoreFile.writeBytes(bytes)
+                } catch (e: Exception) {
+                    // ignore
+                }
+            }
+            if (keystoreFile.exists()) {
+                storeFile = keystoreFile
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
         }
     }
 
     buildTypes {
         debug {
+            val debugCfg = signingConfigs.findByName("debugConfig")
+            if (debugCfg?.storeFile != null && debugCfg.storeFile!!.exists()) {
+                signingConfig = debugCfg
+            } else {
+                signingConfig = signingConfigs.getByName("debug")
+            }
         }
         release {
             isMinifyEnabled = false
@@ -29,6 +54,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
@@ -44,32 +70,38 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "META-INF/INDEX.LIST"
+            excludes += "META-INF/DEPENDENCIES"
         }
     }
 }
 
+
 dependencies {
+    implementation(platform("androidx.compose:compose-bom:2024.02.01"))
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("androidx.activity:activity-compose:1.8.2")
-    implementation("androidx.mediarouter:mediarouter:1.7.0")
-    implementation("androidx.security:security-crypto:1.1.0-alpha06")
-    implementation("androidx.biometric:biometric:1.1.0")
 
-    implementation(platform("androidx.compose:compose-bom:2023.10.01"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-extended")
 
-    implementation("org.videolan.android:libvlc-all:3.6.5")
-    implementation("commons-net:commons-net:3.11.1")
+    // VLC player
+    implementation("org.videolan.android:libvlc-all:3.6.0-eap13")
 
-    testImplementation("junit:junit:4.13.2")
-    androidTestImplementation("androidx.test.ext:junit:1.1.5")
-    androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
-    androidTestImplementation(platform("androidx.compose:compose-bom:2023.10.01"))
-    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    // FTP Server
+    implementation("org.apache.ftpserver:ftpserver-core:1.2.0")
+    implementation("org.slf4j:slf4j-android:1.7.36")
+
+    // Vault secure storage
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
+    // Coroutines
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

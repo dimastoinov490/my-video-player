@@ -12,10 +12,10 @@ class VlcPlayerManager(context: Context) {
         "--no-drop-late-frames",
         "--no-skip-frames",
         "--rtsp-tcp",
-        "-v"
+        "-vvv"
     )
 
-    val libVLC: LibVLC = LibVLC(context.applicationContext, options)
+    val libVLC: LibVLC = LibVLC(context, options)
     val mediaPlayer: MediaPlayer = MediaPlayer(libVLC)
 
     var onStatusChanged: ((String) -> Unit)? = null
@@ -23,15 +23,29 @@ class VlcPlayerManager(context: Context) {
 
     private val eventListener = MediaPlayer.EventListener { event ->
         when (event.type) {
-            MediaPlayer.Event.Playing -> onStatusChanged?.invoke("Playing")
-            MediaPlayer.Event.Paused -> onStatusChanged?.invoke("Paused")
-            MediaPlayer.Event.Stopped -> onStatusChanged?.invoke("Stopped")
-            MediaPlayer.Event.EndReached -> onStatusChanged?.invoke("End Reached")
-            MediaPlayer.Event.EncounteredError -> onStatusChanged?.invoke("Error: Encountered Error")
-            MediaPlayer.Event.Buffering -> onStatusChanged?.invoke("Buffering: ${event.buffering}%")
-            MediaPlayer.Event.TimeChanged -> onTimeChanged?.invoke(mediaPlayer.time, mediaPlayer.length)
-            MediaPlayer.Event.PositionChanged -> onTimeChanged?.invoke(mediaPlayer.time, mediaPlayer.length)
-            else -> Unit
+            MediaPlayer.Event.Buffering -> {
+                onStatusChanged?.invoke("Buffering: ${event.buffering}%")
+            }
+            MediaPlayer.Event.Playing -> {
+                onStatusChanged?.invoke("Playing")
+            }
+            MediaPlayer.Event.Paused -> {
+                onStatusChanged?.invoke("Paused")
+            }
+            MediaPlayer.Event.Stopped -> {
+                onStatusChanged?.invoke("Stopped")
+            }
+            MediaPlayer.Event.EndReached -> {
+                onStatusChanged?.invoke("EndReached")
+            }
+            MediaPlayer.Event.EncounteredError -> {
+                onStatusChanged?.invoke("Error")
+            }
+            MediaPlayer.Event.TimeChanged -> {
+                val time = mediaPlayer.time
+                val length = mediaPlayer.length
+                onTimeChanged?.invoke(time, length)
+            }
         }
     }
 
@@ -41,45 +55,74 @@ class VlcPlayerManager(context: Context) {
 
     fun attachSurface(surfaceView: SurfaceView) {
         val vout = mediaPlayer.vlcVout
-        if (!vout.areViewsAttached()) {
-            vout.setVideoView(surfaceView)
-            vout.attachViews()
-        }
+        vout.setVideoView(surfaceView)
+        vout.attachViews()
     }
 
     fun detachSurface() {
         val vout = mediaPlayer.vlcVout
-        if (vout.areViewsAttached()) {
-            vout.detachViews()
-        }
+        vout.detachViews()
     }
 
-    fun playUrl(context: Context, urlOrUri: String) {
-        val normalized = urlOrUri.trim()
-        if (normalized.isEmpty()) {
-            onStatusChanged?.invoke("Error: empty URL")
-            return
-        }
+    fun updateWindowSize(width: Int, height: Int) {
+        mediaPlayer.vlcVout.setWindowSize(width, height)
+    }
 
+    fun playUrl(urlOrUri: String) {
         try {
-            mediaPlayer.stop()
-            val media = Media(libVLC, Uri.parse(normalized))
+            val media = if (urlOrUri.startsWith("http://") || urlOrUri.startsWith("https://") || urlOrUri.startsWith("rtsp://") || urlOrUri.startsWith("ftp://")) {
+                Media(libVLC, Uri.parse(urlOrUri))
+            } else if (urlOrUri.startsWith("content://") || urlOrUri.startsWith("file://")) {
+                Media(libVLC, Uri.parse(urlOrUri))
+            } else {
+                Media(libVLC, urlOrUri)
+            }
             media.setHWDecoderEnabled(true, false)
             mediaPlayer.media = media
             media.release()
             mediaPlayer.play()
-            onStatusChanged?.invoke("Starting playback...")
         } catch (e: Exception) {
-            onStatusChanged?.invoke("Error: ${e.localizedMessage ?: "unknown"}")
-            e.printStackTrace()
+            onStatusChanged?.invoke("Error: ${e.message}")
         }
     }
 
-    fun setAspectRatio(ratio: String) {
-        try {
-            mediaPlayer.setAspectRatio(ratio)
-        } catch (e: Exception) {
-            e.printStackTrace()
+    fun seekTo(timeMs: Long) {
+        if (mediaPlayer.isSeekable) {
+            mediaPlayer.time = timeMs.coerceAtLeast(0)
         }
+    }
+
+    fun seekRelative(offsetMs: Long) {
+        if (mediaPlayer.isSeekable) {
+            val newTime = (mediaPlayer.time + offsetMs).coerceIn(0, mediaPlayer.length)
+            mediaPlayer.time = newTime
+        }
+    }
+
+    fun setRate(rate: Float) {
+        mediaPlayer.rate = rate
+    }
+
+    fun pause() {
+        if (mediaPlayer.isPlaying) {
+            mediaPlayer.pause()
+        }
+    }
+
+    fun resume() {
+        if (!mediaPlayer.isPlaying) {
+            mediaPlayer.play()
+        }
+    }
+
+    fun stop() {
+        mediaPlayer.stop()
+    }
+
+    fun release() {
+        mediaPlayer.setEventListener(null)
+        mediaPlayer.stop()
+        mediaPlayer.release()
+        libVLC.release()
     }
 }

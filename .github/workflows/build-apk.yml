@@ -5,14 +5,14 @@ on:
     branches: [ "main", "master" ]
   pull_request:
     branches: [ "main", "master" ]
+  workflow_dispatch:
 
 jobs:
   build:
-    name: Build Debug APK
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
@@ -21,28 +21,22 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Gradle 9.3.1
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: '9.3.1'
 
-      - name: Restore Debug Keystore
+      - name: Restore Keystore from Base64
         run: |
-          if [ -f "debug.keystore.base64" ] && [ ! -f "debug.keystore" ]; then
-            base64 -d debug.keystore.base64 > debug.keystore
+          if [ -f debug.keystore.base64 ]; then
+            base64 -d debug.keystore.base64 > debug.keystore || true
           fi
 
-      - name: Ensure Gradle Wrapper
-        run: |
-          if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
-            gradle wrapper --gradle-version 9.3.1
-          fi
-          chmod +x gradlew
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
 
-      - name: Build Debug APK with Gradle
-        run: ./gradlew assembleDebug
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --stacktrace
 
-      - name: Upload APK Artifact
+      - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-debug

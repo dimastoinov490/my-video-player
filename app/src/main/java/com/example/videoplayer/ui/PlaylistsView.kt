@@ -1,19 +1,22 @@
 package com.example.videoplayer.ui
 
+import android.content.Context
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -22,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.videoplayer.model.Playlist
 import com.example.videoplayer.model.PlaylistManager
+import com.example.videoplayer.ui.theme.*
 
 @Composable
 fun PlaylistsView(
@@ -32,28 +36,25 @@ fun PlaylistsView(
     var playlists by remember { mutableStateOf(PlaylistManager.getPlaylists(context)) }
     var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) }
     var showCreateDialog by remember { mutableStateOf(false) }
+    var newName by remember { mutableStateOf("") }
+    var selectedIcon by remember { mutableStateOf("playlist") }
 
     fun refresh() {
         playlists = PlaylistManager.getPlaylists(context)
-        selectedPlaylist?.let { curr ->
-            selectedPlaylist = playlists.find { it.id == curr.id }
-        }
     }
 
     if (selectedPlaylist != null) {
-        // Detailed Playlist Screen
         PlaylistDetailView(
             playlist = selectedPlaylist!!,
             onBack = { selectedPlaylist = null },
             onPlayAll = {
-                val firstUri = selectedPlaylist!!.itemUris.firstOrNull()
-                if (firstUri != null) {
-                    onMediaSelected(firstUri)
-                }
+                val first = selectedPlaylist!!.itemUris.firstOrNull()
+                if (first != null) onMediaSelected(first)
             },
             onPlayItem = { uri -> onMediaSelected(uri) },
             onRemoveItem = { uri ->
                 PlaylistManager.removeItemFromPlaylist(context, selectedPlaylist!!.id, uri)
+                selectedPlaylist = PlaylistManager.getPlaylists(context).find { it.id == selectedPlaylist!!.id }
                 refresh()
             },
             onDeletePlaylist = {
@@ -62,161 +63,137 @@ fun PlaylistsView(
                 refresh()
             }
         )
-    } else {
-        // Playlists List
-        Column(
-            modifier = modifier
-                .fillMaxSize()
-                .background(DarkBackground)
-                .padding(horizontal = 14.dp)
-        ) {
-            // Header with "+ Создать" button
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text = "Мои Плейлисты",
-                        color = Color.White,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "${playlists.size} списков воспроизведения",
-                        color = GrayText,
-                        fontSize = 12.sp
-                    )
-                }
+        return
+    }
 
-                Surface(
-                    onClick = { showCreateDialog = true },
-                    shape = RoundedCornerShape(22.dp),
-                    color = Color.Transparent,
-                    border = BorderStroke(1.dp, GoldenYellowLight.copy(alpha = 0.8f))
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .background(
-                                Brush.horizontalGradient(
-                                    listOf(Color(0xFFFF9E00), Color(0xFFFF6D00))
-                                )
-                            )
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text("+", color = Color.Black, fontSize = 16.sp, fontWeight = FontWeight.Black)
-                            Text("Создать", color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
-                        }
-                    }
-                }
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(DarkBackground)
+    ) {
+        // Header with Create button
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    "Мои плейлисты",
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "Всего: ${playlists.size}",
+                    color = GrayText,
+                    fontSize = 12.sp
+                )
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // Playlists Cards Grid / List
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(bottom = 24.dp)
+            Button(
+                onClick = { showCreateDialog = true },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = NeonOrange
+                ),
+                shape = RoundedCornerShape(20.dp),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
             ) {
-                items(playlists, key = { it.id }) { playlist ->
-                    Surface(
-                        color = Color(0xFF13131D),
-                        shape = RoundedCornerShape(20.dp),
-                        border = BorderStroke(1.dp, Color(0xFF222234)),
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = null,
+                    tint = Color.Black,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    "Создать",
+                    color = Color.Black,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        LazyColumn(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            items(playlists, key = { it.id }) { pl ->
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable { selectedPlaylist = pl },
+                    shape = RoundedCornerShape(16.dp),
+                    color = SurfaceCardColor,
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.06f))
+                ) {
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { selectedPlaylist = playlist }
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
+                        Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                                .size(48.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(NeonOrange.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
                         ) {
-                            // Icon Box with Warm Orange Tint
-                            Box(
-                                modifier = Modifier
-                                    .size(52.dp)
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(
-                                        Brush.linearGradient(
-                                            listOf(Color(0xFF222030), Color(0xFF181824))
-                                        )
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = when (playlist.iconType) {
-                                        "favorites" -> "⭐"
-                                        "recent" -> "🕒"
-                                        "movie" -> "🎬"
-                                        "music" -> "🎵"
-                                        else -> "📁"
-                                    },
-                                    fontSize = 24.sp
-                                )
-                            }
+                            Icon(
+                                imageVector = when (pl.iconType) {
+                                    "favorites" -> Icons.Default.Favorite
+                                    "recent" -> Icons.Default.History
+                                    "movie" -> Icons.Default.Movie
+                                    "music" -> Icons.Default.MusicNote
+                                    else -> Icons.Default.PlaylistPlay
+                                },
+                                contentDescription = null,
+                                tint = GoldenYellowLight,
+                                modifier = Modifier.size(26.dp)
+                            )
+                        }
 
-                            Spacer(modifier = Modifier.width(14.dp))
+                        Spacer(modifier = Modifier.width(14.dp))
 
-                            Column(modifier = Modifier.weight(1f)) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = pl.name,
+                                color = Color.White,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            if (pl.description.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = playlist.name,
-                                    color = Color.White,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Spacer(modifier = Modifier.height(3.dp))
-                                Text(
-                                    text = if (playlist.description.isNotEmpty()) playlist.description else "${playlist.itemUris.size} медиафайлов",
+                                    text = pl.description,
                                     color = GrayText,
                                     fontSize = 12.sp,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "${playlist.itemUris.size} файлов",
-                                    color = SoftOrangeLight,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
                             }
-
-                            // Quick Play button
-                            if (playlist.itemUris.isNotEmpty()) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(38.dp)
-                                        .clip(CircleShape)
-                                        .background(SoftOrangeAccent)
-                                        .clickable {
-                                            onMediaSelected(playlist.itemUris.first())
-                                        },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text("▶", color = Color.White, fontSize = 14.sp)
-                                }
-                            } else {
-                                Text(
-                                    text = "›",
-                                    color = Color(0xFF656580),
-                                    fontSize = 24.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
+                            Spacer(modifier = Modifier.height(3.dp))
+                            Text(
+                                text = "${pl.itemUris.size} медиафайлов",
+                                color = GoldenYellowLight.copy(alpha = 0.8f),
+                                fontSize = 11.sp
+                            )
                         }
+
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = null,
+                            tint = GrayText,
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
                 }
             }
@@ -225,28 +202,28 @@ fun PlaylistsView(
 
     // Create Playlist Dialog
     if (showCreateDialog) {
-        var newName by remember { mutableStateOf("") }
-        var selectedIcon by remember { mutableStateOf("playlist") }
-
         AlertDialog(
-            onDismissRequest = { showCreateDialog = false },
-            containerColor = Color(0xFF161622),
-            title = { Text("Новый плейлист", color = Color.White, fontWeight = FontWeight.Bold) },
+            onDismissRequest = {
+                showCreateDialog = false
+                newName = ""
+            },
+            title = {
+                Text("Новый плейлист", color = Color.White, fontWeight = FontWeight.Bold)
+            },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
                         value = newName,
                         onValueChange = { newName = it },
-                        placeholder = { Text("Название плейлиста...", color = GrayText) },
+                        label = { Text("Название плейлиста", color = GrayText) },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = SoftOrangeAccent,
-                            unfocusedBorderColor = Color(0xFF282838),
+                            focusedBorderColor = NeonOrange,
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
                             focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            cursorColor = SoftOrangeAccent
-                        )
+                            unfocusedTextColor = Color.White
+                        ),
+                        modifier = Modifier.fillMaxWidth()
                     )
 
                     Text("Выберите значок:", color = GrayText, fontSize = 12.sp)
@@ -256,44 +233,55 @@ fun PlaylistsView(
                         horizontalArrangement = Arrangement.SpaceAround
                     ) {
                         listOf(
-                            Pair("📁", "playlist"),
-                            Pair("⭐", "favorites"),
-                            Pair("🎬", "movie"),
-                            Pair("🎵", "music")
-                        ).forEach { (icon, type) ->
-                            val isSel = selectedIcon == type
-                            Box(
+                            "playlist" to Icons.Default.PlaylistPlay,
+                            "favorites" to Icons.Default.Favorite,
+                            "movie" to Icons.Default.Movie,
+                            "music" to Icons.Default.MusicNote
+                        ).forEach { (type, icon) ->
+                            IconButton(
+                                onClick = { selectedIcon = type },
                                 modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(if (isSel) SoftOrangeAccent else Color(0xFF20202F))
-                                    .clickable { selectedIcon = type },
-                                contentAlignment = Alignment.Center
+                                    .size(40.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(
+                                        if (selectedIcon == type) NeonOrange.copy(alpha = 0.25f)
+                                        else Color.Transparent
+                                    )
                             ) {
-                                Text(icon, fontSize = 20.sp)
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = null,
+                                    tint = if (selectedIcon == type) GoldenYellowLight else GrayText
+                                )
                             }
                         }
                     }
                 }
             },
             confirmButton = {
-                TextButton(
+                Button(
                     onClick = {
                         if (newName.isNotBlank()) {
                             PlaylistManager.createPlaylist(context, newName.trim(), selectedIcon)
-                            refresh()
                             showCreateDialog = false
+                            newName = ""
+                            refresh()
                         }
-                    }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonOrange)
                 ) {
-                    Text("Создать", color = SoftOrangeAccent, fontWeight = FontWeight.Bold)
+                    Text("Создать", color = Color.Black, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showCreateDialog = false }) {
-                    Text("Отмена", color = Color.White)
+                TextButton(onClick = {
+                    showCreateDialog = false
+                    newName = ""
+                }) {
+                    Text("Отмена", color = GrayText)
                 }
-            }
+            },
+            containerColor = DarkBackground
         )
     }
 }
@@ -309,154 +297,147 @@ fun PlaylistDetailView(
 ) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
+    BackHandler {
+        onBack()
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(DarkBackground)
-            .padding(horizontal = 14.dp)
     ) {
-        // Top Back Row
+        // Top action bar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Surface(
-                    onClick = onBack,
-                    shape = CircleShape,
-                    color = Color(0xFF1A1A26),
-                    modifier = Modifier.size(38.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text("‹", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-
-                Column {
-                    Text(
-                        text = playlist.name,
-                        color = Color.White,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "${playlist.itemUris.size} медиафайлов",
-                        color = GrayText,
-                        fontSize = 11.sp
-                    )
-                }
+            IconButton(onClick = onBack) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Назад",
+                    tint = NeonOrange
+                )
             }
-
-            // Delete button for custom playlists
-            if (!playlist.id.startsWith("pl_fav") && !playlist.id.startsWith("pl_rec")) {
-                TextButton(onClick = { showDeleteConfirm = true }) {
-                    Text("Удалить", color = Color(0xFFFF5252), fontSize = 12.sp)
-                }
+            Spacer(modifier = Modifier.width(4.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    playlist.name,
+                    color = Color.White,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    "${playlist.itemUris.size} треков / видео",
+                    color = GrayText,
+                    fontSize = 12.sp
+                )
+            }
+            IconButton(onClick = { showDeleteConfirm = true }) {
+                Icon(
+                    imageVector = Icons.Default.DeleteOutline,
+                    contentDescription = "Удалить плейлист",
+                    tint = Color(0xFFFF5252)
+                )
             }
         }
 
-        // Action Buttons Row: Play All
+        // Play All Banner
         if (playlist.itemUris.isNotEmpty()) {
-            Surface(
-                onClick = onPlayAll,
-                shape = RoundedCornerShape(20.dp),
-                color = SoftOrangeAccent,
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 6.dp)
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 12.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
+                Button(
+                    onClick = onPlayAll,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = NeonOrange
+                    ),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text("▶", color = Color.White, fontSize = 14.sp)
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        tint = Color.Black
+                    )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         "Воспроизвести всё",
-                        color = Color.White,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-        } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 32.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Плейлист пуст", color = GrayText, fontSize = 16.sp)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        "Добавляйте видео и аудио через меню ⋮ на карточках",
-                        color = Color(0xFF656578),
-                        fontSize = 12.sp
+                        color = Color.Black,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
                     )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(6.dp))
-
-        // Items List
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(bottom = 24.dp)
-        ) {
-            items(playlist.itemUris) { uri ->
-                val fileName = uri.substringAfterLast("/").substringBefore("?")
-                Surface(
-                    color = Color(0xFF13131D),
-                    shape = RoundedCornerShape(16.dp),
-                    border = BorderStroke(1.dp, Color(0xFF1F1F2E)),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onPlayItem(uri) }
-                ) {
-                    Row(
+        // Items
+        if (playlist.itemUris.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(32.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "Плейлист пуст.\nДобавляйте медиафайлы из библиотеки или аудиоплеера.",
+                    color = GrayText,
+                    fontSize = 14.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(playlist.itemUris) { uri ->
+                    val displayName = uri.substringAfterLast('/').substringBefore('?')
+                    Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { onPlayItem(uri) },
+                        shape = RoundedCornerShape(12.dp),
+                        color = SurfaceCardColor
                     ) {
-                        Box(
+                        Row(
                             modifier = Modifier
-                                .size(36.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(Color(0xFF222030)),
-                            contentAlignment = Alignment.Center
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("▶", color = SoftOrangeAccent, fontSize = 14.sp)
-                        }
-
-                        Spacer(modifier = Modifier.width(10.dp))
-
-                        Text(
-                            text = fileName.ifEmpty { uri },
-                            color = Color.White,
-                            fontSize = 13.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        IconButton(
-                            onClick = { onRemoveItem(uri) },
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Text("✕", color = Color(0xFF88889C), fontSize = 14.sp)
+                            Icon(
+                                imageVector = Icons.Default.PlayCircle,
+                                contentDescription = null,
+                                tint = GoldenYellowLight,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = displayName,
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            IconButton(onClick = { onRemoveItem(uri) }) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Удалить",
+                                    tint = GrayText,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -467,22 +448,25 @@ fun PlaylistDetailView(
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            containerColor = Color(0xFF161622),
             title = { Text("Удалить плейлист?", color = Color.White) },
-            text = { Text("Плейлист будет безвозвратно удален.", color = GrayText) },
+            text = { Text("Плейлист \"${playlist.name}\" будет безвозвратно удалён.", color = GrayText) },
             confirmButton = {
-                TextButton(onClick = {
-                    showDeleteConfirm = false
-                    onDeletePlaylist()
-                }) {
-                    Text("Удалить", color = Color(0xFFFF5252))
+                Button(
+                    onClick = {
+                        showDeleteConfirm = false
+                        onDeletePlaylist()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF5252))
+                ) {
+                    Text("Удалить", color = Color.White)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("Отмена", color = Color.White)
+                    Text("Отмена", color = GrayText)
                 }
-            }
+            },
+            containerColor = DarkBackground
         )
     }
 }

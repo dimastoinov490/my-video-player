@@ -1,18 +1,8 @@
 package com.example.videoplayer.model
 
 import android.content.Context
-import android.content.SharedPreferences
 import org.json.JSONArray
 import org.json.JSONObject
-
-data class Playlist(
-    val id: String,
-    val name: String,
-    val description: String = "",
-    val iconType: String = "playlist", // "favorites", "recent", "movie", "music", "playlist"
-    val itemUris: List<String> = emptyList(),
-    val createdAt: Long = System.currentTimeMillis()
-)
 
 object PlaylistManager {
     private const val PREFS_NAME = "vlc_playlists_prefs"
@@ -68,52 +58,53 @@ object PlaylistManager {
                 obj.put("iconType", p.iconType)
                 obj.put("createdAt", p.createdAt)
                 val urisArray = JSONArray()
-                p.itemUris.forEach { urisArray.put(it) }
+                for (uri in p.itemUris) {
+                    urisArray.put(uri)
+                }
                 obj.put("itemUris", urisArray)
                 array.put(obj)
             }
             prefs.edit().putString(KEY_PLAYLISTS, array.toString()).apply()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        } catch (_: Exception) {}
     }
 
     fun createPlaylist(context: Context, name: String, iconType: String = "playlist"): Playlist {
-        val current = getPlaylists(context).toMutableList()
+        val playlists = getPlaylists(context).toMutableList()
         val newPlaylist = Playlist(
             id = "pl_${System.currentTimeMillis()}",
             name = name,
+            description = "Пользовательский плейлист",
             iconType = iconType,
             itemUris = emptyList()
         )
-        current.add(newPlaylist)
-        savePlaylists(context, current)
+        playlists.add(0, newPlaylist)
+        savePlaylists(context, playlists)
         return newPlaylist
     }
 
     fun deletePlaylist(context: Context, playlistId: String) {
-        val current = getPlaylists(context).filter { it.id != playlistId }
-        savePlaylists(context, current)
+        val playlists = getPlaylists(context).filter { it.id != playlistId }
+        savePlaylists(context, playlists)
     }
 
     fun addItemToPlaylist(context: Context, playlistId: String, uri: String) {
-        val current = getPlaylists(context).map { p ->
+        val playlists = getPlaylists(context).map { p ->
             if (p.id == playlistId) {
                 if (!p.itemUris.contains(uri)) {
                     p.copy(itemUris = p.itemUris + uri)
                 } else p
             } else p
         }
-        savePlaylists(context, current)
+        savePlaylists(context, playlists)
     }
 
     fun removeItemFromPlaylist(context: Context, playlistId: String, uri: String) {
-        val current = getPlaylists(context).map { p ->
+        val playlists = getPlaylists(context).map { p ->
             if (p.id == playlistId) {
                 p.copy(itemUris = p.itemUris.filter { it != uri })
             } else p
         }
-        savePlaylists(context, current)
+        savePlaylists(context, playlists)
     }
 
     private fun getDefaultPlaylists(): List<Playlist> {
