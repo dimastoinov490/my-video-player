@@ -32,22 +32,30 @@ object VaultCrypto {
         return SecretKeySpec(keyBytes, AES)
     }
 
+    fun getEncryptCipher(password: String, salt: ByteArray, iv: ByteArray): Cipher {
+        val key = deriveKey(password, salt)
+        val cipher = Cipher.getInstance(TRANSFORMATION)
+        cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(TAG_LENGTH_BITS, iv))
+        return cipher
+    }
+
+    fun getDecryptCipher(password: String, salt: ByteArray, iv: ByteArray): Cipher {
+        val key = deriveKey(password, salt)
+        val cipher = Cipher.getInstance(TRANSFORMATION)
+        cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(TAG_LENGTH_BITS, iv))
+        return cipher
+    }
+
     fun encrypt(data: ByteArray, password: String): EncryptedVaultPayload {
         val salt = generateSalt()
         val iv = generateIv()
-        val key = deriveKey(password, salt)
-        val cipher = Cipher.getInstance(TRANSFORMATION)
-        val parameterSpec = GCMParameterSpec(TAG_LENGTH_BITS, iv)
-        cipher.init(Cipher.ENCRYPT_MODE, key, parameterSpec)
+        val cipher = getEncryptCipher(password, salt, iv)
         val encrypted = cipher.doFinal(data)
         return EncryptedVaultPayload(salt, iv, encrypted)
     }
 
     fun decrypt(payload: EncryptedVaultPayload, password: String): ByteArray {
-        val key = deriveKey(password, payload.salt)
-        val cipher = Cipher.getInstance(TRANSFORMATION)
-        val parameterSpec = GCMParameterSpec(TAG_LENGTH_BITS, payload.iv)
-        cipher.init(Cipher.DECRYPT_MODE, key, parameterSpec)
+        val cipher = getDecryptCipher(password, payload.salt, payload.iv)
         return cipher.doFinal(payload.cipherText)
     }
 

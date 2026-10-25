@@ -2,12 +2,14 @@ package com.example.videoplayer.ui
 
 import android.content.Context
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PlayCircle
@@ -23,6 +25,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.videoplayer.ui.ai.AiDesignStudioDialog
+import com.example.videoplayer.ui.ai.UiTemplateFromScreenshotDialog
 import com.example.videoplayer.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -31,16 +35,15 @@ fun SettingsScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val theme = LocalAppTheme.current
     val prefs = remember { context.getSharedPreferences("video_prefs", Context.MODE_PRIVATE) }
 
     var hardwareAccel by remember { mutableStateOf(prefs.getBoolean("hw_accel", true)) }
     var backgroundPlay by remember { mutableStateOf(prefs.getBoolean("bg_play", false)) }
     var showBuffering by remember { mutableStateOf(prefs.getBoolean("show_buffering_status", false)) }
     var autoRotate by remember { mutableStateOf(prefs.getBoolean("auto_rotate", true)) }
-    var currentTheme by remember {
-        val saved = prefs.getBoolean("app_dark_theme", true)
-        mutableStateOf(if (saved) "Ночной Неон" else "Светлый Сет")
-    }
+    var showAiStudio by remember { mutableStateOf(false) }
+    var showScreenshotDialog by remember { mutableStateOf(false) }
 
     BackHandler { onBack() }
 
@@ -60,14 +63,14 @@ fun SettingsScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Назад",
-                            tint = NeonOrange
+                            tint = theme.primary
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = theme.background)
             )
         },
-        containerColor = DarkBackground
+        containerColor = theme.background
     ) { padding ->
         LazyColumn(
             modifier = Modifier
@@ -79,7 +82,7 @@ fun SettingsScreen(
             item {
                 Text(
                     "ВОСПРОИЗВЕДЕНИЕ",
-                    color = NeonOrange,
+                    color = theme.primary,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     letterSpacing = 1.sp
@@ -136,8 +139,8 @@ fun SettingsScreen(
 
             item {
                 Text(
-                    "Оформление",
-                    color = NeonOrange,
+                    "ОФОРМЛЕНИЕ И ИИ СТИЛИ",
+                    color = theme.primary,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     letterSpacing = 1.sp
@@ -146,40 +149,74 @@ fun SettingsScreen(
 
             item {
                 SettingsCard {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Palette,
-                            contentDescription = null,
-                            tint = NeonOrange,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                "Цветовой стиль",
-                                color = Color.White,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                currentTheme,
-                                color = GrayText,
-                                fontSize = 13.sp
-                            )
-                        }
-                        TextButton(
-                            onClick = {
-                                val next = if (currentTheme == "Ночной Неон") "Светлый Сет" else "Ночной Неон"
-                                currentTheme = next
-                                prefs.edit().putBoolean("app_dark_theme", next == "Ночной Неон").apply()
-                            }
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Изменить", color = GoldenYellowLight)
+                            Icon(
+                                imageVector = Icons.Default.Palette,
+                                contentDescription = null,
+                                tint = theme.primary,
+                                modifier = Modifier.size(26.dp)
+                            )
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "Текущий стиль: ${theme.name}",
+                                    color = Color.White,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    theme.description,
+                                    color = GrayText,
+                                    fontSize = 12.sp,
+                                    maxLines = 2
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Button(
+                            onClick = { showScreenshotDialog = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = theme.primary),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Palette, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("UI дизайн по скриншоту (макету)", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        OutlinedButton(
+                            onClick = { showAiStudio = true },
+                            border = BorderStroke(1.dp, theme.primary.copy(alpha = 0.6f)),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = theme.primary, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("ИИ Студия: Сгенерировать текстом", color = Color.White, fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        OutlinedButton(
+                            onClick = {
+                                ThemeManager.resetToOriginalNeon(context)
+                                android.widget.Toast.makeText(context, "Оригинальное оформление Неон возвращено!", android.widget.Toast.LENGTH_SHORT).show()
+                            },
+                            border = BorderStroke(1.dp, Color(0xFFFF8A00)),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Palette, contentDescription = null, tint = Color(0xFFFF8A00), modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Вернуть оформление Неон (Оригинал)", color = Color(0xFFFF8A00), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                         }
                     }
                 }
@@ -188,7 +225,7 @@ fun SettingsScreen(
             item {
                 Text(
                     "О ПРИЛОЖЕНИИ",
-                    color = NeonOrange,
+                    color = theme.primary,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     letterSpacing = 1.sp
@@ -206,7 +243,7 @@ fun SettingsScreen(
                         Icon(
                             imageVector = Icons.Default.Info,
                             contentDescription = null,
-                            tint = NeonOrange,
+                            tint = theme.primary,
                             modifier = Modifier.size(24.dp)
                         )
                         Spacer(modifier = Modifier.width(16.dp))
@@ -218,7 +255,7 @@ fun SettingsScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                "Версия 1.0.0 (LibVLC 3.6.0)",
+                                "Версия 1.1.0 (LibVLC 3.6.0 + AI Theme Engine)",
                                 color = GrayText,
                                 fontSize = 13.sp
                             )
@@ -233,14 +270,28 @@ fun SettingsScreen(
             }
         }
     }
+
+    if (showScreenshotDialog) {
+        UiTemplateFromScreenshotDialog(
+            onDismiss = { showScreenshotDialog = false }
+        )
+    }
+
+    if (showAiStudio) {
+        AiDesignStudioDialog(
+            onDismiss = { showAiStudio = false }
+        )
+    }
 }
 
 @Composable
 private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
+    val theme = LocalAppTheme.current
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        color = SurfaceCardColor
+        color = theme.surface,
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
     ) {
         Column(content = content)
     }
@@ -254,16 +305,17 @@ private fun SettingsSwitchItem(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
+    val theme = LocalAppTheme.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+            verticalAlignment = Alignment.CenterVertically
+        ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = NeonOrange,
+            tint = theme.primary,
             modifier = Modifier.size(24.dp)
         )
         Spacer(modifier = Modifier.width(16.dp))
@@ -285,7 +337,7 @@ private fun SettingsSwitchItem(
             onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = Color.White,
-                checkedTrackColor = NeonOrange,
+                checkedTrackColor = theme.primary,
                 uncheckedThumbColor = GrayText,
                 uncheckedTrackColor = Color.White.copy(alpha = 0.1f)
             )

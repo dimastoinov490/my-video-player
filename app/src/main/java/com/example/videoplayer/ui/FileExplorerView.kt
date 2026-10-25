@@ -289,31 +289,16 @@ private fun getDirectoryItems(path: String, root: String, query: String): List<E
 }
 
 private fun getVirtualFallbackItems(): List<ExplorerItem> {
-    return listOf(
-        ExplorerItem(name = "DCIM", path = "/storage/emulated/0/DCIM", isDirectory = true, subItemCount = 12),
-        ExplorerItem(name = "Download", path = "/storage/emulated/0/Download", isDirectory = true, subItemCount = 8),
-        ExplorerItem(name = "Movies", path = "/storage/emulated/0/Movies", isDirectory = true, subItemCount = 6),
-        ExplorerItem(name = "Music", path = "/storage/emulated/0/Music", isDirectory = true, subItemCount = 15),
-        ExplorerItem(
-            name = "BigBuckBunny.mp4",
-            path = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-            isDirectory = false,
-            size = 158008374L,
-            isVideo = true
-        ),
-        ExplorerItem(
-            name = "SubaruOutback.mp4",
-            path = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackSeeTheWorld.mp4",
-            isDirectory = false,
-            size = 48593847L,
-            isVideo = true
-        ),
-        ExplorerItem(
-            name = "NightCityTheme.mp3",
-            path = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-            isDirectory = false,
-            size = 8593847L,
-            isAudio = true
-        )
-    )
+    val commonDirs = listOf("DCIM", "Download", "Movies", "Music", "Pictures", "Documents")
+    val list = mutableListOf<ExplorerItem>()
+    for (name in commonDirs) {
+        val dir = File("/storage/emulated/0/$name")
+        if (dir.exists() && dir.isDirectory) {
+            val count = dir.listFiles()?.size ?: 0
+            list.add(ExplorerItem(name = name, path = dir.absolutePath, isDirectory = true, subItemCount = count))
+        } else {
+            list.add(ExplorerItem(name = name, path = "/storage/emulated/0/$name", isDirectory = true, subItemCount = 0))
+        }
+    }
+    return list
 }

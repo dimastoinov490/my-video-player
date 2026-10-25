@@ -1,8 +1,14 @@
 package com.example.videoplayer.ui
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.os.Build
 import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -11,8 +17,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -28,15 +36,22 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.example.videoplayer.R
 import com.example.videoplayer.model.MediaStoreHelper
 import com.example.videoplayer.model.VideoItem
 import com.example.videoplayer.ui.theme.*
 import com.google.accompanist.swiperefresh.SwipeRefresh
+import com.google.accompanist.swiperefresh.SwipeRefreshIndicator
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -48,6 +63,8 @@ fun VideoLibraryScreen(
     onOpenProtectedVault: () -> Unit,
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val theme = LocalAppTheme.current
 
     var currentTab by remember { mutableIntStateOf(0) }
     var bottomNavIndex by remember { mutableIntStateOf(0) }
@@ -55,20 +72,34 @@ fun VideoLibraryScreen(
     var isSearchActive by remember { mutableStateOf(false) }
     var isRefreshing by remember { mutableStateOf(false) }
     var videos by remember { mutableStateOf<List<VideoItem>>(emptyList()) }
+    var scanStatusText by remember { mutableStateOf("") }
+    var showScanBanner by remember { mutableStateOf(false) }
+    var hasStoragePermission by remember {
+        mutableStateOf(checkMediaPermissions(context))
+    }
 
-    fun loadVideos() {
-        isRefreshing = true
-        try {
-            videos = MediaStoreHelper.getVideos(context)
-        } catch (e: Exception) {
-            Log.e("VideoLibraryScreen", "Failed to load videos", e)
-            videos = emptyList()
-        } finally {
-            isRefreshing = false
+    // Permission launcher
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        val granted = result.values.any { it }
+        hasStoragePermission = granted
+        if (granted) {
+            loadVideosInternal(context, coroutineScope, onVideosLoaded = { videos = it }, onStatus = { scanStatusText = it }, onRefreshing = { isRefreshing = it }, onBanner = { showScanBanner = it })
         }
     }
 
+    fun loadVideos() {
+        if (!hasStoragePermission) {
+            requestMediaPermissions(permissionLauncher)
+        }
+        loadVideosInternal(context, coroutineScope, onVideosLoaded = { videos = it }, onStatus = { scanStatusText = it }, onRefreshing = { isRefreshing = it }, onBanner = { showScanBanner = it })
+    }
+
     LaunchedEffect(Unit) {
+        if (!hasStoragePermission) {
+            requestMediaPermissions(permissionLauncher)
+        }
         loadVideos()
     }
 
@@ -81,7 +112,7 @@ fun VideoLibraryScreen(
     }
 
     Scaffold(
-        containerColor = DarkBackground,
+        containerColor = theme.background,
         bottomBar = {
             Surface(
                 modifier = Modifier
@@ -90,12 +121,12 @@ fun VideoLibraryScreen(
                     .shadow(
                         elevation = 16.dp,
                         shape = RoundedCornerShape(28.dp),
-                        spotColor = GoldenYellowGlow,
-                        ambientColor = GoldenYellowGlow
+                        spotColor = theme.glow,
+                        ambientColor = theme.glow
                     ),
                 shape = RoundedCornerShape(28.dp),
-                color = SurfaceCardColor,
-                border = BorderStroke(1.dp, GoldenYellowLight.copy(alpha = 0.25f))
+                color = theme.surface,
+                border = BorderStroke(1.dp, theme.primary.copy(alpha = 0.25f))
             ) {
                 Row(
                     modifier = Modifier
@@ -152,6 +183,7 @@ fun VideoLibraryScreen(
                         PlaylistsView(onMediaSelected = onVideoSelected)
                     } else {
                         Column(modifier = Modifier.fillMaxSize()) {
+                            // Top bar
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -177,8 +209,8 @@ fun VideoLibraryScreen(
                                             letterSpacing = 1.5.sp
                                         )
                                         Text(
-                                            "Медиаплеер",
-                                            color = GoldenYellowLight,
+                                            "Медиаплеер • ${theme.name}",
+                                            color = theme.secondary,
                                             fontSize = 11.sp
                                         )
                                     }
@@ -189,14 +221,14 @@ fun VideoLibraryScreen(
                                         Icon(
                                             imageVector = Icons.Default.Search,
                                             contentDescription = "Поиск",
-                                            tint = GoldenYellowLight
+                                            tint = theme.secondary
                                         )
                                     }
                                     IconButton(onClick = onOpenCustomUrl) {
                                         Icon(
                                             imageVector = Icons.Default.Link,
                                             contentDescription = "Поток",
-                                            tint = NeonOrange
+                                            tint = theme.primary
                                         )
                                     }
                                 }
@@ -213,7 +245,7 @@ fun VideoLibraryScreen(
                                     singleLine = true,
                                     shape = RoundedCornerShape(20.dp),
                                     colors = OutlinedTextFieldDefaults.colors(
-                                        focusedBorderColor = NeonOrange,
+                                        focusedBorderColor = theme.primary,
                                         unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
                                         focusedTextColor = Color.White,
                                         unfocusedTextColor = Color.White
@@ -221,6 +253,7 @@ fun VideoLibraryScreen(
                                 )
                             }
 
+                            // Top tabs
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -228,7 +261,7 @@ fun VideoLibraryScreen(
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 TopTabPillButton(
-                                    text = "Видео",
+                                    text = "Видео (${filteredVideos.size})",
                                     icon = Icons.Default.Movie,
                                     isSelected = currentTab == 0,
                                     onClick = { currentTab = 0 },
@@ -243,23 +276,186 @@ fun VideoLibraryScreen(
                                 )
                             }
 
+                            // Permission warning banner if permission is missing
+                            if (!hasStoragePermission) {
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = Color(0xFF2A1C0A),
+                                    border = BorderStroke(1.dp, theme.primary.copy(alpha = 0.5f))
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text("Доступ к памяти ограничен", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                            Text("Разрешите чтение медиафайлов для поиска видео на устройстве.", color = Color.LightGray, fontSize = 11.sp)
+                                        }
+                                        Button(
+                                            onClick = { requestMediaPermissions(permissionLauncher) },
+                                            colors = ButtonDefaults.buttonColors(containerColor = theme.primary),
+                                            shape = RoundedCornerShape(8.dp)
+                                        ) {
+                                            Text("Разрешить", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Video Grid with SwipeRefresh (positioned down so it doesn't overlap header tabs)
                             SwipeRefresh(
                                 state = rememberSwipeRefreshState(isRefreshing),
-                                onRefresh = { loadVideos() }
+                                onRefresh = { loadVideos() },
+                                indicatorPadding = PaddingValues(top = 90.dp),
+                                indicator = { state, trigger ->
+                                    SwipeRefreshIndicator(
+                                        state = state,
+                                        refreshTriggerDistance = trigger,
+                                        contentColor = theme.primary,
+                                        backgroundColor = theme.surface,
+                                        elevation = 8.dp
+                                    )
+                                },
+                                modifier = Modifier.weight(1f)
                             ) {
-                                LazyVerticalGrid(
-                                    columns = GridCells.Fixed(2),
+                                if (filteredVideos.isEmpty() && !isRefreshing) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .verticalScroll(rememberScrollState()),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.Center,
+                                            modifier = Modifier.padding(32.dp)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(72.dp)
+                                                    .background(theme.primary.copy(alpha = 0.12f), CircleShape),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Movie,
+                                                    contentDescription = null,
+                                                    tint = theme.primary,
+                                                    modifier = Modifier.size(36.dp)
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.height(16.dp))
+                                            Text(
+                                                text = if (searchQuery.isNotEmpty()) "Ничего не найдено" else "Видео не найдены",
+                                                color = Color.White,
+                                                fontSize = 17.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Spacer(modifier = Modifier.height(6.dp))
+                                            Text(
+                                                text = if (searchQuery.isNotEmpty())
+                                                    "По запросу \"$searchQuery\" ничего не найдено."
+                                                else
+                                                    "В памяти устройства пока нет видеофайлов. Загрузите видео или потяните вниз для обновления.",
+                                                color = GrayText,
+                                                fontSize = 13.sp,
+                                                textAlign = TextAlign.Center
+                                            )
+                                            Spacer(modifier = Modifier.height(20.dp))
+                                            Button(
+                                                onClick = { loadVideos() },
+                                                colors = ButtonDefaults.buttonColors(containerColor = theme.primary),
+                                                shape = RoundedCornerShape(12.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Search,
+                                                    contentDescription = null,
+                                                    tint = Color.Black,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    "Сканировать память",
+                                                    color = Color.Black,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 13.sp
+                                                )
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    LazyVerticalGrid(
+                                        columns = GridCells.Fixed(2),
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentPadding = PaddingValues(16.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        items(filteredVideos, key = { it.id }) { video ->
+                                            VideoCardItem(
+                                                video = video,
+                                                onClick = { onVideoSelected(video.uri.toString()) }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            // VLC-Style Animated Bottom Memory Scanning Panel
+                            AnimatedVisibility(
+                                visible = showScanBanner,
+                                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+                            ) {
+                                Surface(
                                     modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxWidth(),
-                                    contentPadding = PaddingValues(16.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = Color(0xFF181B22),
+                                    border = BorderStroke(1.dp, theme.primary.copy(alpha = 0.4f)),
+                                    shadowElevation = 8.dp
                                 ) {
-                                    items(filteredVideos, key = { it.id }) { video ->
-                                        VideoCardItem(
-                                            video = video,
-                                            onClick = { onVideoSelected(video.uri.toString()) }
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            CircularProgressIndicator(
+                                                color = theme.primary,
+                                                modifier = Modifier.size(18.dp),
+                                                strokeWidth = 2.dp
+                                            )
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    "Сканирование медиафайлов...",
+                                                    color = Color.White,
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                                Text(
+                                                    scanStatusText,
+                                                    color = theme.secondary,
+                                                    fontSize = 11.sp,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                            Text(
+                                                "VLC Scan",
+                                                color = Color.Gray,
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        LinearProgressIndicator(
+                                            color = theme.primary,
+                                            trackColor = Color.White.copy(alpha = 0.1f),
+                                            modifier = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp))
                                         )
                                     }
                                 }
@@ -289,6 +485,64 @@ fun VideoLibraryScreen(
     }
 }
 
+private fun loadVideosInternal(
+    context: Context,
+    coroutineScope: kotlinx.coroutines.CoroutineScope,
+    onVideosLoaded: (List<VideoItem>) -> Unit,
+    onStatus: (String) -> Unit,
+    onRefreshing: (Boolean) -> Unit,
+    onBanner: (Boolean) -> Unit
+) {
+    onRefreshing(true)
+    onBanner(true)
+    onStatus("Инициализация поиска видеофайлов...")
+
+    coroutineScope.launch {
+        try {
+            val list = withContext(Dispatchers.IO) {
+                MediaStoreHelper.getVideos(context) { path ->
+                    onStatus(path)
+                }
+            }
+            onVideosLoaded(list)
+            onStatus("Найдено: ${list.size} видеофайлов")
+            delay(1500)
+        } catch (e: Exception) {
+            Log.e("VideoLibraryScreen", "Failed to load videos", e)
+            onVideosLoaded(emptyList())
+            onStatus("Ошибка сканирования медиа")
+        } finally {
+            onRefreshing(false)
+            onBanner(false)
+        }
+    }
+}
+
+private fun checkMediaPermissions(context: Context): Boolean {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED
+    } else {
+        ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+    }
+}
+
+private fun requestMediaPermissions(launcher: androidx.activity.result.ActivityResultLauncher<Array<String>>) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        launcher.launch(
+            arrayOf(
+                Manifest.permission.READ_MEDIA_VIDEO,
+                Manifest.permission.READ_MEDIA_AUDIO
+            )
+        )
+    } else {
+        launcher.launch(
+            arrayOf(
+                Manifest.permission.READ_EXTERNAL_STORAGE
+            )
+        )
+    }
+}
+
 @Composable
 fun TopTabPillButton(
     text: String,
@@ -297,6 +551,7 @@ fun TopTabPillButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val theme = LocalAppTheme.current
     Surface(
         onClick = onClick,
         modifier = modifier
@@ -304,14 +559,14 @@ fun TopTabPillButton(
             .shadow(
                 elevation = if (isSelected) 8.dp else 0.dp,
                 shape = RoundedCornerShape(24.dp),
-                spotColor = GoldenYellowGlow,
-                ambientColor = GoldenYellowGlow
+                spotColor = theme.glow,
+                ambientColor = theme.glow
             ),
         shape = RoundedCornerShape(24.dp),
-        color = if (isSelected) NeonOrange else SurfaceCardColor,
+        color = if (isSelected) theme.primary else theme.surface,
         border = BorderStroke(
             1.dp,
-            if (isSelected) GoldenYellowLight else Color.White.copy(alpha = 0.08f)
+            if (isSelected) theme.secondary else Color.White.copy(alpha = 0.08f)
         )
     ) {
         Row(
@@ -343,11 +598,12 @@ fun BottomNavRoundedItem(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
+    val theme = LocalAppTheme.current
     Surface(
         onClick = onClick,
         modifier = Modifier.clip(RoundedCornerShape(20.dp)),
         shape = RoundedCornerShape(20.dp),
-        color = if (isSelected) NeonOrange.copy(alpha = 0.18f) else Color.Transparent
+        color = if (isSelected) theme.primary.copy(alpha = 0.18f) else Color.Transparent
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -356,13 +612,13 @@ fun BottomNavRoundedItem(
             Icon(
                 imageVector = icon,
                 contentDescription = label,
-                tint = if (isSelected) GoldenYellowLight else GrayText,
+                tint = if (isSelected) theme.secondary else GrayText,
                 modifier = Modifier.size(22.dp)
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = label,
-                color = if (isSelected) GoldenYellowLight else GrayText,
+                color = if (isSelected) theme.secondary else GrayText,
                 fontSize = 11.sp,
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
             )
@@ -376,22 +632,25 @@ fun VideoCardItem(
     onClick: () -> Unit
 ) {
     val context = LocalContext.current
+    val theme = LocalAppTheme.current
     var bitmapThumbnail by remember { mutableStateOf<Bitmap?>(null) }
 
     LaunchedEffect(video.id) {
         if (video.thumbnailResId == null && video.id > 0) {
-            bitmapThumbnail = MediaStoreHelper.loadThumbnail(context, video.id)
+            bitmapThumbnail = withContext(Dispatchers.IO) {
+                MediaStoreHelper.loadThumbnail(context, video.id)
+            }
         }
     }
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(theme.cornerRadiusDp.dp))
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        color = SurfaceCardColor,
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.06f))
+        shape = RoundedCornerShape(theme.cornerRadiusDp.dp),
+        color = theme.surface,
+        border = BorderStroke(1.dp, theme.cardBorder)
     ) {
         Column {
             Box(
@@ -422,7 +681,7 @@ fun VideoCardItem(
                         Icon(
                             imageVector = Icons.Default.Movie,
                             contentDescription = null,
-                            tint = NeonOrange.copy(alpha = 0.6f),
+                            tint = theme.primary.copy(alpha = 0.6f),
                             modifier = Modifier.size(40.dp)
                         )
                     }
@@ -436,7 +695,7 @@ fun VideoCardItem(
                     color = Color.Black.copy(alpha = 0.75f)
                 ) {
                     Text(
-                        text = formatDuration(video.duration),
+                        text = if (video.duration > 0) formatDuration(video.duration) else "Видео",
                         color = Color.White,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
@@ -449,7 +708,7 @@ fun VideoCardItem(
                         .align(Alignment.TopStart)
                         .padding(6.dp),
                     shape = RoundedCornerShape(6.dp),
-                    color = NeonOrange.copy(alpha = 0.85f)
+                    color = theme.primary.copy(alpha = 0.85f)
                 ) {
                     Text(
                         text = video.resolution,
@@ -476,13 +735,13 @@ fun VideoCardItem(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = formatSize(video.size),
+                        text = if (video.size > 0) formatSize(video.size) else "Медиафайл",
                         color = GrayText,
                         fontSize = 11.sp
                     )
                     Text(
                         text = "MP4",
-                        color = GoldenYellowLight,
+                        color = theme.secondary,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
                     )

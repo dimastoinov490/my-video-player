@@ -5,13 +5,27 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.provider.MediaStore
+import android.util.Log
 import android.util.Size
+import com.example.videoplayer.R
+import java.io.File
 
 object MediaStoreHelper {
+    private const val TAG = "MediaStoreHelper"
 
-    fun getVideos(context: Context): List<VideoItem> {
+    private val VIDEO_EXTENSIONS = setOf("mp4", "mkv", "avi", "mov", "webm", "3gp", "flv", "ts", "m4v")
+
+    fun getVideos(
+        context: Context,
+        onScanningPath: ((String) -> Unit)? = null
+    ): List<VideoItem> {
         val videoList = mutableListOf<VideoItem>()
+        val seenPaths = mutableSetOf<String>()
+
+        // 1. MediaStore query
+        onScanningPath?.invoke("Индексация MediaStore...")
         val projection = arrayOf(
             MediaStore.Video.Media._ID,
             MediaStore.Video.Media.TITLE,
@@ -20,7 +34,8 @@ object MediaStoreHelper {
             MediaStore.Video.Media.WIDTH,
             MediaStore.Video.Media.HEIGHT,
             MediaStore.Video.Media.DATE_ADDED,
-            MediaStore.Video.Media.SIZE
+            MediaStore.Video.Media.SIZE,
+            MediaStore.Video.Media.DATA
         )
 
         try {
@@ -33,33 +48,43 @@ object MediaStoreHelper {
             )
 
             cursor?.use {
-                val idCol = it.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
-                val titleCol = it.getColumnIndexOrThrow(MediaStore.Video.Media.TITLE)
-                val nameCol = it.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
-                val durCol = it.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
-                val widthCol = it.getColumnIndexOrThrow(MediaStore.Video.Media.WIDTH)
-                val heightCol = it.getColumnIndexOrThrow(MediaStore.Video.Media.HEIGHT)
-                val dateCol = it.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_ADDED)
-                val sizeCol = it.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
+                val idCol = it.getColumnIndex(MediaStore.Video.Media._ID)
+                val titleCol = it.getColumnIndex(MediaStore.Video.Media.TITLE)
+                val nameCol = it.getColumnIndex(MediaStore.Video.Media.DISPLAY_NAME)
+                val durCol = it.getColumnIndex(MediaStore.Video.Media.DURATION)
+                val widthCol = it.getColumnIndex(MediaStore.Video.Media.WIDTH)
+                val heightCol = it.getColumnIndex(MediaStore.Video.Media.HEIGHT)
+                val dateCol = it.getColumnIndex(MediaStore.Video.Media.DATE_ADDED)
+                val sizeCol = it.getColumnIndex(MediaStore.Video.Media.SIZE)
+                val dataCol = it.getColumnIndex(MediaStore.Video.Media.DATA)
 
                 while (it.moveToNext()) {
-                    val id = it.getLong(idCol)
-                    val title = it.getString(titleCol) ?: "Video $id"
-                    val displayName = it.getString(nameCol) ?: title
-                    val duration = it.getLong(durCol)
-                    val width = it.getInt(widthCol)
-                    val height = it.getInt(heightCol)
-                    val dateAdded = it.getLong(dateCol)
-                    val size = it.getLong(sizeCol)
-                    val contentUri = ContentUris.withAppendedId(
-                        MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-                        id
-                    )
+                    val id = if (idCol >= 0) it.getLong(idCol) else -1L
+                    val title = if (titleCol >= 0) it.getString(titleCol) ?: "Video $id" else "Video"
+                    val displayName = if (nameCol >= 0) it.getString(nameCol) ?: title else title
+                    val duration = if (durCol >= 0) it.getLong(durCol) else 0L
+                    val width = if (widthCol >= 0) it.getInt(widthCol) else 0
+                    val height = if (heightCol >= 0) it.getInt(heightCol) else 0
+                    val dateAdded = if (dateCol >= 0) it.getLong(dateCol) else 0L
+                    val size = if (sizeCol >= 0) it.getLong(sizeCol) else 0L
+                    val dataPath = if (dataCol >= 0) it.getString(dataCol) else null
+
+                    if (!dataPath.isNullOrBlank()) {
+                        seenPaths.add(dataPath.lowercase())
+                    }
+
+                    val contentUri = if (id >= 0) {
+                        ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id)
+                    } else if (!dataPath.isNullOrBlank()) {
+                        Uri.fromFile(File(dataPath))
+                    } else {
+                        continue
+                    }
 
                     val resolution = if (width > 0 && height > 0) "${width}x${height}" else "HD"
                     videoList.add(
                         VideoItem(
-                            id = id,
+                            id = if (id >= 0) id else videoList.size.toLong() + 1000,
                             title = title,
                             displayName = displayName,
                             uri = contentUri,
@@ -73,11 +98,68 @@ object MediaStoreHelper {
                     )
                 }
             }
-        } catch (_: Exception) {
-            return emptyList()
+        } catch (e: Throwable) {
+            Log.e(TAG, "MediaStore query failed: ${e.message}")
+        }
+
+        // 2. Direct filesystem scanner fallback for common video folders
+        val scanDirs = listOfNotNull(
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM),
+            File(Environment.getExternalStorageDirectory(), "Movies"),
+            File(Environment.getExternalStorageDirectory(), "Download"),
+            File(Environment.getExternalStorageDirectory(), "DCIM/Camera"),
+            context.getExternalFilesDir(Environment.DIRECTORY_MOVIES),
+            context.getExternalFilesDir(null)
+        )
+
+        for (dir in scanDirs) {
+            if (dir.exists() && dir.isDirectory) {
+                onScanningPath?.invoke("Сканирование: ${dir.name}...")
+                scanDirectoryRecursive(dir, seenPaths, videoList, maxDepth = 2)
+            }
         }
 
         return videoList
+    }
+
+    private fun scanDirectoryRecursive(
+        dir: File,
+        seenPaths: MutableSet<String>,
+        outList: MutableList<VideoItem>,
+        maxDepth: Int
+    ) {
+        if (maxDepth < 0) return
+        try {
+            val files = dir.listFiles() ?: return
+            for (file in files) {
+                if (file.isDirectory && !file.name.startsWith(".")) {
+                    scanDirectoryRecursive(file, seenPaths, outList, maxDepth - 1)
+                } else if (file.isFile && file.length() > 0) {
+                    val ext = file.extension.lowercase()
+                    if (ext in VIDEO_EXTENSIONS) {
+                        val pathLower = file.absolutePath.lowercase()
+                        if (seenPaths.add(pathLower)) {
+                            outList.add(
+                                VideoItem(
+                                    id = outList.size.toLong() + 5000L,
+                                    title = file.nameWithoutExtension,
+                                    displayName = file.name,
+                                    uri = Uri.fromFile(file),
+                                    duration = 0L,
+                                    resolution = "MP4",
+                                    width = 1920,
+                                    height = 1080,
+                                    dateAdded = file.lastModified() / 1000L,
+                                    size = file.length()
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        } catch (_: Throwable) {}
     }
 
     fun loadThumbnail(context: Context, id: Long): Bitmap? {
@@ -98,7 +180,7 @@ object MediaStoreHelper {
                     null
                 )
             }
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
             null
         }
     }
@@ -125,40 +207,40 @@ object MediaStoreHelper {
             )
 
             cursor?.use {
-                val idCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-                val titleCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
-                val artistCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
-                val albumCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
-                val durCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
-                val sizeCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)
-                val dateCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
+                val idCol = it.getColumnIndex(MediaStore.Audio.Media._ID)
+                val titleCol = it.getColumnIndex(MediaStore.Audio.Media.TITLE)
+                val artistCol = it.getColumnIndex(MediaStore.Audio.Media.ARTIST)
+                val albumCol = it.getColumnIndex(MediaStore.Audio.Media.ALBUM)
+                val durCol = it.getColumnIndex(MediaStore.Audio.Media.DURATION)
+                val sizeCol = it.getColumnIndex(MediaStore.Audio.Media.SIZE)
+                val dateCol = it.getColumnIndex(MediaStore.Audio.Media.DATE_ADDED)
 
                 while (it.moveToNext()) {
-                    val id = it.getLong(idCol)
-                    val title = it.getString(titleCol) ?: "Audio $id"
-                    val artist = it.getString(artistCol) ?: "Unknown Artist"
-                    val album = it.getString(albumCol) ?: "Unknown Album"
-                    val duration = it.getLong(durCol)
-                    val size = it.getLong(sizeCol)
-                    val dateAdded = it.getLong(dateCol)
+                    val id = if (idCol >= 0) it.getLong(idCol) else -1L
+                    val title = if (titleCol >= 0) it.getString(titleCol) ?: "Audio $id" else "Audio"
+                    val artist = if (artistCol >= 0) it.getString(artistCol) ?: "Unknown Artist" else "Unknown Artist"
+                    val album = if (albumCol >= 0) it.getString(albumCol) ?: "Unknown Album" else "Unknown Album"
+                    val duration = if (durCol >= 0) it.getLong(durCol) else 0L
+                    val size = if (sizeCol >= 0) it.getLong(sizeCol) else 0L
+                    val dateAdded = if (dateCol >= 0) it.getLong(dateCol) else 0L
 
-                    audioList.add(
-                        AudioItem(
-                            id = id,
-                            title = title,
-                            artist = artist,
-                            album = album,
-                            duration = duration,
-                            uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id),
-                            size = size,
-                            dateAdded = dateAdded
+                    if (id >= 0) {
+                        audioList.add(
+                            AudioItem(
+                                id = id,
+                                title = title,
+                                artist = artist,
+                                album = album,
+                                duration = duration,
+                                uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id),
+                                size = size,
+                                dateAdded = dateAdded
+                            )
                         )
-                    )
+                    }
                 }
             }
-        } catch (_: Exception) {
-            return emptyList()
-        }
+        } catch (_: Throwable) {}
 
         return audioList
     }

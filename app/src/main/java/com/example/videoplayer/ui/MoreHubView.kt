@@ -12,7 +12,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -29,29 +28,35 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.videoplayer.service.LocalHttpShareServer
+import com.example.videoplayer.service.WifiDirectInfo
+import com.example.videoplayer.service.WifiDirectManager
+import com.example.videoplayer.ui.ai.AiDesignStudioDialog
+import com.example.videoplayer.ui.ai.UiTemplateFromScreenshotDialog
 import com.example.videoplayer.ui.theme.*
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import com.google.zxing.common.BitMatrix
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
-val HubOrange = Color(0xFFFF8800)
-val HubAmberLight = Color(0xFFFFB300)
-val HubCardBg = Color(0xFF1E1E1E)
-val HubBorder = Color(0x33FF8800)
-
 private fun generateQrCodeBitmap(text: String, size: Int = 512): Bitmap {
-    val matrix: BitMatrix = MultiFormatWriter().encode(text, BarcodeFormat.QR_CODE, size, size)
-    val pixels = IntArray(size * size)
-    for (y in 0 until size) {
-        val offset = y * size
-        for (x in 0 until size) {
-            pixels[offset + x] = if (matrix[x, y]) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
+    return try {
+        val matrix: BitMatrix = MultiFormatWriter().encode(text, BarcodeFormat.QR_CODE, size, size)
+        val pixels = IntArray(size * size)
+        for (y in 0 until size) {
+            val offset = y * size
+            for (x in 0 until size) {
+                pixels[offset + x] = if (matrix[x, y]) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
+            }
         }
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        bitmap.setPixels(pixels, 0, size, 0, 0, size, size)
+        bitmap
+    } catch (_: Exception) {
+        Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
     }
-    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-    bitmap.setPixels(pixels, 0, size, 0, 0, size, size)
-    return bitmap
 }
 
 @Composable
@@ -63,24 +68,39 @@ fun MoreHubView(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val theme = LocalAppTheme.current
 
     var httpEnabled by remember { mutableStateOf(LocalHttpShareServer.isRunning(context)) }
     var httpAddress by remember { mutableStateOf(LocalHttpShareServer.getServerUrl(context)) }
-    var showQrDialog by remember { mutableStateOf(false) }
-    var qrContent by remember { mutableStateOf(httpAddress) }
-    var qrTitle by remember { mutableStateOf("Подключение к сети") }
+    var serverError by remember { mutableStateOf<String?>(LocalHttpShareServer.lastErrorMessage) }
+    var isStartingServer by remember { mutableStateOf(false) }
+
+    var showDirectModal by remember { mutableStateOf(false) }
+    var showAiStudioDialog by remember { mutableStateOf(false) }
+    var showScreenshotCloneDialog by remember { mutableStateOf(false) }
+
+    var wifiInfo by remember {
+        mutableStateOf(
+            WifiDirectInfo(
+                ssid = WifiDirectManager.currentSsid,
+                password = WifiDirectManager.currentPass,
+                qrPayload = WifiDirectManager.getWifiQrPayload(),
+                isNativeP2p = false
+            )
+        )
+    }
+    var wifiStatusText by remember { mutableStateOf("") }
+    var isWifiStarting by remember { mutableStateOf(false) }
 
     val defaultShareFile = remember {
-        File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "nexora_share_example.mp4")
-    }
-    val shareUrl = remember(httpEnabled, httpAddress) {
-        if (httpEnabled) LocalHttpShareServer.getDownloadUrl(context, defaultShareFile) else ""
+        File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "share_video.mp4")
     }
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(DarkBackground)
+            .background(theme.background)
     ) {
         Row(
             modifier = Modifier
@@ -96,8 +116,8 @@ fun MoreHubView(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    "Nexora Hub • Сервисы и обмен",
-                    color = HubAmberLight,
+                    "Nexora Hub • ${theme.name}",
+                    color = theme.secondary,
                     fontSize = 12.sp
                 )
             }
@@ -110,12 +130,13 @@ fun MoreHubView(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            // Local HTTP Server Card
             item {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(22.dp),
-                    color = HubCardBg,
-                    border = BorderStroke(1.dp, if (httpEnabled) HubOrange.copy(alpha = 0.8f) else HubBorder)
+                    color = theme.surface,
+                    border = BorderStroke(1.dp, if (httpEnabled) theme.primary.copy(alpha = 0.8f) else theme.cardBorder)
                 ) {
                     Column(modifier = Modifier.padding(18.dp)) {
                         Row(
@@ -126,13 +147,13 @@ fun MoreHubView(
                                 modifier = Modifier
                                     .size(46.dp)
                                     .clip(RoundedCornerShape(14.dp))
-                                    .background(if (httpEnabled) HubOrange.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.06f)),
+                                    .background(if (httpEnabled) theme.primary.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.06f)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Wifi,
                                     contentDescription = null,
-                                    tint = if (httpEnabled) HubAmberLight else GrayText,
+                                    tint = if (httpEnabled) theme.secondary else GrayText,
                                     modifier = Modifier.size(24.dp)
                                 )
                             }
@@ -147,33 +168,60 @@ fun MoreHubView(
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    if (httpEnabled) "Сервер активен в локальной сети" else "Обмен файлами по Wi‑Fi через HTTP",
+                                    if (httpEnabled) "Сервер активен на порту ${LocalHttpShareServer.currentPort}" else "Обмен файлами по Wi‑Fi через HTTP",
                                     color = if (httpEnabled) Color(0xFF4CAF50) else GrayText,
                                     fontSize = 12.sp
                                 )
                             }
 
-                            Switch(
-                                checked = httpEnabled,
-                                onCheckedChange = { checked ->
-                                    if (checked) {
-                                        val started = LocalHttpShareServer.start(context, 8765)
-                                        httpEnabled = started
-                                        httpAddress = LocalHttpShareServer.getServerUrl(context)
-                                        Toast.makeText(context, if (started) "HTTP-сервер запущен" else "Ошибка запуска HTTP-сервера", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        LocalHttpShareServer.stop()
-                                        httpEnabled = false
-                                        httpAddress = LocalHttpShareServer.getServerUrl(context)
-                                        Toast.makeText(context, "HTTP-сервер остановлен", Toast.LENGTH_SHORT).show()
-                                    }
-                                },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = Color.White,
-                                    checkedTrackColor = HubOrange,
-                                    uncheckedThumbColor = GrayText,
-                                    uncheckedTrackColor = Color.White.copy(alpha = 0.1f)
+                            if (isStartingServer) {
+                                CircularProgressIndicator(color = theme.primary, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                            } else {
+                                Switch(
+                                    checked = httpEnabled,
+                                    onCheckedChange = { checked ->
+                                        isStartingServer = true
+                                        serverError = null
+                                        coroutineScope.launch {
+                                            if (checked) {
+                                                val started = withContext(Dispatchers.IO) {
+                                                    LocalHttpShareServer.start(context, 8765)
+                                                }
+                                                httpEnabled = started
+                                                httpAddress = LocalHttpShareServer.getServerUrl(context)
+                                                if (!started) {
+                                                    serverError = LocalHttpShareServer.lastErrorMessage ?: "Не удалось занять порт"
+                                                    Toast.makeText(context, "Ошибка: $serverError", Toast.LENGTH_LONG).show()
+                                                } else {
+                                                    Toast.makeText(context, "Сервер запущен: $httpAddress", Toast.LENGTH_SHORT).show()
+                                                }
+                                            } else {
+                                                withContext(Dispatchers.IO) {
+                                                    LocalHttpShareServer.stop()
+                                                }
+                                                httpEnabled = false
+                                                httpAddress = LocalHttpShareServer.getServerUrl(context)
+                                                Toast.makeText(context, "Сервер остановлен", Toast.LENGTH_SHORT).show()
+                                            }
+                                            isStartingServer = false
+                                        }
+                                    },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = Color.White,
+                                        checkedTrackColor = theme.primary,
+                                        uncheckedThumbColor = GrayText,
+                                        uncheckedTrackColor = Color.White.copy(alpha = 0.1f)
+                                    )
                                 )
+                            }
+                        }
+
+                        if (serverError != null) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                "Ошибка: $serverError",
+                                color = Color(0xFFFF5252),
+                                fontSize = 12.sp
                             )
                         }
 
@@ -183,7 +231,7 @@ fun MoreHubView(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(12.dp),
                                 color = Color.Black.copy(alpha = 0.4f),
-                                border = BorderStroke(1.dp, HubOrange.copy(alpha = 0.3f))
+                                border = BorderStroke(1.dp, theme.primary.copy(alpha = 0.3f))
                             ) {
                                 Row(
                                     modifier = Modifier
@@ -193,10 +241,10 @@ fun MoreHubView(
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     Column {
-                                        Text("Адрес подключения:", color = GrayText, fontSize = 11.sp)
+                                        Text("Адрес для браузера:", color = GrayText, fontSize = 11.sp)
                                         Text(
                                             httpAddress,
-                                            color = HubAmberLight,
+                                            color = theme.secondary,
                                             fontSize = 14.sp,
                                             fontWeight = FontWeight.SemiBold
                                         )
@@ -207,13 +255,13 @@ fun MoreHubView(
                                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                             val clip = ClipData.newPlainText("HTTP address", httpAddress)
                                             clipboard.setPrimaryClip(clip)
-                                            Toast.makeText(context, "Адрес скопирован", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, "Адрес скопирован в буфер", Toast.LENGTH_SHORT).show()
                                         }
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.ContentCopy,
                                             contentDescription = "Копировать",
-                                            tint = HubOrange,
+                                            tint = theme.primary,
                                             modifier = Modifier.size(20.dp)
                                         )
                                     }
@@ -224,12 +272,13 @@ fun MoreHubView(
                 }
             }
 
+            // Wi-Fi Direct & QR Sharing Card
             item {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(22.dp),
-                    color = HubCardBg,
-                    border = BorderStroke(1.dp, HubBorder)
+                    color = theme.surface,
+                    border = BorderStroke(1.dp, theme.cardBorder)
                 ) {
                     Column(modifier = Modifier.padding(18.dp)) {
                         Row(
@@ -240,13 +289,13 @@ fun MoreHubView(
                                 modifier = Modifier
                                     .size(46.dp)
                                     .clip(RoundedCornerShape(14.dp))
-                                    .background(HubOrange.copy(alpha = 0.15f)),
+                                    .background(theme.primary.copy(alpha = 0.15f)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.QrCodeScanner,
                                     contentDescription = null,
-                                    tint = HubAmberLight,
+                                    tint = theme.secondary,
                                     modifier = Modifier.size(24.dp)
                                 )
                             }
@@ -255,13 +304,13 @@ fun MoreHubView(
 
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    "Передача по QR",
+                                    "Передача по QR и Wi‑Fi Direct",
                                     color = Color.White,
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    "Подключение и передача файла через локальную сеть",
+                                    "Прямое подключение по QR с паролем от Wi‑Fi Direct",
                                     color = GrayText,
                                     fontSize = 12.sp
                                 )
@@ -270,49 +319,31 @@ fun MoreHubView(
 
                         Spacer(modifier = Modifier.height(14.dp))
 
-                        Row(
+                        Button(
+                            onClick = {
+                                isWifiStarting = true
+                                WifiDirectManager.startHotspotOrDirect(
+                                    context = context,
+                                    onStatus = { wifiStatusText = it },
+                                    onComplete = { info ->
+                                        wifiInfo = info
+                                        isWifiStarting = false
+                                        showDirectModal = true
+                                    }
+                                )
+                            },
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            colors = ButtonDefaults.buttonColors(containerColor = theme.primary),
+                            shape = RoundedCornerShape(14.dp)
                         ) {
-                            Button(
-                                onClick = {
-                                    qrTitle = "Подключение к сети"
-                                    qrContent = httpAddress.ifBlank { "http://127.0.0.1:8765" }
-                                    showQrDialog = true
-                                },
-                                modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColors(containerColor = HubOrange),
-                                shape = RoundedCornerShape(14.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.ConnectWithoutContact,
-                                    contentDescription = null,
-                                    tint = Color.Black,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("QR сети", color = Color.Black, fontWeight = FontWeight.Bold)
-                            }
-
-                            OutlinedButton(
-                                onClick = {
-                                    qrTitle = "Прямая передача файла"
-                                    qrContent = shareUrl.ifBlank { "http://127.0.0.1:8765/download/nexora_share_example.mp4" }
-                                    showQrDialog = true
-                                },
-                                modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = HubAmberLight),
-                                border = BorderStroke(1.dp, HubOrange),
-                                shape = RoundedCornerShape(14.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.AttachFile,
-                                    contentDescription = null,
-                                    tint = HubAmberLight,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("QR файла", color = HubAmberLight, fontWeight = FontWeight.Bold)
+                            if (isWifiStarting) {
+                                CircularProgressIndicator(color = Color.Black, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Включение Wi‑Fi Direct...", color = Color.Black, fontWeight = FontWeight.Bold)
+                            } else {
+                                Icon(Icons.Default.WifiTethering, contentDescription = null, tint = Color.Black, modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Открыть QR подключения с паролем сети", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                             }
                         }
                     }
@@ -322,11 +353,126 @@ fun MoreHubView(
             item {
                 Text(
                     "НАВИГАЦИЯ И ИНСТРУМЕНТЫ",
-                    color = HubOrange,
+                    color = theme.primary,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     letterSpacing = 1.sp,
                     modifier = Modifier.padding(start = 4.dp, top = 8.dp)
+                )
+            }
+
+            // Quick Restore Neon Theme Button Card
+            item {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable {
+                            ThemeManager.resetToOriginalNeon(context)
+                            Toast.makeText(context, "Оригинальное оформление Неон возвращено!", Toast.LENGTH_SHORT).show()
+                        },
+                    shape = RoundedCornerShape(16.dp),
+                    color = theme.surface,
+                    border = BorderStroke(1.dp, Color(0xFFFF8A00).copy(alpha = 0.4f))
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFFFF8A00).copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Palette, contentDescription = null, tint = Color(0xFFFF8A00), modifier = Modifier.size(22.dp))
+                        }
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Вернуть оформление Неон (Оригинал)", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                            Text("Восстановить фирменный оранжево-золотой стиль Nexora", color = GrayText, fontSize = 12.sp)
+                        }
+                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFFFF8A00), modifier = Modifier.size(20.dp))
+                    }
+                }
+            }
+
+            // UI by Screenshot / Layout Cloner Card
+            item {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable { showScreenshotCloneDialog = true },
+                    shape = RoundedCornerShape(16.dp),
+                    color = theme.surface,
+                    border = BorderStroke(1.dp, theme.primary.copy(alpha = 0.5f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(theme.primary.copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Palette,
+                                contentDescription = null,
+                                tint = theme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    "UI дизайн по скриншоту",
+                                    color = Color.White,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = theme.primary
+                                ) {
+                                    Text(
+                                        "МАКЕТ",
+                                        color = Color.Black,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Black,
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                    )
+                                }
+                            }
+                            Text(
+                                "Загрузите скриншот главного экрана и плеера — цвета и кнопки подстроятся точь-в-точь по макету",
+                                color = GrayText,
+                                fontSize = 12.sp,
+                                lineHeight = 16.sp
+                            )
+                        }
+                        Icon(
+                            Icons.Default.ArrowForwardIos,
+                            contentDescription = null,
+                            tint = theme.secondary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+
+            // AI Design Studio Card
+            item {
+                HubActionCard(
+                    icon = Icons.Default.AutoAwesome,
+                    title = "ИИ Дизайн Студия",
+                    subtitle = "Генерация уникального оформления и цветовых тем плеера",
+                    onClick = { showAiStudioDialog = true }
                 )
             }
 
@@ -368,45 +514,151 @@ fun MoreHubView(
         }
     }
 
-    if (showQrDialog) {
-        val qrBitmap = remember(qrContent) { generateQrCodeBitmap(qrContent) }
+    if (showScreenshotCloneDialog) {
+        UiTemplateFromScreenshotDialog(
+            onDismiss = { showScreenshotCloneDialog = false }
+        )
+    }
+
+    if (showAiStudioDialog) {
+        AiDesignStudioDialog(
+            onDismiss = { showAiStudioDialog = false }
+        )
+    }
+
+    // Modal with Wi-Fi Direct and File Download QR
+    if (showDirectModal) {
+        var tabIndex by remember { mutableIntStateOf(0) }
+        val wifiQrBitmap = remember(wifiInfo.qrPayload) { generateQrCodeBitmap(wifiInfo.qrPayload) }
+        val downloadUrl = remember(httpAddress) {
+            LocalHttpShareServer.getDownloadUrl(context, defaultShareFile)
+        }
+        val fileQrBitmap = remember(downloadUrl) { generateQrCodeBitmap(downloadUrl) }
+
         AlertDialog(
-            onDismissRequest = { showQrDialog = false },
+            onDismissRequest = { showDirectModal = false },
             title = {
-                Text(qrTitle, color = Color.White, fontWeight = FontWeight.Bold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.WifiTethering, contentDescription = null, tint = theme.primary)
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text("Wi‑Fi Direct & QR передача", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                }
             },
             text = {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    Image(
-                        bitmap = qrBitmap.asImageBitmap(),
-                        contentDescription = qrTitle,
-                        modifier = Modifier.size(220.dp)
-                    )
-                    Text(
-                        qrContent,
-                        color = GrayText,
-                        fontSize = 11.sp
-                    )
+                    // Tabs: Wi-Fi connect QR / File download QR
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { tabIndex = 0 },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (tabIndex == 0) theme.primary else Color(0xFF252525)
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                "1. Пароль Wi‑Fi",
+                                color = if (tabIndex == 0) Color.Black else Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp
+                            )
+                        }
+                        Button(
+                            onClick = { tabIndex = 1 },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (tabIndex == 1) theme.primary else Color(0xFF252525)
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                "2. Скачать видео",
+                                color = if (tabIndex == 1) Color.Black else Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+
+                    if (tabIndex == 0) {
+                        // Wi-Fi Connection QR
+                        Image(
+                            bitmap = wifiQrBitmap.asImageBitmap(),
+                            contentDescription = "Wi-Fi QR Code",
+                            modifier = Modifier.size(200.dp)
+                        )
+
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFF252525),
+                            border = BorderStroke(1.dp, theme.primary.copy(alpha = 0.3f))
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text("Наведите камеру любого телефона для автоподключения:", color = GrayText, fontSize = 11.sp)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Имя сети (SSID):", color = Color.White, fontSize = 12.sp)
+                                    Text(wifiInfo.ssid, color = theme.secondary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Пароль Wi‑Fi:", color = Color.White, fontSize = 12.sp)
+                                    Text(wifiInfo.password, color = theme.primary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                }
+                            }
+                        }
+                    } else {
+                        // File Download QR
+                        Image(
+                            bitmap = fileQrBitmap.asImageBitmap(),
+                            contentDescription = "File Download QR",
+                            modifier = Modifier.size(200.dp)
+                        )
+
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFF252525)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text("После подключения к Wi‑Fi откройте ссылку или QR:", color = GrayText, fontSize = 11.sp)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(downloadUrl, color = theme.secondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
                 }
             },
             confirmButton = {
                 Button(
-                    onClick = { showQrDialog = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = HubOrange)
+                    onClick = { showDirectModal = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = theme.primary),
+                    shape = RoundedCornerShape(10.dp)
                 ) {
                     Text("Готово", color = Color.Black, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showQrDialog = false }) {
+                TextButton(onClick = { showDirectModal = false }) {
                     Text("Закрыть", color = GrayText)
                 }
             },
-            containerColor = DarkBackground
+            containerColor = theme.surface,
+            shape = RoundedCornerShape(20.dp)
         )
     }
 }
@@ -418,13 +670,14 @@ private fun HubActionCard(
     subtitle: String,
     onClick: () -> Unit
 ) {
+    val theme = LocalAppTheme.current
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp),
-        color = HubCardBg,
+        color = theme.surface,
         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
     ) {
         Row(
@@ -443,7 +696,7 @@ private fun HubActionCard(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = HubAmberLight,
+                    tint = theme.secondary,
                     modifier = Modifier.size(22.dp)
                 )
             }

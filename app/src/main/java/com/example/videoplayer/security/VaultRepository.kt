@@ -2,29 +2,39 @@ package com.example.videoplayer.security
 
 import android.content.Context
 import android.util.Base64
+import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.util.UUID
+import javax.crypto.CipherInputStream
+import javax.crypto.CipherOutputStream
 
 private const val VAULT_DIR_NAME = "secure_vault"
+private const val TAG = "SecureVaultRepo"
 
 class SecureVaultRepository(private val context: Context) {
     private val rootDir = File(context.filesDir, VAULT_DIR_NAME).apply { mkdirs() }
 
     private val prefs: android.content.SharedPreferences by lazy {
-        val masterKey = MasterKey.Builder(context)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
+        try {
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
 
-        EncryptedSharedPreferences.create(
-            context,
-            "secure_vault_state",
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        )
+            EncryptedSharedPreferences.create(
+                context,
+                "secure_vault_state",
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "EncryptedSharedPreferences error, falling back to standard prefs", e)
+            context.getSharedPreferences("secure_vault_fallback", Context.MODE_PRIVATE)
+        }
     }
 
     data class SecureVaultItem(
@@ -51,29 +61,36 @@ class SecureVaultRepository(private val context: Context) {
     fun verifyPassword(password: String): Boolean {
         val saltText = prefs.getString("vault_password_salt", null) ?: return false
         val hashText = prefs.getString("vault_password_hash", null) ?: return false
-        val salt = Base64.decode(saltText, Base64.NO_WRAP)
-        val hash = Base64.decode(hashText, Base64.NO_WRAP)
-        return VaultCrypto.passwordMatches(password, salt, hash)
+        return try {
+            val salt = Base64.decode(saltText, Base64.NO_WRAP)
+            val hash = Base64.decode(hashText, Base64.NO_WRAP)
+            VaultCrypto.passwordMatches(password, salt, hash)
+        } catch (e: Exception) {
+            Log.e(TAG, "Password verification failed", e)
+            false
+        }
     }
 
     fun addFile(source: File, password: String, displayName: String): String {
         if (!verifyPassword(password)) {
-            throw IllegalStateException("Invalid vault password")
+            throw IllegalStateException("Неверный пароль хранилища")
         }
-
-        val payload = VaultCrypto.encrypt(source.readBytes(), password)
-        val combined = ByteArray(payload.salt.size + payload.iv.size + payload.cipherText.size)
-        var offset = 0
-
-        payload.salt.copyInto(combined, offset)
-        offset += payload.salt.size
-        payload.iv.copyInto(combined, offset)
-        offset += payload.iv.size
-        payload.cipherText.copyInto(combined, offset)
 
         val id = UUID.randomUUID().toString()
         val targetFile = File(rootDir, "$id.enc")
-        FileOutputStream(targetFile).use { it.write(combined) }
+        val salt = VaultCrypto.generateSalt()
+        val iv = VaultCrypto.generateIv()
+        val cipher = VaultCrypto.getEncryptCipher(password, salt, iv)
+
+        FileOutputStream(targetFile).use { fos ->
+            fos.write(salt)
+            fos.write(iv)
+            CipherOutputStream(fos, cipher).use { cos ->
+                source.inputStream().use { fis ->
+                    fis.copyTo(cos, bufferSize = 64 * 1024)
+                }
+            }
+        }
 
         prefs.edit().putString("name_$id", displayName).apply()
         return id
@@ -90,24 +107,31 @@ class SecureVaultRepository(private val context: Context) {
 
     fun openFile(id: String, password: String): File {
         if (!verifyPassword(password)) {
-            throw IllegalStateException("Invalid vault password")
+            throw IllegalStateException("Неверный пароль хранилища")
         }
 
         val source = File(rootDir, "$id.enc")
-        val raw = source.readBytes()
-        val saltSize = 16
-        val ivSize = 12
-        val salt = raw.copyOfRange(0, saltSize)
-        val iv = raw.copyOfRange(saltSize, saltSize + ivSize)
-        val cipherText = raw.copyOfRange(saltSize + ivSize, raw.size)
-
-        val decrypted = VaultCrypto.decrypt(
-            EncryptedVaultPayload(salt = salt, iv = iv, cipherText = cipherText),
-            password
-        )
+        if (!source.exists()) {
+            throw IllegalStateException("Файл не найден в хранилище")
+        }
 
         val outFile = File(context.cacheDir, "$id.decrypted")
-        outFile.writeBytes(decrypted)
+        FileInputStream(source).use { fis ->
+            val salt = ByteArray(16)
+            var read = fis.read(salt)
+            if (read < 16) throw IllegalStateException("Поврежденный файл хранилища")
+            val iv = ByteArray(12)
+            read = fis.read(iv)
+            if (read < 12) throw IllegalStateException("Поврежденный файл хранилища")
+
+            val cipher = VaultCrypto.getDecryptCipher(password, salt, iv)
+            CipherInputStream(fis, cipher).use { cis ->
+                FileOutputStream(outFile).use { fos ->
+                    cis.copyTo(fos, bufferSize = 64 * 1024)
+                }
+            }
+        }
+
         return outFile
     }
 
@@ -119,6 +143,8 @@ class SecureVaultRepository(private val context: Context) {
     }
 
     fun clearTempDecryptedFiles() {
-        context.cacheDir.listFiles()?.filter { it.name.endsWith(".decrypted") }?.forEach { it.delete() }
+        try {
+            context.cacheDir.listFiles()?.filter { it.name.endsWith(".decrypted") }?.forEach { it.delete() }
+        } catch (_: Exception) {}
     }
 }

@@ -26,7 +26,10 @@ object PlaylistManager {
                 val urisArray = obj.optJSONArray("itemUris")
                 if (urisArray != null) {
                     for (j in 0 until urisArray.length()) {
-                        uris.add(urisArray.getString(j))
+                        val uriStr = urisArray.getString(j)
+                        if (!uriStr.contains("commondatastorage.googleapis.com")) {
+                            uris.add(uriStr)
+                        }
                     }
                 }
                 list.add(
@@ -114,39 +117,28 @@ object PlaylistManager {
                 name = "Избранное",
                 description = "Любимые видео и треки",
                 iconType = "favorites",
-                itemUris = listOf(
-                    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-                    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackSeeTheWorld.mp4"
-                )
+                itemUris = emptyList()
             ),
             Playlist(
                 id = "pl_recent",
                 name = "Недавние",
                 description = "Недавно просмотренные медиафайлы",
                 iconType = "recent",
-                itemUris = listOf(
-                    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-                    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4"
-                )
+                itemUris = emptyList()
             ),
             Playlist(
                 id = "pl_cinema",
                 name = "Фильмы и Кино",
                 description = "Коллекция фильмов в HD",
                 iconType = "movie",
-                itemUris = listOf(
-                    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
-                    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4"
-                )
+                itemUris = emptyList()
             ),
             Playlist(
                 id = "pl_music",
                 name = "Музыкальные клипы",
                 description = "Клипы и атмосферные саундтреки",
                 iconType = "music",
-                itemUris = listOf(
-                    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackSeeTheWorld.mp4"
-                )
+                itemUris = emptyList()
             )
         )
     }

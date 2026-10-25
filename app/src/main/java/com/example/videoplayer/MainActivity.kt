@@ -22,13 +22,15 @@ import com.example.videoplayer.ui.theme.*
 class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ThemeManager.init(this)
         enableEdgeToEdge()
 
         setContent {
             VideoPlayerTheme {
+                val theme = LocalAppTheme.current
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = DarkBackground
+                    color = theme.background
                 ) {
                     var selectedVideoUri by remember { mutableStateOf<String?>(null) }
                     var showCustomUrlDialog by remember { mutableStateOf(false) }
@@ -59,7 +61,7 @@ class MainActivity : FragmentActivity() {
 
                         if (showCustomUrlDialog) {
                             var urlInput by remember {
-                                mutableStateOf("https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4")
+                                mutableStateOf("")
                             }
 
                             AlertDialog(
@@ -82,10 +84,11 @@ class MainActivity : FragmentActivity() {
                                         OutlinedTextField(
                                             value = urlInput,
                                             onValueChange = { urlInput = it },
+                                            placeholder = { Text("https://example.com/video.mp4", color = GrayText) },
                                             singleLine = true,
                                             modifier = Modifier.fillMaxWidth(),
                                             colors = OutlinedTextFieldDefaults.colors(
-                                                focusedBorderColor = NeonOrange,
+                                                focusedBorderColor = theme.primary,
                                                 unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
                                                 focusedTextColor = Color.White,
                                                 unfocusedTextColor = Color.White
@@ -101,7 +104,7 @@ class MainActivity : FragmentActivity() {
                                                 selectedVideoUri = urlInput.trim()
                                             }
                                         },
-                                        colors = ButtonDefaults.buttonColors(containerColor = NeonOrange)
+                                        colors = ButtonDefaults.buttonColors(containerColor = theme.primary)
                                     ) {
                                         Text("Играть", color = Color.Black, fontWeight = FontWeight.Bold)
                                     }
@@ -111,7 +114,7 @@ class MainActivity : FragmentActivity() {
                                         Text("Отмена", color = GrayText)
                                     }
                                 },
-                                containerColor = DarkBackground,
+                                containerColor = theme.surface,
                                 shape = RoundedCornerShape(18.dp)
                             )
                         }
