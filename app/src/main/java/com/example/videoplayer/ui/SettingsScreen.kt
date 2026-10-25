@@ -1,305 +1,132 @@
-package com.example.videoplayer.ui
+package com.example.videoplayer
 
-import android.content.Context
-import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
+import android.os.Bundle
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.PlayCircle
-import androidx.compose.material.icons.filled.ScreenRotation
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.videoplayer.ui.theme.*
+import androidx.fragment.app.FragmentActivity
+import com.example.videoplayer.ui.SettingsScreen
+import com.example.videoplayer.ui.VideoLibraryScreen
+import com.example.videoplayer.ui.theme.DarkBackground
+import com.example.videoplayer.ui.theme.GrayText
+import com.example.videoplayer.ui.theme.NeonOrange
+import com.example.videoplayer.ui.theme.VideoPlayerTheme
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun SettingsScreen(
-    onBack: () -> Unit
-) {
-    val context = LocalContext.current
-    val prefs = remember { context.getSharedPreferences("video_prefs", Context.MODE_PRIVATE) }
+class MainActivity : FragmentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
 
-    var hardwareAccel by remember {
-        mutableStateOf(prefs.getBoolean("hw_accel", true))
-    }
-    var backgroundPlay by remember {
-        mutableStateOf(prefs.getBoolean("bg_play", false))
-    }
-    var showBuffering by remember {
-        mutableStateOf(prefs.getBoolean("show_buffering_status", false))
-    }
-    var autoRotate by remember {
-        mutableStateOf(prefs.getBoolean("auto_rotate", true))
-    }
-    var currentTheme by remember {
-        mutableStateOf(prefs.getString("app_theme", "Оранжевый Неон") ?: "Оранжевый Неон")
-    }
+        setContent {
+            var darkTheme by remember { mutableStateOf(true) }
+            var selectedVideoUri by remember { mutableStateOf<String?>(null) }
+            var showCustomUrlDialog by remember { mutableStateOf(false) }
+            var showSettingsScreen by remember { mutableStateOf(false) }
 
-    BackHandler {
-        onBack()
-    }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        "Настройки",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 20.sp
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Назад",
-                            tint = NeonOrange
+            VideoPlayerTheme(darkTheme = darkTheme) {
+                Surface(
+                    color = if (darkTheme) DarkBackground else Color(0xFFF7F3EE),
+                    modifier = Modifier
+                ) {
+                    if (selectedVideoUri != null) {
+                        com.example.videoplayer.ui.PlayerScreen(
+                            videoUri = selectedVideoUri!!,
+                            onBack = { selectedVideoUri = null }
                         )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = DarkBackground
-                )
-            )
-        },
-        containerColor = DarkBackground
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            item {
-                Text(
-                    "ВОСПРОИЗВЕДЕНИЕ",
-                    color = NeonOrange,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = 1.sp
-                )
-            }
-
-            item {
-                SettingsCard {
-                    SettingsSwitchItem(
-                        icon = Icons.Default.PlayCircle,
-                        title = "Аппаратное декодирование",
-                        subtitle = "Использовать аппаратный декодер LibVLC",
-                        checked = hardwareAccel,
-                        onCheckedChange = {
-                            hardwareAccel = it
-                            prefs.edit().putBoolean("hw_accel", it).apply()
-                        }
-                    )
-                    HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
-                    SettingsSwitchItem(
-                        icon = Icons.Default.Settings,
-                        title = "Фоновое воспроизведение",
-                        subtitle = "Продолжать звук при блокировке экрана",
-                        checked = backgroundPlay,
-                        onCheckedChange = {
-                            backgroundPlay = it
-                            prefs.edit().putBoolean("bg_play", it).apply()
-                        }
-                    )
-                    HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
-                    SettingsSwitchItem(
-                        icon = Icons.Default.PlayCircle,
-                        title = "Отображать буферизацию",
-                        subtitle = "Индикатор процентов кэша во время проигрывания",
-                        checked = showBuffering,
-                        onCheckedChange = {
-                            showBuffering = it
-                            prefs.edit().putBoolean("show_buffering_status", it).apply()
-                        }
-                    )
-                    HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
-                    SettingsSwitchItem(
-                        icon = Icons.Default.ScreenRotation,
-                        title = "Автоповорот в полноэкранном",
-                        subtitle = "Автоматически поворачивать в альбомный режим",
-                        checked = autoRotate,
-                        onCheckedChange = {
-                            autoRotate = it
-                            prefs.edit().putBoolean("auto_rotate", it).apply()
-                        }
-                    )
-                }
-            }
-
-            item {
-                Text(
-                    "ИНТЕРФЕЙС И ОФОРМЛЕНИЕ",
-                    color = NeonOrange,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = 1.sp
-                )
-            }
-
-            item {
-                SettingsCard {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Palette,
-                            contentDescription = null,
-                            tint = NeonOrange,
-                            modifier = Modifier.size(24.dp)
+                    } else if (showSettingsScreen) {
+                        SettingsScreen(
+                            onBack = { showSettingsScreen = false },
+                            onThemeChanged = { darkTheme = it }
                         )
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                "Цветовой стиль",
-                                color = Color.White,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                currentTheme,
-                                color = GrayText,
-                                fontSize = 13.sp
-                            )
-                        }
-                        TextButton(
-                            onClick = {
-                                val next = if (currentTheme == "Оранжевый Неон") "Теплый Янтарь" else "Оранжевый Неон"
-                                currentTheme = next
-                                prefs.edit().putString("app_theme", next).apply()
+                    } else {
+                        VideoLibraryScreen(
+                            onVideoSelected = { uri -> selectedVideoUri = uri },
+                            onOpenCustomUrl = { showCustomUrlDialog = true },
+                            onOpenSettings = { showSettingsScreen = true }
+                        )
+
+                        if (showCustomUrlDialog) {
+                            var urlInput by remember {
+                                mutableStateOf("https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4")
                             }
-                        ) {
-                            Text("Изменить", color = GoldenYellowLight)
-                        }
-                    }
-                }
-            }
 
-            item {
-                Text(
-                    "О ПРИЛОЖЕНИИ",
-                    color = NeonOrange,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = 1.sp
-                )
-            }
-
-            item {
-                SettingsCard {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = null,
-                            tint = NeonOrange,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Column {
-                            Text(
-                                "Nexora Video Player",
-                                color = Color.White,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                "Версия 1.0.0 (LibVLC 3.6.0)",
-                                color = GrayText,
-                                fontSize = 13.sp
-                            )
-                            Text(
-                                "Современный мультимедийный проигрыватель",
-                                color = GrayText,
-                                fontSize = 12.sp
+                            AlertDialog(
+                                onDismissRequest = { showCustomUrlDialog = false },
+                                title = {
+                                    Text(
+                                        "Воспроизведение по ссылке",
+                                        color = if (darkTheme) Color.White else Color.Black,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 17.sp
+                                    )
+                                },
+                                text = {
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Text(
+                                            "Введите HTTP(S), HLS или RTSP URL:",
+                                            color = if (darkTheme) GrayText else Color(0xFF4A4A4A),
+                                            fontSize = 13.sp
+                                        )
+                                        OutlinedTextField(
+                                            value = urlInput,
+                                            onValueChange = { urlInput = it },
+                                            singleLine = true,
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedBorderColor = NeonOrange,
+                                                unfocusedBorderColor = if (darkTheme) Color.White.copy(alpha = 0.2f) else Color.Black.copy(alpha = 0.2f),
+                                                focusedTextColor = if (darkTheme) Color.White else Color.Black,
+                                                unfocusedTextColor = if (darkTheme) Color.White else Color.Black
+                                            )
+                                        )
+                                    }
+                                },
+                                confirmButton = {
+                                    Button(
+                                        onClick = {
+                                            if (urlInput.isNotBlank()) {
+                                                showCustomUrlDialog = false
+                                                selectedVideoUri = urlInput.trim()
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = NeonOrange)
+                                    ) {
+                                        Text("Играть", color = Color.Black, fontWeight = FontWeight.Bold)
+                                    }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { showCustomUrlDialog = false }) {
+                                        Text("Отмена", color = GrayText)
+                                    }
+                                },
+                                containerColor = if (darkTheme) DarkBackground else Color(0xFFF8F4F0),
+                                shape = RoundedCornerShape(18.dp)
                             )
                         }
                     }
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        color = SurfaceCardColor
-    ) {
-        Column(content = content)
-    }
-}
-
-@Composable
-private fun SettingsSwitchItem(
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = NeonOrange,
-            modifier = Modifier.size(24.dp)
-        )
-        Spacer(modifier = Modifier.width(16.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                title,
-                color = Color.White,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium
-            )
-            Text(
-                subtitle,
-                color = GrayText,
-                fontSize = 12.sp
-            )
-        }
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = NeonOrange,
-                uncheckedThumbColor = GrayText,
-                uncheckedTrackColor = Color.White.copy(alpha = 0.1f)
-            )
-        )
     }
 }
