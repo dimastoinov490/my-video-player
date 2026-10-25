@@ -1,7 +1,6 @@
 package com.example.videoplayer
 
 import android.os.Bundle
-import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
@@ -13,7 +12,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.videoplayer.ui.MoreHubView
+import androidx.fragment.app.FragmentActivity
 import com.example.videoplayer.ui.PlayerScreen
 import com.example.videoplayer.ui.SettingsScreen
 import com.example.videoplayer.ui.VideoLibraryScreen

@@ -28,8 +28,7 @@ import com.example.videoplayer.ui.theme.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    onBack: () -> Unit,
-    onThemeChanged: (Boolean) -> Unit = {}
+    onBack: () -> Unit
 ) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("video_prefs", Context.MODE_PRIVATE) }
@@ -112,9 +111,9 @@ fun SettingsScreen(
                     )
                     HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
                     SettingsSwitchItem(
-                        icon = Icons.Default.PlayCircle,
+                        icon = Icons.Default.ScreenRotation,
                         title = "Отображать буферизацию",
-                        subtitle = "Индикатор процентов кэша во время проигрывания",
+                        subtitle = "Показывать состояние буферизации во время воспроизведения",
                         checked = showBuffering,
                         onCheckedChange = {
                             showBuffering = it
@@ -123,9 +122,9 @@ fun SettingsScreen(
                     )
                     HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
                     SettingsSwitchItem(
-                        icon = Icons.Default.ScreenRotation,
-                        title = "Автоповорот в полноэкранном",
-                        subtitle = "Автоматически поворачивать в альбомный режим",
+                        icon = Icons.Default.PlayCircle,
+                        title = "Автоповорот",
+                        subtitle = "Переворачивать экран при смене ориентации",
                         checked = autoRotate,
                         onCheckedChange = {
                             autoRotate = it
@@ -137,7 +136,7 @@ fun SettingsScreen(
 
             item {
                 Text(
-                    "ИНТЕРФЕЙС И ОФОРМЛЕНИЕ",
+                    "Оформление",
                     color = NeonOrange,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -175,10 +174,9 @@ fun SettingsScreen(
                         }
                         TextButton(
                             onClick = {
-                                val nextDark = prefs.getBoolean("app_dark_theme", true).not()
-                                currentTheme = if (nextDark) "Ночной Неон" else "Светлый Сет"
-                                prefs.edit().putBoolean("app_dark_theme", nextDark).apply()
-                                onThemeChanged(nextDark)
+                                val next = if (currentTheme == "Ночной Неон") "Светлый Сет" else "Ночной Неон"
+                                currentTheme = next
+                                prefs.edit().putBoolean("app_dark_theme", next == "Ночной Неон").apply()
                             }
                         ) {
                             Text("Изменить", color = GoldenYellowLight)
