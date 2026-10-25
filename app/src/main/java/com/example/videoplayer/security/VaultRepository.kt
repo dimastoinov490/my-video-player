@@ -19,9 +19,9 @@ class SecureVaultRepository(private val context: Context) {
             .build()
 
         EncryptedSharedPreferences.create(
+            context,
             "secure_vault_state",
             masterKey,
-            context,
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
         )

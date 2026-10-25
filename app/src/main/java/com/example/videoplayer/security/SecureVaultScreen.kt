@@ -42,8 +42,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
-import com.example.videoplayer.ui.DarkBackground
-import com.example.videoplayer.ui.NeonOrange
+import com.example.videoplayer.ui.theme.DarkBackground
+import com.example.videoplayer.ui.theme.NeonOrange
 import kotlinx.coroutines.delay
 import java.io.File
 

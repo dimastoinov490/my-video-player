@@ -99,6 +99,12 @@ dependencies {
     // Vault secure storage
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
+    // FTP Client
+    implementation("commons-net:commons-net:3.10.0")
+
+    // Biometric authentication
+    implementation("androidx.biometric:biometric:1.1.0")
+
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 

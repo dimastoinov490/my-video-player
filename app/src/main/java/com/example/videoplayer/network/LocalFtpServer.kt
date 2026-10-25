@@ -17,17 +17,19 @@ class LocalFtpServerManager(private val context: Context) {
     private val sharedDir = File(context.getExternalFilesDir(null), "ftp_share").apply { mkdirs() }
 
     fun start(): String {
-        if (server != null && server!!.isRunning) {
+        val currentServer = server
+        if (currentServer != null && !currentServer.isStopped) {
             return currentAddress()
         }
 
         val ftpServerFactory = FtpServerFactory()
         val userManager = ftpServerFactory.userManager
-        val user = BaseUser()
-        user.name = "nexora"
-        user.password = "nexora"
-        user.homeDirectory = sharedDir.absolutePath
-        user.authorize(WritePermission())
+        val user = BaseUser().apply {
+            name = "nexora"
+            password = "nexora"
+            homeDirectory = sharedDir.absolutePath
+            authorities = listOf(WritePermission())
+        }
         userManager.save(user)
 
         val listenerFactory = ListenerFactory()
@@ -35,20 +37,27 @@ class LocalFtpServerManager(private val context: Context) {
         listenerFactory.serverAddress = localIpAddress()
         ftpServerFactory.addListener("default", listenerFactory.createListener())
 
-        server = ftpServerFactory.createServer()
-        server?.start()
+        val newServer = ftpServerFactory.createServer()
+        newServer.start()
+        server = newServer
         return currentAddress()
     }
 
     fun stop() {
-        try {
-            server?.stop()
-        } catch (_: Exception) {
+        val currentServer = server
+        if (currentServer != null) {
+            try {
+                currentServer.stop()
+            } catch (_: Exception) {
+            }
+            server = null
         }
-        server = null
     }
 
-    fun isRunning(): Boolean = server?.isRunning == true
+    fun isRunning(): Boolean {
+        val currentServer = server
+        return currentServer != null && !currentServer.isStopped
+    }
 
     fun currentAddress(): String = "ftp://${localIpAddress()}:2121"
 
@@ -56,6 +65,7 @@ class LocalFtpServerManager(private val context: Context) {
         val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
         val ipAddress = wifiManager?.connectionInfo?.ipAddress
         if (ipAddress != null) {
+            @Suppress("DEPRECATION")
             val ip = Formatter.formatIpAddress(ipAddress)
             if (ip != null && ip != "0.0.0.0") return ip
         }
