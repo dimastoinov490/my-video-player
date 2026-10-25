@@ -1,55 +1,81 @@
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+package com.example.videoplayer.service
 
-    <uses-permission android:name="android.permission.INTERNET"/>
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
-    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
-    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE"/>
-    <uses-permission android:name="android.permission.BLUETOOTH"/>
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"/>
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
-    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/>
-    <uses-permission
-        android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32" />
+import android.content.Context
+import android.os.Environment
+import org.apache.ftpserver.FtpServer
+import org.apache.ftpserver.FtpServerFactory
+import org.apache.ftpserver.listener.ListenerFactory
+import org.apache.ftpserver.usermanager.impl.BaseUser
+import org.apache.ftpserver.usermanager.impl.WritePermission
+import java.net.InetAddress
+import java.net.NetworkInterface
 
-    <application
-        android:theme="@style/Theme.VideoPlayer"
-        android:label="@string/app_name"
-        android:icon="@mipmap/ic_launcher"
-        android:roundIcon="@mipmap/ic_launcher_round"
-        android:allowBackup="true"
-        android:supportsRtl="true">
+object LocalFtpServer {
+    private var server: FtpServer? = null
+    var isRunning: Boolean = false
+        private set
+    var port: Int = 2121
+        private set
 
-        <provider
-            android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.provider"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths" />
-        </provider>
+    fun start(context: Context, chosenPort: Int = 2121): Boolean {
+        if (isRunning) return true
+        port = chosenPort
+        return try {
+            val serverFactory = FtpServerFactory()
+            val listenerFactory = ListenerFactory()
+            listenerFactory.port = port
+            serverFactory.addListener("default", listenerFactory.createListener())
 
-        <service
-            android:name=".service.LocalTransferForegroundService"
-            android:enabled="true"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            val user = BaseUser().apply {
+                name = "anonymous"
+                homeDirectory = Environment.getExternalStorageDirectory().absolutePath
+                authorities = listOf(WritePermission())
+            }
+            serverFactory.userManager.save(user)
 
-        <activity
-            android:name="com.example.videoplayer.MainActivity"
-            android:exported="true"
-            android:label="@string/app_name"
-            android:theme="@style/Theme.VideoPlayer"
-            android:configChanges="smallestScreenSize|screenSize|screenLayout|orientation|keyboardHidden">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.LAUNCHER"/>
-            </intent-filter>
-        </activity>
-    </application>
-</manifest>
+            val createdServer = serverFactory.createServer()
+            createdServer.start()
+            server = createdServer
+            isRunning = true
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            isRunning = false
+            false
+        }
+    }
+
+    fun stop() {
+        val currentServer = server
+        if (currentServer != null) {
+            try {
+                currentServer.stop()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            server = null
+        }
+        isRunning = false
+    }
+
+    fun getLocalIpAddress(): String {
+        try {
+            val interfaces = NetworkInterface.getNetworkInterfaces()
+            while (interfaces.hasMoreElements()) {
+                val iface = interfaces.nextElement()
+                val addresses = iface.inetAddresses
+                while (addresses.hasMoreElements()) {
+                    val addr = addresses.nextElement()
+                    if (!addr.isLoopbackAddress && addr is InetAddress) {
+                        val host = addr.hostAddress
+                        if (host != null && !host.contains(":")) {
+                            return host
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {
+        }
+        return "192.168.1.100"
+    }
+}
