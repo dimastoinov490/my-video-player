@@ -45,6 +45,7 @@ object ScreenshotThemeExtractor {
         customApiKey: String? = null
     ): ScreenshotAnalysisResult = withContext(Dispatchers.IO) {
         val apiKey = customApiKey?.trim()?.ifBlank { null }
+            ?: ThemeManager.getSavedGeminiKey(context)
             ?: getBuildConfigApiKey()
 
         // 1. Try Gemini Multimodal Vision API if API key is provided
@@ -83,7 +84,25 @@ object ScreenshotThemeExtractor {
         mainBitmap: Bitmap?,
         playerBitmap: Bitmap?
     ): ScreenshotAnalysisResult? {
-        val url = URL("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=$apiKey")
+        val models = listOf("gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro")
+        for (model in models) {
+            try {
+                val result = callGeminiModel(apiKey, model, mainBitmap, playerBitmap)
+                if (result != null) return result
+            } catch (e: Exception) {
+                Log.w("ScreenshotExtractor", "Model $model failed: ${e.message}")
+            }
+        }
+        return null
+    }
+
+    private fun callGeminiModel(
+        apiKey: String,
+        modelName: String,
+        mainBitmap: Bitmap?,
+        playerBitmap: Bitmap?
+    ): ScreenshotAnalysisResult? {
+        val url = URL("https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=$apiKey")
         val conn = url.openConnection() as HttpURLConnection
         conn.requestMethod = "POST"
         conn.setRequestProperty("Content-Type", "application/json")
@@ -309,7 +328,7 @@ object ScreenshotThemeExtractor {
         val cornerRadius = if (playerStyle == PlayerControlStyle.MODERN_FLOAT) 24 else 16
 
         val ctrlBgHex = String.format("#%02X%02X%02X", (surfR + 10).coerceAtMost(60), (surfG + 10).coerceAtMost(60), (surfB + 12).coerceAtMost(70))
-        val ctrlBg = Color(ThemeManager.parseHexColor(ctrlBgHex).value.toInt())
+        val ctrlBg = ThemeManager.parseHexColor(ctrlBgHex)
 
         val paletteName = getFriendlyName(primHue, maxSat)
         val description = "Точная адаптация визуального макета: акцент $primaryHex, стиль ${playerStyle.name}"

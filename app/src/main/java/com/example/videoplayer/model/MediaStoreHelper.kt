@@ -24,6 +24,10 @@ object MediaStoreHelper {
         val videoList = mutableListOf<VideoItem>()
         val seenPaths = mutableSetOf<String>()
 
+        val secureRepo = com.example.videoplayer.security.SecureVaultRepository(context)
+        val hiddenItems = try { secureRepo.getHiddenItems() } catch (_: Exception) { emptySet() }
+        val vaultNames = try { secureRepo.listItems().map { it.displayName.lowercase().trim() }.toSet() } catch (_: Exception) { emptySet() }
+
         // 1. MediaStore query
         onScanningPath?.invoke("Индексация MediaStore...")
         val projection = arrayOf(
@@ -68,6 +72,18 @@ object MediaStoreHelper {
                     val dateAdded = if (dateCol >= 0) it.getLong(dateCol) else 0L
                     val size = if (sizeCol >= 0) it.getLong(sizeCol) else 0L
                     val dataPath = if (dataCol >= 0) it.getString(dataCol) else null
+
+                    val nameLower = displayName.lowercase().trim()
+                    val titleLower = title.lowercase().trim()
+                    val pathLower = dataPath?.lowercase()?.trim()
+                    val isHidden = hiddenItems.contains(nameLower) ||
+                            hiddenItems.contains(titleLower) ||
+                            (pathLower != null && (hiddenItems.contains(pathLower) || hiddenItems.any { pathLower.endsWith(it) })) ||
+                            vaultNames.contains(nameLower) ||
+                            vaultNames.contains(titleLower)
+                    if (isHidden) {
+                        continue // Hidden in secure vault
+                    }
 
                     if (!dataPath.isNullOrBlank()) {
                         seenPaths.add(dataPath.lowercase())
@@ -117,7 +133,7 @@ object MediaStoreHelper {
         for (dir in scanDirs) {
             if (dir.exists() && dir.isDirectory) {
                 onScanningPath?.invoke("Сканирование: ${dir.name}...")
-                scanDirectoryRecursive(dir, seenPaths, videoList, maxDepth = 2)
+                scanDirectoryRecursive(dir, seenPaths, videoList, maxDepth = 2, hiddenItems = hiddenItems, vaultNames = vaultNames)
             }
         }
 
@@ -128,18 +144,24 @@ object MediaStoreHelper {
         dir: File,
         seenPaths: MutableSet<String>,
         outList: MutableList<VideoItem>,
-        maxDepth: Int
+        maxDepth: Int,
+        hiddenItems: Set<String>,
+        vaultNames: Set<String>
     ) {
         if (maxDepth < 0) return
         try {
             val files = dir.listFiles() ?: return
             for (file in files) {
-                if (file.isDirectory && !file.name.startsWith(".")) {
-                    scanDirectoryRecursive(file, seenPaths, outList, maxDepth - 1)
-                } else if (file.isFile && file.length() > 0) {
+                if (file.isDirectory && !file.name.startsWith(".") && !file.name.contains("secure_vault")) {
+                    scanDirectoryRecursive(file, seenPaths, outList, maxDepth - 1, hiddenItems, vaultNames)
+                } else if (file.isFile && file.length() > 0 && !file.name.endsWith(".enc")) {
                     val ext = file.extension.lowercase()
                     if (ext in VIDEO_EXTENSIONS) {
                         val pathLower = file.absolutePath.lowercase()
+                        val nameLower = file.name.lowercase().trim()
+                        if (hiddenItems.contains(nameLower) || vaultNames.contains(nameLower) || hiddenItems.contains(pathLower)) {
+                            continue
+                        }
                         if (seenPaths.add(pathLower)) {
                             outList.add(
                                 VideoItem(
@@ -187,6 +209,10 @@ object MediaStoreHelper {
 
     fun getAudios(context: Context): List<AudioItem> {
         val audioList = mutableListOf<AudioItem>()
+        val secureRepo = com.example.videoplayer.security.SecureVaultRepository(context)
+        val hiddenItems = try { secureRepo.getHiddenItems() } catch (_: Exception) { emptySet() }
+        val vaultNames = try { secureRepo.listItems().map { it.displayName.lowercase().trim() }.toSet() } catch (_: Exception) { emptySet() }
+
         val projection = arrayOf(
             MediaStore.Audio.Media._ID,
             MediaStore.Audio.Media.TITLE,
@@ -223,6 +249,11 @@ object MediaStoreHelper {
                     val duration = if (durCol >= 0) it.getLong(durCol) else 0L
                     val size = if (sizeCol >= 0) it.getLong(sizeCol) else 0L
                     val dateAdded = if (dateCol >= 0) it.getLong(dateCol) else 0L
+
+                    val titleLower = title.lowercase().trim()
+                    if (hiddenItems.contains(titleLower) || vaultNames.contains(titleLower)) {
+                        continue
+                    }
 
                     if (id >= 0) {
                         audioList.add(

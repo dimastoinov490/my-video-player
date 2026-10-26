@@ -1,12 +1,11 @@
 package com.example.videoplayer.ui.ai
 
+import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -42,100 +41,48 @@ import kotlinx.coroutines.withContext
 
 @Composable
 fun UiTemplateFromScreenshotDialog(
+    mainScreenshotUri: Uri? = null,
+    playerScreenshotUri: Uri? = null,
+    onRequestPickMain: () -> Unit = {},
+    onRequestPickPlayer: () -> Unit = {},
+    onClearMain: () -> Unit = {},
+    onClearPlayer: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val activeTheme = LocalAppTheme.current
 
-    var mainScreenUri by remember { mutableStateOf<Uri?>(null) }
-    var playerScreenUri by remember { mutableStateOf<Uri?>(null) }
     var mainScreenBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var playerScreenBitmap by remember { mutableStateOf<Bitmap?>(null) }
 
-    var apiKeyInput by remember { mutableStateOf("") }
-    var showApiKeyInput by remember { mutableStateOf(false) }
+    // Synchronize bitmaps from incoming URIs
+    LaunchedEffect(mainScreenshotUri) {
+        if (mainScreenshotUri != null) {
+            mainScreenBitmap = loadBitmapFromUri(context, mainScreenshotUri)
+        } else {
+            mainScreenBitmap = null
+        }
+    }
+
+    LaunchedEffect(playerScreenshotUri) {
+        if (playerScreenshotUri != null) {
+            playerScreenBitmap = loadBitmapFromUri(context, playerScreenshotUri)
+        } else {
+            playerScreenBitmap = null
+        }
+    }
+
+    // Google Gemini in-app authorization state
+    var isGeminiAuthorized by remember { mutableStateOf<Boolean>(ThemeManager.isGeminiAuthorized(context)) }
+    var apiKeyInput by remember { mutableStateOf(ThemeManager.getSavedGeminiKey(context) ?: "") }
+    var showAuthPanel by remember { mutableStateOf<Boolean>(!isGeminiAuthorized) }
+    var isAuthorizing by remember { mutableStateOf(false) }
+    var authFeedbackText by remember { mutableStateOf("") }
 
     var isAnalyzing by remember { mutableStateOf(false) }
     var analysisResult by remember { mutableStateOf<ScreenshotAnalysisResult?>(null) }
     var statusText by remember { mutableStateOf("") }
-
-    // Android zero-permission Photo Pickers with GetContent fallback
-    val mainPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            mainScreenUri = uri
-            coroutineScope.launch {
-                val bmp = loadBitmapFromUri(context, uri)
-                mainScreenBitmap = bmp
-            }
-        }
-    }
-
-    val mainGetContentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            mainScreenUri = uri
-            coroutineScope.launch {
-                val bmp = loadBitmapFromUri(context, uri)
-                mainScreenBitmap = bmp
-            }
-        }
-    }
-
-    val playerPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            playerScreenUri = uri
-            coroutineScope.launch {
-                val bmp = loadBitmapFromUri(context, uri)
-                playerScreenBitmap = bmp
-            }
-        }
-    }
-
-    val playerGetContentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            playerScreenUri = uri
-            coroutineScope.launch {
-                val bmp = loadBitmapFromUri(context, uri)
-                playerScreenBitmap = bmp
-            }
-        }
-    }
-
-    fun pickMainScreenshot() {
-        try {
-            mainPickerLauncher.launch(
-                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-            )
-        } catch (_: Throwable) {
-            try {
-                mainGetContentLauncher.launch("image/*")
-            } catch (e: Throwable) {
-                Toast.makeText(context, "Не удалось открыть выбор файлов: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    fun pickPlayerScreenshot() {
-        try {
-            playerPickerLauncher.launch(
-                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-            )
-        } catch (_: Throwable) {
-            try {
-                playerGetContentLauncher.launch("image/*")
-            } catch (e: Throwable) {
-                Toast.makeText(context, "Не удалось открыть выбор файлов: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -186,7 +133,7 @@ fun UiTemplateFromScreenshotDialog(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                "Адаптация макета по образцу",
+                                "Точная подгонка макета плеера по образцу",
                                 color = activeTheme.secondary,
                                 fontSize = 11.sp
                             )
@@ -218,7 +165,7 @@ fun UiTemplateFromScreenshotDialog(
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     Text(
-                        "Загрузите скриншоты желаемого интерфейса — механизм распознает цветовую палитру, стиль кнопок и скругления плеера, и применит их как в макете.",
+                        "Загрузите скриншоты желаемого интерфейса — механизм распознает цветовую палитру, расположение кнопок и скругления, и сделает плеер в точности как на картинке.",
                         color = Color.LightGray,
                         fontSize = 12.sp,
                         lineHeight = 16.sp
@@ -227,12 +174,12 @@ fun UiTemplateFromScreenshotDialog(
                     // Screenshot 1: Main Screen
                     ScreenshotUploadCard(
                         title = "Скриншот 1: Главный экран",
-                        subtitle = "Интерфейс библиотеки, каталога или главного меню",
+                        subtitle = "Библиотека, каталог или карточки фильмов",
                         bitmap = mainScreenBitmap,
-                        onPickClick = { pickMainScreenshot() },
+                        onPickClick = onRequestPickMain,
                         onClearClick = {
-                            mainScreenUri = null
                             mainScreenBitmap = null
+                            onClearMain()
                         },
                         theme = activeTheme
                     )
@@ -240,142 +187,100 @@ fun UiTemplateFromScreenshotDialog(
                     // Screenshot 2: Player Screen
                     ScreenshotUploadCard(
                         title = "Скриншот 2: Экран плеера",
-                        subtitle = "Панель управления видео, кнопки Play/Pause, кнопки перемотки и таймлайн",
+                        subtitle = "Панель управления видео, таймлайн, кнопки воспроизведения и перемотки",
                         bitmap = playerScreenBitmap,
-                        onPickClick = { pickPlayerScreenshot() },
+                        onPickClick = onRequestPickPlayer,
                         onClearClick = {
-                            playerScreenUri = null
                             playerScreenBitmap = null
+                            onClearPlayer()
                         },
                         theme = activeTheme
                     )
 
-                    // Optional API Key & Browser Authorization Accordion
+                    // Google Gemini in-app authorization card
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(16.dp),
                         color = activeTheme.surface,
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
+                        border = BorderStroke(
+                            1.dp,
+                            if (isGeminiAuthorized) Color(0xFF4CAF50).copy(alpha = 0.6f) else Color.White.copy(alpha = 0.12f)
+                        )
                     ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
+                        Column(modifier = Modifier.padding(14.dp)) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { showApiKeyInput = !showApiKeyInput },
+                                    .clickable { showAuthPanel = !showAuthPanel },
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.VpnKey,
-                                        contentDescription = null,
-                                        tint = activeTheme.secondary,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Text(
-                                        "ИИ и Авторизация через браузер",
-                                        color = Color.White,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Medium
-                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .background(
+                                                if (isGeminiAuthorized) Color(0xFF4CAF50).copy(alpha = 0.2f) else activeTheme.primary.copy(alpha = 0.15f),
+                                                CircleShape
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isGeminiAuthorized) Icons.Default.CheckCircle else Icons.Default.VpnKey,
+                                            contentDescription = null,
+                                            tint = if (isGeminiAuthorized) Color(0xFF4CAF50) else activeTheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+
+                                    Column {
+                                        Text(
+                                            if (isGeminiAuthorized) "🟢 Google Gemini AI авторизован" else "Авторизация Google Gemini AI",
+                                            color = Color.White,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            if (isGeminiAuthorized) "Онлайн-нейросеть активна для анализа" else "Локальный ИИ активен • Нажмите для подключения Gemini",
+                                            color = if (isGeminiAuthorized) Color(0xFF81C784) else Color.Gray,
+                                            fontSize = 11.sp
+                                        )
+                                    }
                                 }
+
                                 Icon(
-                                    imageVector = if (showApiKeyInput) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                    imageVector = if (showAuthPanel) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                                     contentDescription = null,
-                                    tint = Color.Gray,
-                                    modifier = Modifier.size(18.dp)
+                                    tint = Color.LightGray,
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
 
-                            if (showApiKeyInput) {
-                                Spacer(modifier = Modifier.height(10.dp))
+                            if (showAuthPanel) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                                Spacer(modifier = Modifier.height(12.dp))
+
                                 Text(
-                                    "По умолчанию работает встроенный локальный анализатор палитры без интернета и без ключей. Если хотите подключить онлайн-нейросети:",
-                                    color = Color.Gray,
-                                    fontSize = 11.sp
+                                    "Авторизуйте Google Gemini в приложении, чтобы нейросеть анализировала скриншоты напрямую через официальный облачный AI:",
+                                    color = Color.LightGray,
+                                    fontSize = 11.sp,
+                                    lineHeight = 15.sp
                                 )
-                                Spacer(modifier = Modifier.height(10.dp))
-
-                                // Browser login links
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    OutlinedButton(
-                                        onClick = {
-                                            try {
-                                                val intent = android.content.Intent(
-                                                    android.content.Intent.ACTION_VIEW,
-                                                    Uri.parse("https://aistudio.google.com/app/apikey")
-                                                )
-                                                context.startActivity(intent)
-                                            } catch (e: Exception) {
-                                                Toast.makeText(context, "Не удалось открыть браузер: ${e.message}", Toast.LENGTH_SHORT).show()
-                                            }
-                                        },
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(10.dp),
-                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = activeTheme.primary),
-                                        border = BorderStroke(1.dp, activeTheme.primary.copy(alpha = 0.5f)),
-                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp)
-                                    ) {
-                                        Text("🔑 AI Studio", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                    }
-
-                                    OutlinedButton(
-                                        onClick = {
-                                            try {
-                                                val intent = android.content.Intent(
-                                                    android.content.Intent.ACTION_VIEW,
-                                                    Uri.parse("https://gemini.google.com")
-                                                )
-                                                context.startActivity(intent)
-                                            } catch (e: Exception) {
-                                                Toast.makeText(context, "Не удалось открыть браузер", Toast.LENGTH_SHORT).show()
-                                            }
-                                        },
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(10.dp),
-                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
-                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp)
-                                    ) {
-                                        Text("🌐 Gemini Web", fontSize = 11.sp)
-                                    }
-
-                                    OutlinedButton(
-                                        onClick = {
-                                            try {
-                                                val intent = android.content.Intent(
-                                                    android.content.Intent.ACTION_VIEW,
-                                                    Uri.parse("https://chatgpt.com")
-                                                )
-                                                context.startActivity(intent)
-                                            } catch (e: Exception) {
-                                                Toast.makeText(context, "Не удалось открыть браузер", Toast.LENGTH_SHORT).show()
-                                            }
-                                        },
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(10.dp),
-                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
-                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp)
-                                    ) {
-                                        Text("💬 ChatGPT", fontSize = 11.sp)
-                                    }
-                                }
 
                                 Spacer(modifier = Modifier.height(10.dp))
+
                                 OutlinedTextField(
                                     value = apiKeyInput,
                                     onValueChange = { apiKeyInput = it },
-                                    placeholder = { Text("Вставьте скопированный API ключ (необязательно)", color = Color.Gray, fontSize = 11.sp) },
+                                    label = { Text("Ключ Google AI (Gemini API Key)", fontSize = 11.sp) },
+                                    placeholder = { Text("AIzaSy...", color = Color.Gray, fontSize = 11.sp) },
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(10.dp),
+                                    shape = RoundedCornerShape(12.dp),
                                     colors = OutlinedTextFieldDefaults.colors(
                                         focusedBorderColor = activeTheme.primary,
                                         unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
@@ -383,6 +288,75 @@ fun UiTemplateFromScreenshotDialog(
                                         unfocusedTextColor = Color.White
                                     )
                                 )
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Button(
+                                        onClick = {
+                                            if (apiKeyInput.isBlank()) {
+                                                authFeedbackText = "Введите ключ API для авторизации"
+                                                return@Button
+                                            }
+                                            isAuthorizing = true
+                                            authFeedbackText = "Проверка ключа в Google AI..."
+                                            coroutineScope.launch {
+                                                val (success, message) = ThemeManager.verifyAndAuthorizeGemini(context, apiKeyInput.trim())
+                                                isAuthorizing = false
+                                                if (success) {
+                                                    isGeminiAuthorized = true
+                                                    authFeedbackText = "✅ $message"
+                                                    Toast.makeText(context, "Google Gemini успешно авторизован!", Toast.LENGTH_SHORT).show()
+                                                } else {
+                                                    isGeminiAuthorized = false
+                                                    authFeedbackText = "❌ $message"
+                                                }
+                                            }
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        colors = ButtonDefaults.buttonColors(containerColor = activeTheme.primary),
+                                        shape = RoundedCornerShape(10.dp),
+                                        enabled = !isAuthorizing
+                                    ) {
+                                        if (isAuthorizing) {
+                                            CircularProgressIndicator(color = Color.Black, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("Проверка...", color = Color.Black, fontSize = 11.sp)
+                                        } else {
+                                            Icon(Icons.Default.VpnKey, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("Авторизовать в приложении", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = {
+                                            try {
+                                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://aistudio.google.com/app/apikey"))
+                                                context.startActivity(intent)
+                                            } catch (e: Exception) {
+                                                Toast.makeText(context, "Не удалось открыть браузер: ${e.message}", Toast.LENGTH_SHORT).show()
+                                            }
+                                        },
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
+                                    ) {
+                                        Text("Получить ключ", fontSize = 11.sp)
+                                    }
+                                }
+
+                                if (authFeedbackText.isNotBlank()) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = authFeedbackText,
+                                        color = if (authFeedbackText.startsWith("✅")) Color(0xFF81C784) else Color(0xFFFF8A80),
+                                        fontSize = 11.sp
+                                    )
+                                }
                             }
                         }
                     }
@@ -395,7 +369,7 @@ fun UiTemplateFromScreenshotDialog(
                                 return@Button
                             }
                             isAnalyzing = true
-                            statusText = "Анализ скриншотов и извлечение UI элементов..."
+                            statusText = if (isGeminiAuthorized) "Gemini Vision анализирует скриншоты..." else "Анализ скриншотов и извлечение палитры..."
                             coroutineScope.launch {
                                 try {
                                     val result = ScreenshotThemeExtractor.extractThemeFromScreenshots(
@@ -859,7 +833,7 @@ private fun ColorPill(label: String, color: Color, hex: String, modifier: Modifi
     }
 }
 
-private suspend fun loadBitmapFromUri(context: android.content.Context, uri: Uri): Bitmap? = withContext(Dispatchers.IO) {
+private suspend fun loadBitmapFromUri(context: Context, uri: Uri): Bitmap? = withContext(Dispatchers.IO) {
     try {
         var w = 0
         var h = 0

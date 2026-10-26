@@ -251,7 +251,7 @@ private fun getDirectoryItems(path: String, root: String, query: String): List<E
             val files = dir.listFiles()
             if (files != null) {
                 for (f in files) {
-                    if (f.name.startsWith(".")) continue
+                    if (f.name.startsWith(".") || f.name.endsWith(".enc") || f.name.contains("secure_vault")) continue
                     val isDir = f.isDirectory
                     val ext = f.extension.lowercase(Locale.ROOT)
                     val isVideo = ext in listOf("mp4", "mkv", "avi", "mov", "webm", "ts", "flv", "wmv", "3gp")

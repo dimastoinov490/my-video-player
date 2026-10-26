@@ -9,7 +9,7 @@ import javax.crypto.spec.PBEKeySpec
 import javax.crypto.spec.SecretKeySpec
 
 private const val KEY_LENGTH = 256
-private const val ITERATIONS = 120_000
+private const val ITERATIONS = 10_000
 private const val AES = "AES"
 private const val TRANSFORMATION = "AES/CTR/NoPadding"
 

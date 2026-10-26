@@ -4,8 +4,12 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Bitmap
+import android.net.Uri
 import android.os.Environment
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -87,6 +91,67 @@ fun MoreHubView(
     var showDirectModal by remember { mutableStateOf(false) }
     var showAiStudioDialog by remember { mutableStateOf(false) }
     var showScreenshotCloneDialog by remember { mutableStateOf(false) }
+
+    var screenshotMainUri by remember { mutableStateOf<Uri?>(null) }
+    var screenshotPlayerUri by remember { mutableStateOf<Uri?>(null) }
+
+    val pickMainPhotoLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            screenshotMainUri = uri
+        }
+    }
+    val pickMainContentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            screenshotMainUri = uri
+        }
+    }
+
+    val pickPlayerPhotoLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            screenshotPlayerUri = uri
+        }
+    }
+    val pickPlayerContentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            screenshotPlayerUri = uri
+        }
+    }
+
+    fun requestPickMainScreenshot() {
+        try {
+            pickMainPhotoLauncher.launch(
+                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+            )
+        } catch (_: Throwable) {
+            try {
+                pickMainContentLauncher.launch("image/*")
+            } catch (e: Throwable) {
+                Toast.makeText(context, "Не удалось открыть выбор файлов: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    fun requestPickPlayerScreenshot() {
+        try {
+            pickPlayerPhotoLauncher.launch(
+                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+            )
+        } catch (_: Throwable) {
+            try {
+                pickPlayerContentLauncher.launch("image/*")
+            } catch (e: Throwable) {
+                Toast.makeText(context, "Не удалось открыть выбор файлов: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     var wifiInfo by remember {
         mutableStateOf(
@@ -799,6 +864,12 @@ fun MoreHubView(
 
     if (showScreenshotCloneDialog) {
         UiTemplateFromScreenshotDialog(
+            mainScreenshotUri = screenshotMainUri,
+            playerScreenshotUri = screenshotPlayerUri,
+            onRequestPickMain = { requestPickMainScreenshot() },
+            onRequestPickPlayer = { requestPickPlayerScreenshot() },
+            onClearMain = { screenshotMainUri = null },
+            onClearPlayer = { screenshotPlayerUri = null },
             onDismiss = { showScreenshotCloneDialog = false }
         )
     }

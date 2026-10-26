@@ -284,11 +284,67 @@ object ThemeManager {
         return custom
     }
 
+    private const val KEY_GEMINI_API_KEY = "gemini_api_key"
+
+    fun getSavedGeminiKey(context: Context): String? {
+        val key = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(KEY_GEMINI_API_KEY, null)?.trim()
+        return if (key.isNullOrBlank()) null else key
+    }
+
+    fun saveGeminiKey(context: Context, key: String?) {
+        val clean = key?.trim()?.ifBlank { null }
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_GEMINI_API_KEY, clean)
+            .apply()
+    }
+
+    fun isGeminiAuthorized(context: Context): Boolean {
+        return !getSavedGeminiKey(context).isNullOrBlank()
+    }
+
+    suspend fun verifyAndAuthorizeGemini(context: Context, apiKey: String): Pair<Boolean, String> = withContext(Dispatchers.IO) {
+        val cleanKey = apiKey.trim()
+        if (cleanKey.isBlank()) return@withContext Pair(false, "Ключ не может быть пустым")
+        try {
+            val url = URL("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$cleanKey")
+            val conn = url.openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.connectTimeout = 12000
+            conn.readTimeout = 12000
+            conn.doOutput = true
+
+            val body = JSONObject().apply {
+                put("contents", org.json.JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("parts", org.json.JSONArray().apply {
+                            put(JSONObject().apply { put("text", "ping") })
+                        })
+                    })
+                })
+            }
+            conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+            val code = conn.responseCode
+            if (code == 200) {
+                saveGeminiKey(context, cleanKey)
+                Pair(true, "Приложение успешно авторизовано в Google Gemini AI!")
+            } else {
+                val err = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "Код $code"
+                Pair(false, "Google API отклонил ключ: $err")
+            }
+        } catch (e: Exception) {
+            Pair(false, "Сбой подключения к сервисам Google: ${e.localizedMessage ?: "Нет сети"}")
+        }
+    }
+
     suspend fun generateAiDesign(
+        context: Context,
         prompt: String,
-        apiKey: String? = null
+        customKey: String? = null
     ): AppCustomTheme = withContext(Dispatchers.IO) {
-        val key = apiKey?.trim()?.ifBlank { null }
+        val key = customKey?.trim()?.ifBlank { null } ?: getSavedGeminiKey(context)
         if (!key.isNullOrBlank()) {
             try {
                 val result = callGeminiForTheme(prompt, key)
@@ -302,59 +358,103 @@ object ThemeManager {
     }
 
     private fun callGeminiForTheme(prompt: String, apiKey: String): AppCustomTheme? {
-        val url = URL("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=$apiKey")
-        val conn = url.openConnection() as HttpURLConnection
-        conn.requestMethod = "POST"
-        conn.setRequestProperty("Content-Type", "application/json")
-        conn.connectTimeout = 15000
-        conn.readTimeout = 15000
-        conn.doOutput = true
+        val models = listOf("gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro")
+        for (model in models) {
+            try {
+                val url = URL("https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey")
+                val conn = url.openConnection() as HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.connectTimeout = 15000
+                conn.readTimeout = 15000
+                conn.doOutput = true
 
-        val systemPrompt = "You are a UI color palette designer for a video player app. Given a user theme prompt, output ONLY a JSON object with: { \"name\": string, \"description\": string, \"primary\": \"#hex\", \"secondary\": \"#hex\", \"background\": \"#hex\", \"surface\": \"#hex\" }. The background must be dark (e.g. #080808 to #151515) for high video contrast. Do not include markdown codeblocks."
-        val reqBody = JSONObject().apply {
-            put("contents", org.json.JSONArray().apply {
-                put(JSONObject().apply {
-                    put("parts", org.json.JSONArray().apply {
+                val systemPrompt = """
+                    You are an expert mobile UI/UX designer for a video player. Generate a unique theme based on the user prompt.
+                    Output ONLY valid JSON without markdown formatting:
+                    {
+                      "name": "Creative Russian Title (2-4 words)",
+                      "description": "Artistic Russian description of the style and mood",
+                      "primary": "#HEX (vivid accent for active controls and seekbar)",
+                      "secondary": "#HEX (harmonizing accent for secondary controls)",
+                      "background": "#HEX (deep dark background #050505 to #16181F for high video contrast)",
+                      "surface": "#HEX (dark card/panel surface #10121A to #222530)",
+                      "cardBorder": "#HEX (semi-transparent border)",
+                      "glow": "#HEX (accent glow color)",
+                      "playerControlStyle": "CLASSIC_VLC" | "MODERN_FLOAT" | "MINIMAL_COMPACT" | "CINEMATIC_FULL",
+                      "buttonSize": "COMPACT" | "STANDARD" | "LARGE",
+                      "cornerRadiusDp": integer between 0 and 28,
+                      "controlPanelBg": "#HEX (optional dark panel background)"
+                    }
+                """.trimIndent()
+
+                val reqBody = JSONObject().apply {
+                    put("contents", org.json.JSONArray().apply {
                         put(JSONObject().apply {
-                            put("text", "$systemPrompt\nUser prompt: $prompt")
+                            put("parts", org.json.JSONArray().apply {
+                                put(JSONObject().apply {
+                                    put("text", "$systemPrompt\nUser concept: $prompt")
+                                })
+                            })
                         })
                     })
-                })
-            })
-        }
+                }
 
-        conn.outputStream.use { it.write(reqBody.toString().toByteArray(Charsets.UTF_8)) }
-        if (conn.responseCode == 200) {
-            val responseText = conn.inputStream.bufferedReader().use { it.readText() }
-            val root = JSONObject(responseText)
-            val candidates = root.optJSONArray("candidates")
-            val textPart = candidates?.optJSONObject(0)
-                ?.optJSONObject("content")
-                ?.optJSONArray("parts")
-                ?.optJSONObject(0)
-                ?.optString("text")
+                conn.outputStream.use { it.write(reqBody.toString().toByteArray(Charsets.UTF_8)) }
+                if (conn.responseCode == 200) {
+                    val responseText = conn.inputStream.bufferedReader().use { it.readText() }
+                    val root = JSONObject(responseText)
+                    val candidates = root.optJSONArray("candidates")
+                    val textPart = candidates?.optJSONObject(0)
+                        ?.optJSONObject("content")
+                        ?.optJSONArray("parts")
+                        ?.optJSONObject(0)
+                        ?.optString("text")
 
-            if (!textPart.isNullOrBlank()) {
-                val cleanJson = textPart.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
-                val parsed = JSONObject(cleanJson)
-                val name = parsed.optString("name", "ИИ Дизайн")
-                val desc = parsed.optString("description", prompt)
-                val primary = parseHexColor(parsed.optString("primary", "#FF8A00"))
-                val secondary = parseHexColor(parsed.optString("secondary", "#FFAE33"))
-                val bg = parseHexColor(parsed.optString("background", "#0D0D0D"))
-                val surface = parseHexColor(parsed.optString("surface", "#1E1E1E"))
+                    if (!textPart.isNullOrBlank()) {
+                        val cleanJson = textPart.trim()
+                            .removePrefix("```json")
+                            .removePrefix("```")
+                            .removeSuffix("```")
+                            .trim()
+                        val parsed = JSONObject(cleanJson)
+                        val name = parsed.optString("name", "ИИ Дизайн: $prompt")
+                        val desc = parsed.optString("description", "Сгенерировано Google Gemini по запросу «$prompt»")
+                        val primary = parseHexColor(parsed.optString("primary", "#FF8A00"))
+                        val secondary = parseHexColor(parsed.optString("secondary", "#FFAE33"))
+                        val bg = parseHexColor(parsed.optString("background", "#0D0D0D"))
+                        val surface = parseHexColor(parsed.optString("surface", "#1E1E1E"))
+                        val border = if (parsed.has("cardBorder")) parseHexColor(parsed.getString("cardBorder")) else primary.copy(alpha = 0.35f)
+                        val glow = if (parsed.has("glow")) parseHexColor(parsed.getString("glow")) else primary.copy(alpha = 0.5f)
 
-                return AppCustomTheme(
-                    id = "custom_ai",
-                    name = name,
-                    description = desc,
-                    primary = primary,
-                    secondary = secondary,
-                    background = bg,
-                    surface = surface,
-                    cardBorder = primary.copy(alpha = 0.35f),
-                    glow = primary.copy(alpha = 0.5f)
-                )
+                        val ctrlStyleStr = parsed.optString("playerControlStyle", PlayerControlStyle.MODERN_FLOAT.name)
+                        val ctrlStyle = try { PlayerControlStyle.valueOf(ctrlStyleStr) } catch (_: Exception) { PlayerControlStyle.MODERN_FLOAT }
+
+                        val btnSizeStr = parsed.optString("buttonSize", ButtonSizeOption.STANDARD.name)
+                        val btnSize = try { ButtonSizeOption.valueOf(btnSizeStr) } catch (_: Exception) { ButtonSizeOption.STANDARD }
+
+                        val cornerRadius = parsed.optInt("cornerRadiusDp", 16).coerceIn(0, 32)
+                        val ctrlPanelBg = if (parsed.has("controlPanelBg")) parseHexColor(parsed.getString("controlPanelBg")) else null
+
+                        return AppCustomTheme(
+                            id = "custom_ai",
+                            name = name,
+                            description = desc,
+                            primary = primary,
+                            secondary = secondary,
+                            background = bg,
+                            surface = surface,
+                            cardBorder = border,
+                            glow = glow,
+                            playerControlStyle = ctrlStyle,
+                            buttonSize = btnSize,
+                            cornerRadiusDp = cornerRadius,
+                            controlPanelBg = ctrlPanelBg
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w("ThemeManager", "Model $model failed, trying next", e)
             }
         }
         return null
@@ -363,106 +463,252 @@ object ThemeManager {
     private fun synthesizeAiThemeFromPrompt(prompt: String): AppCustomTheme {
         val p = prompt.lowercase()
 
-        return when {
-            p.contains("фиолетов") || p.contains("сирен") || p.contains("неон") && p.contains("розов") || p.contains("синтвейв") || p.contains("synthwave") -> {
-                AppCustomTheme(
-                    id = "custom_ai",
-                    name = "Синтвейв 80-х",
-                    description = "Ретро-футуризм с неоновым пурпуром и розовым закатом",
-                    primary = Color(0xFFFF007F),
-                    secondary = Color(0xFF9D00FF),
-                    background = Color(0xFF0F0618),
-                    surface = Color(0xFF1E0E2E),
-                    cardBorder = Color(0x55FF007F),
-                    glow = Color(0x66FF007F)
-                )
-            }
-            p.contains("зелен") || p.contains("лайм") || p.contains("матриц") || p.contains("matrix") || p.contains("хакер") || p.contains("toxic") || p.contains("лес") -> {
-                AppCustomTheme(
-                    id = "custom_ai",
-                    name = "Matrix Кибер-Лайм",
-                    description = "Кислотный цифровой лайм с глубоким темным терминалом",
-                    primary = Color(0xFF00FF66),
-                    secondary = Color(0xFF76FF03),
-                    background = Color(0xFF051008),
-                    surface = Color(0xFF0C1E10),
-                    cardBorder = Color(0x5500FF66),
-                    glow = Color(0x6600FF66)
-                )
-            }
-            p.contains("син") || p.contains("голуб") || p.contains("лед") || p.contains("арктик") || p.contains("мороз") || p.contains("холод") || p.contains("океан") -> {
-                AppCustomTheme(
-                    id = "custom_ai",
-                    name = "Арктический Неон",
-                    description = "Ледяной ультрамарин и кристальный бирюзовый акцент",
-                    primary = Color(0xFF00E5FF),
-                    secondary = Color(0xFF2979FF),
-                    background = Color(0xFF060F1A),
-                    surface = Color(0xFF0C1D2E),
-                    cardBorder = Color(0x5500E5FF),
-                    glow = Color(0x6600E5FF)
-                )
-            }
-            p.contains("красн") || p.contains("огон") || p.contains("плам") || p.contains("lava") || p.contains("рубин") || p.contains("дракон") -> {
-                AppCustomTheme(
-                    id = "custom_ai",
-                    name = "Огненный Рубин",
-                    description = "Агрессивный рубиново-красный и пламенный янтарь",
-                    primary = Color(0xFFFF1744),
-                    secondary = Color(0xFFFF9100),
-                    background = Color(0xFF140808),
-                    surface = Color(0xFF241010),
-                    cardBorder = Color(0x55FF1744),
-                    glow = Color(0x66FF1744)
-                )
-            }
-            p.contains("золот") || p.contains("люкс") || p.contains("премиум") || p.contains("royal") || p.contains("gold") -> {
-                AppCustomTheme(
-                    id = "custom_ai",
-                    name = "Королевское Золото",
-                    description = "Премиальное шампанское золото и глубокий обсидиан",
-                    primary = Color(0xFFFFD700),
-                    secondary = Color(0xFFFFA000),
-                    background = Color(0xFF0F0E0B),
-                    surface = Color(0xFF1E1C15),
-                    cardBorder = Color(0x55FFD700),
-                    glow = Color(0x66FFD700)
-                )
-            }
-            p.contains("бел") || p.contains("минимал") || p.contains("сер") || p.contains("графит") || p.contains("монохром") -> {
-                AppCustomTheme(
-                    id = "custom_ai",
-                    name = "Скандинавский Графит",
-                    description = "Лаконичный матовый графит с чистым жемчужным свечением",
-                    primary = Color(0xFFE2E8F0),
-                    secondary = Color(0xFF94A3B8),
-                    background = Color(0xFF0A0C10),
-                    surface = Color(0xFF161B22),
-                    cardBorder = Color(0x44E2E8F0),
-                    glow = Color(0x44E2E8F0)
-                )
-            }
-            else -> {
-                val hash = prompt.hashCode()
-                val hue = kotlin.math.abs(hash % 360).toFloat()
-                val primary = Color.hsv(hue, 0.85f, 1.0f)
-                val secondary = Color.hsv((hue + 40f) % 360f, 0.75f, 0.95f)
-                val bg = Color.hsv(hue, 0.25f, 0.06f)
-                val surface = Color.hsv(hue, 0.20f, 0.12f)
-
-                AppCustomTheme(
-                    id = "custom_ai",
-                    name = "ИИ Дизайн: ${prompt.take(18).trim().replaceFirstChar { it.uppercase() }}",
-                    description = "Уникальная генерация палитры на основе вашего описания",
-                    primary = primary,
-                    secondary = secondary,
-                    background = bg,
-                    surface = surface,
-                    cardBorder = primary.copy(alpha = 0.35f),
-                    glow = primary.copy(alpha = 0.5f)
-                )
-            }
+        // 1. Anime / Sakura / Japanese aesthetic
+        if (p.contains("сакур") || p.contains("аним") || p.contains("япон") || p.contains("sakura") || p.contains("нежн") || p.contains("розов") && p.contains("бел")) {
+            return AppCustomTheme(
+                id = "custom_ai",
+                name = "Сакура Аниме",
+                description = "Японская эстетика: нежный лепестковый розовый, лунный маджента и плавающие стеклянные элементы",
+                primary = Color(0xFFFF69B4),
+                secondary = Color(0xFFFFB6C1),
+                background = Color(0xFF130910),
+                surface = Color(0xFF22111D),
+                cardBorder = Color(0x66FF69B4),
+                glow = Color(0x66FF69B4),
+                playerControlStyle = PlayerControlStyle.MODERN_FLOAT,
+                buttonSize = ButtonSizeOption.STANDARD,
+                cornerRadiusDp = 22,
+                controlPanelBg = Color(0xCC1E0B19)
+            )
         }
+
+        // 2. Steampunk / Brass / Copper
+        if (p.contains("стимпанк") || p.contains("steampunk") || p.contains("мед") || p.contains("латун") || p.contains("бронз") || p.contains("механизм") || p.contains("викториан")) {
+            return AppCustomTheme(
+                id = "custom_ai",
+                name = "Стимпанк Виктория",
+                description = "Механическая медь, полированная латунь, благородный темный орех и классическая точность",
+                primary = Color(0xFFE5A93C),
+                secondary = Color(0xFFCD7F32),
+                background = Color(0xFF120C07),
+                surface = Color(0xFF21170F),
+                cardBorder = Color(0x66E5A93C),
+                glow = Color(0x55E5A93C),
+                playerControlStyle = PlayerControlStyle.CLASSIC_VLC,
+                buttonSize = ButtonSizeOption.STANDARD,
+                cornerRadiusDp = 6,
+                controlPanelBg = Color(0xE61A120B)
+            )
+        }
+
+        // 3. Cyberpunk 2077 / Neon High-Tech
+        if (p.contains("киберпанк") || p.contains("cyberpunk") || p.contains("неон") && (p.contains("циан") || p.contains("бирюз"))) {
+            return AppCustomTheme(
+                id = "custom_ai",
+                name = "Night City Неон",
+                description = "Электрический циановый луч, неоновый пурпур и кинематографичная панель управления",
+                primary = Color(0xFF00F0FF),
+                secondary = Color(0xFFFF0055),
+                background = Color(0xFF070B12),
+                surface = Color(0xFF0E1624),
+                cardBorder = Color(0x6600F0FF),
+                glow = Color(0x7700F0FF),
+                playerControlStyle = PlayerControlStyle.CINEMATIC_FULL,
+                buttonSize = ButtonSizeOption.LARGE,
+                cornerRadiusDp = 16,
+                controlPanelBg = Color(0xDD0A101A)
+            )
+        }
+
+        // 4. Synthwave / Retrowave 80s
+        if (p.contains("синтвейв") || p.contains("synthwave") || p.contains("ретровейв") || p.contains("80") || p.contains("фиолетов") || p.contains("сирен")) {
+            return AppCustomTheme(
+                id = "custom_ai",
+                name = "Синтвейв 1984",
+                description = "Закатный неоновый ультра-пурпур, лазерная фуксия и плавающий плеер",
+                primary = Color(0xFFFF007F),
+                secondary = Color(0xFFB5179E),
+                background = Color(0xFF0E0517),
+                surface = Color(0xFF1B0B2B),
+                cardBorder = Color(0x66FF007F),
+                glow = Color(0x77FF007F),
+                playerControlStyle = PlayerControlStyle.MODERN_FLOAT,
+                buttonSize = ButtonSizeOption.STANDARD,
+                cornerRadiusDp = 20,
+                controlPanelBg = Color(0xD9170824)
+            )
+        }
+
+        // 5. Matrix / Terminal Hacker / Acid Lime
+        if (p.contains("матриц") || p.contains("matrix") || p.contains("хакер") || p.contains("лайм") || p.contains("терминал") || p.contains("кислот")) {
+            return AppCustomTheme(
+                id = "custom_ai",
+                name = "Matrix Терминал",
+                description = "Кислотный цифровой лайм, код матрицы и строгий минималистичный интерфейс",
+                primary = Color(0xFF00FF66),
+                secondary = Color(0xFF76FF03),
+                background = Color(0xFF040D06),
+                surface = Color(0xFF091A0D),
+                cardBorder = Color(0x6600FF66),
+                glow = Color(0x7700FF66),
+                playerControlStyle = PlayerControlStyle.MINIMAL_COMPACT,
+                buttonSize = ButtonSizeOption.COMPACT,
+                cornerRadiusDp = 4,
+                controlPanelBg = Color(0xF2051208)
+            )
+        }
+
+        // 6. Arctic Ice / Glacier Sapphire
+        if (p.contains("лед") || p.contains("арктик") || p.contains("мороз") || p.contains("снег") || p.contains("холод") || p.contains("голуб")) {
+            return AppCustomTheme(
+                id = "custom_ai",
+                name = "Ледяной Сапфир",
+                description = "Кристальный ледниковый ультрамарин и морозный голубой акцент",
+                primary = Color(0xFF00E5FF),
+                secondary = Color(0xFF2979FF),
+                background = Color(0xFF050E17),
+                surface = Color(0xFF0B1C2E),
+                cardBorder = Color(0x6600E5FF),
+                glow = Color(0x7700E5FF),
+                playerControlStyle = PlayerControlStyle.MODERN_FLOAT,
+                buttonSize = ButtonSizeOption.STANDARD,
+                cornerRadiusDp = 18,
+                controlPanelBg = Color(0xD9081524)
+            )
+        }
+
+        // 7. Fire / Lava / Volcano Ruby
+        if (p.contains("огон") || p.contains("плам") || p.contains("лава") || p.contains("рубин") || p.contains("вулкан") || p.contains("красн")) {
+            return AppCustomTheme(
+                id = "custom_ai",
+                name = "Вулканический Рубин",
+                description = "Раскаленная магма, рубиновый огонь и мощные увеличенные кнопки управления",
+                primary = Color(0xFFFF1744),
+                secondary = Color(0xFFFF9100),
+                background = Color(0xFF140606),
+                surface = Color(0xFF240E0E),
+                cardBorder = Color(0x66FF1744),
+                glow = Color(0x77FF1744),
+                playerControlStyle = PlayerControlStyle.CINEMATIC_FULL,
+                buttonSize = ButtonSizeOption.LARGE,
+                cornerRadiusDp = 14,
+                controlPanelBg = Color(0xE61E0A0A)
+            )
+        }
+
+        // 8. Royal Gold / Luxury Obsidian
+        if (p.contains("золот") || p.contains("люкс") || p.contains("премиум") || p.contains("богат") || p.contains("gold") || p.contains("королев")) {
+            return AppCustomTheme(
+                id = "custom_ai",
+                name = "Королевское Золото",
+                description = "Сияющее 24-каратное золото, темный обсидиан и премиальные закругления",
+                primary = Color(0xFFFFD700),
+                secondary = Color(0xFFFFA000),
+                background = Color(0xFF0F0E0A),
+                surface = Color(0xFF1F1B12),
+                cardBorder = Color(0x66FFD700),
+                glow = Color(0x77FFD700),
+                playerControlStyle = PlayerControlStyle.MODERN_FLOAT,
+                buttonSize = ButtonSizeOption.STANDARD,
+                cornerRadiusDp = 20,
+                controlPanelBg = Color(0xE61A160C)
+            )
+        }
+
+        // 9. Coffee / Chocolate / Caramel Warmth
+        if (p.contains("кофе") || p.contains("шоколад") || p.contains("карамел") || p.contains("уют") || p.contains("тепл") || p.contains("коричнев")) {
+            return AppCustomTheme(
+                id = "custom_ai",
+                name = "Теплый Мокко",
+                description = "Ароматный эспрессо, сливочная карамель и бархатные мягкие тона",
+                primary = Color(0xFFD4A373),
+                secondary = Color(0xFFFAEDCD),
+                background = Color(0xFF130E0A),
+                surface = Color(0xFF221A13),
+                cardBorder = Color(0x66D4A373),
+                glow = Color(0x55D4A373),
+                playerControlStyle = PlayerControlStyle.MODERN_FLOAT,
+                buttonSize = ButtonSizeOption.STANDARD,
+                cornerRadiusDp = 18,
+                controlPanelBg = Color(0xE61A120D)
+            )
+        }
+
+        // 10. Cosmic Nebula / Deep Space
+        if (p.contains("космос") || p.contains("туманност") || p.contains("звезд") || p.contains("галактик") || p.contains("space") || p.contains("астро")) {
+            return AppCustomTheme(
+                id = "custom_ai",
+                name = "Космическая Небула",
+                description = "Глубокая межзвездная синева, лазурное сияние звезд и кинотеатральный масштаб",
+                primary = Color(0xFF7000FF),
+                secondary = Color(0xFF00F0FF),
+                background = Color(0xFF060614),
+                surface = Color(0xFF0F0E26),
+                cardBorder = Color(0x667000FF),
+                glow = Color(0x777000FF),
+                playerControlStyle = PlayerControlStyle.CINEMATIC_FULL,
+                buttonSize = ButtonSizeOption.LARGE,
+                cornerRadiusDp = 24,
+                controlPanelBg = Color(0xD90C0B1F)
+            )
+        }
+
+        // 11. Minimalist Monochrome / OLED Pitch Black
+        if (p.contains("минимал") || p.contains("монохром") || p.contains("oled") || p.contains("черн") || p.contains("бел") || p.contains("графит") || p.contains("сер")) {
+            return AppCustomTheme(
+                id = "custom_ai",
+                name = "OLED Абсолют",
+                description = "Чистый глубокий черный для OLED дисплеев с максимальным контрастом и энергосбережением",
+                primary = Color(0xFFFFFFFF),
+                secondary = Color(0xFFA0AEC0),
+                background = Color(0xFF000000),
+                surface = Color(0xFF111111),
+                cardBorder = Color(0x44FFFFFF),
+                glow = Color(0x33FFFFFF),
+                playerControlStyle = PlayerControlStyle.MINIMAL_COMPACT,
+                buttonSize = ButtonSizeOption.STANDARD,
+                cornerRadiusDp = 12,
+                controlPanelBg = Color(0xF2080808)
+            )
+        }
+
+        // 12. Dynamic Procedural Color-Field Synthesizer for ANY OTHER prompt
+        val hash = prompt.hashCode()
+        val hue1 = kotlin.math.abs(hash % 360).toFloat()
+        val hue2 = (hue1 + 35f + kotlin.math.abs((hash shr 4) % 40)) % 360f
+
+        val primary = Color.hsv(hue1, 0.90f, 1.0f)
+        val secondary = Color.hsv(hue2, 0.80f, 0.95f)
+        val bg = Color.hsv(hue1, 0.30f, 0.05f)
+        val surface = Color.hsv(hue1, 0.25f, 0.11f)
+        val border = primary.copy(alpha = 0.45f)
+        val glow = primary.copy(alpha = 0.60f)
+
+        val styleOptions = PlayerControlStyle.values()
+        val chosenStyle = styleOptions[kotlin.math.abs(hash) % styleOptions.size]
+
+        val sizeOptions = ButtonSizeOption.values()
+        val chosenSize = sizeOptions[kotlin.math.abs(hash shr 2) % sizeOptions.size]
+
+        val radius = listOf(8, 14, 18, 24)[kotlin.math.abs(hash shr 3) % 4]
+
+        val titleWord = prompt.trim().split(" ").take(3).joinToString(" ").replaceFirstChar { it.uppercase() }
+
+        return AppCustomTheme(
+            id = "custom_ai",
+            name = "Стиль «$titleWord»",
+            description = "Уникальное авторское оформление, синтезированное ИИ под концепцию «$prompt»",
+            primary = primary,
+            secondary = secondary,
+            background = bg,
+            surface = surface,
+            cardBorder = border,
+            glow = glow,
+            playerControlStyle = chosenStyle,
+            buttonSize = chosenSize,
+            cornerRadiusDp = radius,
+            controlPanelBg = surface.copy(alpha = 0.85f)
+        )
     }
 
     fun parseHexColor(hex: String): Color {
@@ -470,12 +716,14 @@ object ThemeManager {
             val clean = hex.removePrefix("#").trim()
             val colorInt = if (clean.length == 6) {
                 ("FF$clean").toLong(16).toInt()
-            } else {
+            } else if (clean.length == 8) {
                 clean.toLong(16).toInt()
+            } else {
+                0xFFFF8A00.toInt()
             }
-            Color(colorInt)
+            colorFromInt(colorInt)
         } catch (_: Exception) {
-            Color(0xFFFF8A00)
+            ThemePresets.NexoraNeon.primary
         }
     }
 }

@@ -5,6 +5,7 @@ import android.net.Uri
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.fragment.app.FragmentActivity
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.BorderStroke
@@ -27,7 +28,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import androidx.fragment.app.FragmentActivity
+import android.os.Build
+import android.provider.DocumentsContract
+import android.provider.MediaStore
+import android.provider.OpenableColumns
+import androidx.activity.result.IntentSenderRequest
 import com.example.videoplayer.model.MediaStoreHelper
 import com.example.videoplayer.model.VideoItem
 import com.example.videoplayer.ui.theme.DarkBackground
@@ -141,18 +146,74 @@ fun SecureVaultScreen(
         }
     }
 
+    val deleteOriginalLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            statusText = "Файл скрыт, а исходный оригинал удален с устройства"
+        }
+    }
+
+    fun queryActualFileName(uri: Uri): String {
+        try {
+            context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (idx >= 0) {
+                        val name = cursor.getString(idx)
+                        if (!name.isNullOrBlank()) return name
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+        return uri.lastPathSegment?.substringAfterLast('/') ?: "video_${System.currentTimeMillis()}.mp4"
+    }
+
     fun importUriToVault(uri: Uri, displayName: String) {
         coroutineScope.launch {
             isBusy = true
-            busyMessage = "Шифрование файла: $displayName..."
+            busyMessage = "Шифрование и скрытие файла: $displayName..."
             try {
                 withContext(Dispatchers.IO) {
                     val input = context.contentResolver.openInputStream(uri)
                         ?: throw IllegalStateException("Не удалось прочитать выбранный файл")
                     vaultRepository.addStream(input, password, displayName)
+                    vaultRepository.recordHiddenItem(displayName)
+                    vaultRepository.recordHiddenItem(displayName.substringBeforeLast('.'))
+                    vaultRepository.recordHiddenItem(uri.toString())
+
+                    // Delete original file so it is no longer visible in phone gallery/folders
+                    var originalDeleted = false
+                    try {
+                        originalDeleted = DocumentsContract.deleteDocument(context.contentResolver, uri)
+                    } catch (_: Exception) {}
+
+                    if (!originalDeleted) {
+                        try {
+                            val rows = context.contentResolver.delete(uri, null, null)
+                            originalDeleted = rows > 0
+                        } catch (sec: android.app.RecoverableSecurityException) {
+                            withContext(Dispatchers.Main) {
+                                deleteOriginalLauncher.launch(
+                                    IntentSenderRequest.Builder(sec.userAction.actionIntent.intentSender).build()
+                                )
+                            }
+                        } catch (e: Exception) {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                try {
+                                    val deleteReq = MediaStore.createDeleteRequest(context.contentResolver, listOf(uri))
+                                    withContext(Dispatchers.Main) {
+                                        deleteOriginalLauncher.launch(
+                                            IntentSenderRequest.Builder(deleteReq.intentSender).build()
+                                        )
+                                    }
+                                } catch (_: Exception) {}
+                            }
+                        }
+                    }
                 }
                 files = vaultRepository.listItems()
-                statusText = "Файл «$displayName» успешно зашифрован и сохранен"
+                statusText = "Файл «$displayName» успешно зашифрован и скрыт из общей памяти!"
                 lockDeadline = System.currentTimeMillis() + 120_000L
             } catch (e: Throwable) {
                 Log.e("SecureVault", "Error adding file", e)
@@ -174,7 +235,7 @@ fun SecureVaultScreen(
                 statusText = "Введите пароль хранилища"
                 return@rememberLauncherForActivityResult
             }
-            val originalName = uri.lastPathSegment?.substringAfterLast('/') ?: "video_file"
+            val originalName = queryActualFileName(uri)
             importUriToVault(uri, originalName)
         }
     )

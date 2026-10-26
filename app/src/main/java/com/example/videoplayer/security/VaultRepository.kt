@@ -87,17 +87,34 @@ class SecureVaultRepository(private val context: Context) {
             fos.write(iv)
             CipherOutputStream(fos, cipher).use { cos ->
                 input.use { ins ->
-                    ins.copyTo(cos, bufferSize = 64 * 1024)
+                    ins.copyTo(cos, bufferSize = 256 * 1024)
                 }
             }
         }
 
         prefs.edit().putString("name_$id", displayName).apply()
+        recordHiddenItem(displayName)
         return id
     }
 
     fun addFile(source: File, password: String, displayName: String): String {
         return addStream(source.inputStream(), password, displayName)
+    }
+
+    fun recordHiddenItem(identifier: String) {
+        val current = getHiddenItems().toMutableSet()
+        current.add(identifier.trim().lowercase())
+        prefs.edit().putStringSet("vault_hidden_items", current).apply()
+    }
+
+    fun getHiddenItems(): Set<String> {
+        return prefs.getStringSet("vault_hidden_items", emptySet()) ?: emptySet()
+    }
+
+    fun removeHiddenItem(identifier: String) {
+        val current = getHiddenItems().toMutableSet()
+        current.remove(identifier.trim().lowercase())
+        prefs.edit().putStringSet("vault_hidden_items", current).apply()
     }
 
     fun listItems(): List<SecureVaultItem> {
@@ -131,7 +148,7 @@ class SecureVaultRepository(private val context: Context) {
             val cipher = VaultCrypto.getDecryptCipher(password, salt, iv)
             CipherInputStream(fis, cipher).use { cis ->
                 FileOutputStream(outFile).use { fos ->
-                    cis.copyTo(fos, bufferSize = 64 * 1024)
+                    cis.copyTo(fos, bufferSize = 256 * 1024)
                 }
             }
         }
@@ -141,7 +158,11 @@ class SecureVaultRepository(private val context: Context) {
 
     fun deleteFile(id: String): Boolean {
         val file = File(rootDir, "$id.enc")
+        val displayName = prefs.getString("name_$id", null)
         val deleted = file.delete()
+        if (displayName != null) {
+            removeHiddenItem(displayName)
+        }
         prefs.edit().remove("name_$id").apply()
         return deleted
     }
