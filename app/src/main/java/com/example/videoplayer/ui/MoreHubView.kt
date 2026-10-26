@@ -27,6 +27,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.videoplayer.service.HttpBroadcastFolder
+import com.example.videoplayer.service.HttpServerConfig
 import com.example.videoplayer.service.LocalHttpShareServer
 import com.example.videoplayer.service.WifiDirectInfo
 import com.example.videoplayer.service.WifiDirectManager
@@ -75,6 +77,12 @@ fun MoreHubView(
     var httpAddress by remember { mutableStateOf(LocalHttpShareServer.getServerUrl(context)) }
     var serverError by remember { mutableStateOf<String?>(LocalHttpShareServer.lastErrorMessage) }
     var isStartingServer by remember { mutableStateOf(false) }
+
+    var authRequired by remember { mutableStateOf(HttpServerConfig.isAuthRequired(context)) }
+    var authUsername by remember { mutableStateOf(HttpServerConfig.getUsername(context)) }
+    var authPassword by remember { mutableStateOf(HttpServerConfig.getPassword(context)) }
+    var broadcastFolder by remember { mutableStateOf(HttpServerConfig.getBroadcastFolder(context)) }
+    var showHttpSettings by remember { mutableStateOf(false) }
 
     var showDirectModal by remember { mutableStateOf(false) }
     var showAiStudioDialog by remember { mutableStateOf(false) }
@@ -130,6 +138,209 @@ fun MoreHubView(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            // Settings card for HTTP Server & Broadcast placed directly above HTTP Server
+            item {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(22.dp),
+                    color = theme.surface,
+                    border = BorderStroke(1.dp, theme.cardBorder)
+                ) {
+                    Column(modifier = Modifier.padding(18.dp)) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showHttpSettings = !showHttpSettings },
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(46.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(theme.primary.copy(alpha = 0.15f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Tune,
+                                        contentDescription = null,
+                                        tint = theme.primary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+
+                                Column {
+                                    Text(
+                                        "Настройки веб-вещания и HTTP",
+                                        color = Color.White,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        if (authRequired) "Авторизация: Вкл ($authUsername) • ${broadcastFolder.title}" else "Свободный доступ • ${broadcastFolder.title}",
+                                        color = theme.secondary,
+                                        fontSize = 11.sp,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+
+                            Icon(
+                                imageVector = if (showHttpSettings) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = null,
+                                tint = Color.LightGray,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+
+                        if (showHttpSettings) {
+                            Spacer(modifier = Modifier.height(14.dp))
+                            HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            // Authorization switch
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        "Вход по логину и паролю",
+                                        color = Color.White,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        "Запрашивать HTTP Basic Auth при входе в браузере",
+                                        color = GrayText,
+                                        fontSize = 11.sp
+                                    )
+                                }
+
+                                Switch(
+                                    checked = authRequired,
+                                    onCheckedChange = { checked ->
+                                        authRequired = checked
+                                        HttpServerConfig.setAuthRequired(context, checked)
+                                    },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = Color.White,
+                                        checkedTrackColor = theme.primary,
+                                        uncheckedThumbColor = GrayText,
+                                        uncheckedTrackColor = Color.White.copy(alpha = 0.1f)
+                                    )
+                                )
+                            }
+
+                            if (authRequired) {
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    OutlinedTextField(
+                                        value = authUsername,
+                                        onValueChange = {
+                                            authUsername = it
+                                            HttpServerConfig.setUsername(context, it)
+                                        },
+                                        label = { Text("Логин", fontSize = 11.sp) },
+                                        singleLine = true,
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = theme.primary,
+                                            unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                                            focusedTextColor = Color.White,
+                                            unfocusedTextColor = Color.White
+                                        )
+                                    )
+
+                                    OutlinedTextField(
+                                        value = authPassword,
+                                        onValueChange = {
+                                            authPassword = it
+                                            HttpServerConfig.setPassword(context, it)
+                                        },
+                                        label = { Text("Пароль", fontSize = 11.sp) },
+                                        singleLine = true,
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = theme.primary,
+                                            unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                                            focusedTextColor = Color.White,
+                                            unfocusedTextColor = Color.White
+                                        )
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Text(
+                                "Папка вещания файлов:",
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            HttpBroadcastFolder.values().forEach { folder ->
+                                val isSelected = folder == broadcastFolder
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 3.dp)
+                                        .clickable {
+                                            broadcastFolder = folder
+                                            HttpServerConfig.setBroadcastFolder(context, folder)
+                                        },
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = if (isSelected) theme.primary.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.04f),
+                                    border = BorderStroke(1.dp, if (isSelected) theme.primary else Color.White.copy(alpha = 0.08f))
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            folder.title,
+                                            color = if (isSelected) Color.White else Color.LightGray,
+                                            fontSize = 12.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                        if (isSelected) {
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = null,
+                                                tint = theme.primary,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                "💡 Браузерный плеер автоматически поддерживает перемотку (Range 206) и прямое воспроизведение MP4, MKV, WebM, MP3 без загрузки на диск.",
+                                color = theme.secondary,
+                                fontSize = 11.sp,
+                                lineHeight = 15.sp
+                            )
+                        }
+                    }
+                }
+            }
+
             // Local HTTP Server Card
             item {
                 Surface(
@@ -233,36 +444,108 @@ fun MoreHubView(
                                 color = Color.Black.copy(alpha = 0.4f),
                                 border = BorderStroke(1.dp, theme.primary.copy(alpha = 0.3f))
                             ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Column {
-                                        Text("Адрес для браузера:", color = GrayText, fontSize = 11.sp)
-                                        Text(
-                                            httpAddress,
-                                            color = theme.secondary,
-                                            fontSize = 14.sp,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
+                                Column(modifier = Modifier.padding(14.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text("Адрес для браузера (ПК / Телефон):", color = GrayText, fontSize = 11.sp)
+                                            Text(
+                                                httpAddress,
+                                                color = theme.secondary,
+                                                fontSize = 15.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+
+                                        Row {
+                                            IconButton(
+                                                onClick = {
+                                                    try {
+                                                        val intent = android.content.Intent(
+                                                            android.content.Intent.ACTION_VIEW,
+                                                            android.net.Uri.parse(httpAddress)
+                                                        )
+                                                        context.startActivity(intent)
+                                                    } catch (e: Exception) {
+                                                        Toast.makeText(context, "Не удалось открыть браузер", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.OpenInBrowser,
+                                                    contentDescription = "Открыть в браузере",
+                                                    tint = theme.primary,
+                                                    modifier = Modifier.size(22.dp)
+                                                )
+                                            }
+
+                                            IconButton(
+                                                onClick = {
+                                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                                    val clip = ClipData.newPlainText("HTTP address", httpAddress)
+                                                    clipboard.setPrimaryClip(clip)
+                                                    Toast.makeText(context, "Адрес скопирован в буфер", Toast.LENGTH_SHORT).show()
+                                                }
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.ContentCopy,
+                                                    contentDescription = "Копировать",
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+                                        }
                                     }
 
-                                    IconButton(
-                                        onClick = {
-                                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                            val clip = ClipData.newPlainText("HTTP address", httpAddress)
-                                            clipboard.setPrimaryClip(clip)
-                                            Toast.makeText(context, "Адрес скопирован в буфер", Toast.LENGTH_SHORT).show()
+                                    if (authRequired) {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = theme.primary.copy(alpha = 0.12f),
+                                            border = BorderStroke(1.dp, theme.primary.copy(alpha = 0.3f))
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Lock,
+                                                    contentDescription = null,
+                                                    tint = theme.primary,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Text(
+                                                    "Вход в браузере: $authUsername / $authPassword",
+                                                    color = Color.White,
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.SemiBold
+                                                )
+                                            }
                                         }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
                                         Icon(
-                                            imageVector = Icons.Default.ContentCopy,
-                                            contentDescription = "Копировать",
-                                            tint = theme.primary,
-                                            modifier = Modifier.size(20.dp)
+                                            imageVector = Icons.Default.PlayCircleOutline,
+                                            contentDescription = null,
+                                            tint = Color(0xFF4CAF50),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Text(
+                                            "Веб-плеер активен: воспроизведение видео/аудио потоком (Range 206)",
+                                            color = Color.LightGray,
+                                            fontSize = 11.sp
                                         )
                                     }
                                 }

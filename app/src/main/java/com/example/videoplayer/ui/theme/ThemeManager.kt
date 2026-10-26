@@ -152,51 +152,77 @@ object ThemeManager {
     var activeTheme by mutableStateOf<AppCustomTheme>(ThemePresets.NexoraNeon)
         private set
 
+    fun colorToInt(color: Color): Int {
+        val a = (color.alpha * 255.0f + 0.5f).toInt().coerceIn(0, 255)
+        val r = (color.red * 255.0f + 0.5f).toInt().coerceIn(0, 255)
+        val g = (color.green * 255.0f + 0.5f).toInt().coerceIn(0, 255)
+        val b = (color.blue * 255.0f + 0.5f).toInt().coerceIn(0, 255)
+        return (a shl 24) or (r shl 16) or (g shl 8) or b
+    }
+
+    fun colorFromInt(colorInt: Int): Color {
+        val a = ((colorInt ushr 24) and 0xFF) / 255.0f
+        val r = ((colorInt ushr 16) and 0xFF) / 255.0f
+        val g = ((colorInt ushr 8) and 0xFF) / 255.0f
+        val b = (colorInt and 0xFF) / 255.0f
+        return Color(red = r, green = g, blue = b, alpha = if (a == 0f) 1.0f else a)
+    }
+
     fun init(context: Context) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val themeId = prefs.getString(KEY_THEME_ID, "nexora_neon") ?: "nexora_neon"
+        try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val themeId = prefs.getString(KEY_THEME_ID, "nexora_neon") ?: "nexora_neon"
 
-        if (themeId == "custom_ai") {
-            val primary = prefs.getInt(KEY_CUSTOM_PRIMARY, 0xFFFF8A00.toInt())
-            val secondary = prefs.getInt(KEY_CUSTOM_SECONDARY, 0xFFFF9500.toInt())
-            val bg = prefs.getInt(KEY_CUSTOM_BG, 0xFF0D0D0D.toInt())
-            val surface = prefs.getInt(KEY_CUSTOM_SURFACE, 0xFF1E1E1E.toInt())
-            val name = prefs.getString(KEY_CUSTOM_NAME, "ИИ Стиль") ?: "ИИ Стиль"
-            val desc = prefs.getString(KEY_CUSTOM_DESC, "Сгенерировано искусственным интеллектом") ?: ""
-            val ctrlStyleStr = prefs.getString(KEY_CUSTOM_CTRL_STYLE, PlayerControlStyle.CLASSIC_VLC.name)
-            val btnSizeStr = prefs.getString(KEY_CUSTOM_BTN_SIZE, ButtonSizeOption.STANDARD.name)
-            val cornerRadius = prefs.getInt(KEY_CUSTOM_CORNER_RADIUS, 16)
-            val ctrlBgInt = prefs.getInt(KEY_CUSTOM_CTRL_BG, 0)
+            if (themeId == "custom_ai") {
+                val primaryInt = prefs.getInt(KEY_CUSTOM_PRIMARY, 0xFFFF8A00.toInt()).let { if (it == 0) 0xFFFF8A00.toInt() else it }
+                val secondaryInt = prefs.getInt(KEY_CUSTOM_SECONDARY, 0xFFFF9500.toInt()).let { if (it == 0) 0xFFFF9500.toInt() else it }
+                val bgInt = prefs.getInt(KEY_CUSTOM_BG, 0xFF0D0D0D.toInt()).let { if (it == 0) 0xFF0D0D0D.toInt() else it }
+                val surfaceInt = prefs.getInt(KEY_CUSTOM_SURFACE, 0xFF1E1E1E.toInt()).let { if (it == 0) 0xFF1E1E1E.toInt() else it }
+                val name = prefs.getString(KEY_CUSTOM_NAME, "ИИ Стиль") ?: "ИИ Стиль"
+                val desc = prefs.getString(KEY_CUSTOM_DESC, "Сгенерировано искусственным интеллектом") ?: ""
+                val ctrlStyleStr = prefs.getString(KEY_CUSTOM_CTRL_STYLE, PlayerControlStyle.CLASSIC_VLC.name)
+                val btnSizeStr = prefs.getString(KEY_CUSTOM_BTN_SIZE, ButtonSizeOption.STANDARD.name)
+                val cornerRadius = prefs.getInt(KEY_CUSTOM_CORNER_RADIUS, 16)
+                val ctrlBgInt = prefs.getInt(KEY_CUSTOM_CTRL_BG, 0)
 
-            val ctrlStyle = try {
-                PlayerControlStyle.valueOf(ctrlStyleStr ?: PlayerControlStyle.CLASSIC_VLC.name)
-            } catch (_: Exception) {
-                PlayerControlStyle.CLASSIC_VLC
+                val ctrlStyle = try {
+                    PlayerControlStyle.valueOf(ctrlStyleStr ?: PlayerControlStyle.CLASSIC_VLC.name)
+                } catch (_: Exception) {
+                    PlayerControlStyle.CLASSIC_VLC
+                }
+
+                val btnSize = try {
+                    ButtonSizeOption.valueOf(btnSizeStr ?: ButtonSizeOption.STANDARD.name)
+                } catch (_: Exception) {
+                    ButtonSizeOption.STANDARD
+                }
+
+                val primary = colorFromInt(primaryInt)
+                val secondary = colorFromInt(secondaryInt)
+                val bg = colorFromInt(bgInt)
+                val surface = colorFromInt(surfaceInt)
+
+                activeTheme = AppCustomTheme(
+                    id = "custom_ai",
+                    name = name,
+                    description = desc,
+                    primary = primary,
+                    secondary = secondary,
+                    background = bg,
+                    surface = surface,
+                    cardBorder = primary.copy(alpha = 0.35f),
+                    glow = primary.copy(alpha = 0.5f),
+                    playerControlStyle = ctrlStyle,
+                    buttonSize = btnSize,
+                    cornerRadiusDp = cornerRadius,
+                    controlPanelBg = if (ctrlBgInt != 0) colorFromInt(ctrlBgInt) else null
+                )
+            } else {
+                activeTheme = ThemePresets.allPresets.find { it.id == themeId } ?: ThemePresets.NexoraNeon
             }
-
-            val btnSize = try {
-                ButtonSizeOption.valueOf(btnSizeStr ?: ButtonSizeOption.STANDARD.name)
-            } catch (_: Exception) {
-                ButtonSizeOption.STANDARD
-            }
-
-            activeTheme = AppCustomTheme(
-                id = "custom_ai",
-                name = name,
-                description = desc,
-                primary = Color(primary),
-                secondary = Color(secondary),
-                background = Color(bg),
-                surface = Color(surface),
-                cardBorder = Color(primary).copy(alpha = 0.35f),
-                glow = Color(primary).copy(alpha = 0.5f),
-                playerControlStyle = ctrlStyle,
-                buttonSize = btnSize,
-                cornerRadiusDp = cornerRadius,
-                controlPanelBg = if (ctrlBgInt != 0) Color(ctrlBgInt) else null
-            )
-        } else {
-            activeTheme = ThemePresets.allPresets.find { it.id == themeId } ?: ThemePresets.NexoraNeon
+        } catch (e: Throwable) {
+            Log.e("ThemeManager", "Error initializing theme, falling back to original neon", e)
+            activeTheme = ThemePresets.NexoraNeon
         }
     }
 
@@ -243,16 +269,16 @@ object ThemeManager {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit()
             .putString(KEY_THEME_ID, "custom_ai")
-            .putInt(KEY_CUSTOM_PRIMARY, primary.value.toInt())
-            .putInt(KEY_CUSTOM_SECONDARY, secondary.value.toInt())
-            .putInt(KEY_CUSTOM_BG, background.value.toInt())
-            .putInt(KEY_CUSTOM_SURFACE, surface.value.toInt())
+            .putInt(KEY_CUSTOM_PRIMARY, colorToInt(primary))
+            .putInt(KEY_CUSTOM_SECONDARY, colorToInt(secondary))
+            .putInt(KEY_CUSTOM_BG, colorToInt(background))
+            .putInt(KEY_CUSTOM_SURFACE, colorToInt(surface))
             .putString(KEY_CUSTOM_NAME, name)
             .putString(KEY_CUSTOM_DESC, description)
             .putString(KEY_CUSTOM_CTRL_STYLE, playerControlStyle.name)
             .putString(KEY_CUSTOM_BTN_SIZE, buttonSize.name)
             .putInt(KEY_CUSTOM_CORNER_RADIUS, cornerRadiusDp)
-            .putInt(KEY_CUSTOM_CTRL_BG, controlPanelBg?.value?.toInt() ?: 0)
+            .putInt(KEY_CUSTOM_CTRL_BG, controlPanelBg?.let { colorToInt(it) } ?: 0)
             .apply()
 
         return custom

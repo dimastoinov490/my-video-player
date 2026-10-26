@@ -71,7 +71,7 @@ class SecureVaultRepository(private val context: Context) {
         }
     }
 
-    fun addFile(source: File, password: String, displayName: String): String {
+    fun addStream(input: java.io.InputStream, password: String, displayName: String): String {
         if (!verifyPassword(password)) {
             throw IllegalStateException("Неверный пароль хранилища")
         }
@@ -86,14 +86,18 @@ class SecureVaultRepository(private val context: Context) {
             fos.write(salt)
             fos.write(iv)
             CipherOutputStream(fos, cipher).use { cos ->
-                source.inputStream().use { fis ->
-                    fis.copyTo(cos, bufferSize = 64 * 1024)
+                input.use { ins ->
+                    ins.copyTo(cos, bufferSize = 64 * 1024)
                 }
             }
         }
 
         prefs.edit().putString("name_$id", displayName).apply()
         return id
+    }
+
+    fun addFile(source: File, password: String, displayName: String): String {
+        return addStream(source.inputStream(), password, displayName)
     }
 
     fun listItems(): List<SecureVaultItem> {
@@ -120,9 +124,9 @@ class SecureVaultRepository(private val context: Context) {
             val salt = ByteArray(16)
             var read = fis.read(salt)
             if (read < 16) throw IllegalStateException("Поврежденный файл хранилища")
-            val iv = ByteArray(12)
+            val iv = ByteArray(16)
             read = fis.read(iv)
-            if (read < 12) throw IllegalStateException("Поврежденный файл хранилища")
+            if (read < 16) throw IllegalStateException("Поврежденный файл хранилища")
 
             val cipher = VaultCrypto.getDecryptCipher(password, salt, iv)
             CipherInputStream(fis, cipher).use { cis ->

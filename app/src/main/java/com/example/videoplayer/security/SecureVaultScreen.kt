@@ -147,15 +147,9 @@ fun SecureVaultScreen(
             busyMessage = "Шифрование файла: $displayName..."
             try {
                 withContext(Dispatchers.IO) {
-                    val tempFile = File.createTempFile("vault_import_", ".tmp", context.cacheDir)
-                    try {
-                        context.contentResolver.openInputStream(uri)?.use { input ->
-                            tempFile.outputStream().use { output -> input.copyTo(output) }
-                        }
-                        vaultRepository.addFile(tempFile, password, displayName)
-                    } finally {
-                        tempFile.delete()
-                    }
+                    val input = context.contentResolver.openInputStream(uri)
+                        ?: throw IllegalStateException("Не удалось прочитать выбранный файл")
+                    vaultRepository.addStream(input, password, displayName)
                 }
                 files = vaultRepository.listItems()
                 statusText = "Файл «$displayName» успешно зашифрован и сохранен"

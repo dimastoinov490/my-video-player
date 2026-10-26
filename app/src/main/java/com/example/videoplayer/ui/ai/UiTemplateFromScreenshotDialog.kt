@@ -60,9 +60,21 @@ fun UiTemplateFromScreenshotDialog(
     var analysisResult by remember { mutableStateOf<ScreenshotAnalysisResult?>(null) }
     var statusText by remember { mutableStateOf("") }
 
-    // Android zero-permission Photo Pickers
+    // Android zero-permission Photo Pickers with GetContent fallback
     val mainPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            mainScreenUri = uri
+            coroutineScope.launch {
+                val bmp = loadBitmapFromUri(context, uri)
+                mainScreenBitmap = bmp
+            }
+        }
+    }
+
+    val mainGetContentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
             mainScreenUri = uri
@@ -81,6 +93,46 @@ fun UiTemplateFromScreenshotDialog(
             coroutineScope.launch {
                 val bmp = loadBitmapFromUri(context, uri)
                 playerScreenBitmap = bmp
+            }
+        }
+    }
+
+    val playerGetContentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            playerScreenUri = uri
+            coroutineScope.launch {
+                val bmp = loadBitmapFromUri(context, uri)
+                playerScreenBitmap = bmp
+            }
+        }
+    }
+
+    fun pickMainScreenshot() {
+        try {
+            mainPickerLauncher.launch(
+                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+            )
+        } catch (_: Throwable) {
+            try {
+                mainGetContentLauncher.launch("image/*")
+            } catch (e: Throwable) {
+                Toast.makeText(context, "Не удалось открыть выбор файлов: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    fun pickPlayerScreenshot() {
+        try {
+            playerPickerLauncher.launch(
+                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+            )
+        } catch (_: Throwable) {
+            try {
+                playerGetContentLauncher.launch("image/*")
+            } catch (e: Throwable) {
+                Toast.makeText(context, "Не удалось открыть выбор файлов: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -177,11 +229,7 @@ fun UiTemplateFromScreenshotDialog(
                         title = "Скриншот 1: Главный экран",
                         subtitle = "Интерфейс библиотеки, каталога или главного меню",
                         bitmap = mainScreenBitmap,
-                        onPickClick = {
-                            mainPickerLauncher.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                            )
-                        },
+                        onPickClick = { pickMainScreenshot() },
                         onClearClick = {
                             mainScreenUri = null
                             mainScreenBitmap = null
@@ -194,11 +242,7 @@ fun UiTemplateFromScreenshotDialog(
                         title = "Скриншот 2: Экран плеера",
                         subtitle = "Панель управления видео, кнопки Play/Pause, кнопки перемотки и таймлайн",
                         bitmap = playerScreenBitmap,
-                        onPickClick = {
-                            playerPickerLauncher.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                            )
-                        },
+                        onPickClick = { pickPlayerScreenshot() },
                         onClearClick = {
                             playerScreenUri = null
                             playerScreenBitmap = null
@@ -206,7 +250,7 @@ fun UiTemplateFromScreenshotDialog(
                         theme = activeTheme
                     )
 
-                    // Optional API Key Accordion
+                    // Optional API Key & Browser Authorization Accordion
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(14.dp),
@@ -232,7 +276,7 @@ fun UiTemplateFromScreenshotDialog(
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Text(
-                                        "Ключ Gemini API (необязательно)",
+                                        "ИИ и Авторизация через браузер",
                                         color = Color.White,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Medium
@@ -249,15 +293,86 @@ fun UiTemplateFromScreenshotDialog(
                             if (showApiKeyInput) {
                                 Spacer(modifier = Modifier.height(10.dp))
                                 Text(
-                                    "По умолчанию работает мгновенный встроенный визуальный анализатор палитры. Если указать ключ Gemini, нейросеть дополнительно проанализирует контекст макета.",
+                                    "По умолчанию работает встроенный локальный анализатор палитры без интернета и без ключей. Если хотите подключить онлайн-нейросети:",
                                     color = Color.Gray,
                                     fontSize = 11.sp
                                 )
-                                Spacer(modifier = Modifier.height(8.dp))
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                // Browser login links
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            try {
+                                                val intent = android.content.Intent(
+                                                    android.content.Intent.ACTION_VIEW,
+                                                    Uri.parse("https://aistudio.google.com/app/apikey")
+                                                )
+                                                context.startActivity(intent)
+                                            } catch (e: Exception) {
+                                                Toast.makeText(context, "Не удалось открыть браузер: ${e.message}", Toast.LENGTH_SHORT).show()
+                                            }
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = activeTheme.primary),
+                                        border = BorderStroke(1.dp, activeTheme.primary.copy(alpha = 0.5f)),
+                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp)
+                                    ) {
+                                        Text("🔑 AI Studio", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = {
+                                            try {
+                                                val intent = android.content.Intent(
+                                                    android.content.Intent.ACTION_VIEW,
+                                                    Uri.parse("https://gemini.google.com")
+                                                )
+                                                context.startActivity(intent)
+                                            } catch (e: Exception) {
+                                                Toast.makeText(context, "Не удалось открыть браузер", Toast.LENGTH_SHORT).show()
+                                            }
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
+                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp)
+                                    ) {
+                                        Text("🌐 Gemini Web", fontSize = 11.sp)
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = {
+                                            try {
+                                                val intent = android.content.Intent(
+                                                    android.content.Intent.ACTION_VIEW,
+                                                    Uri.parse("https://chatgpt.com")
+                                                )
+                                                context.startActivity(intent)
+                                            } catch (e: Exception) {
+                                                Toast.makeText(context, "Не удалось открыть браузер", Toast.LENGTH_SHORT).show()
+                                            }
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
+                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp)
+                                    ) {
+                                        Text("💬 ChatGPT", fontSize = 11.sp)
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
                                 OutlinedTextField(
                                     value = apiKeyInput,
                                     onValueChange = { apiKeyInput = it },
-                                    placeholder = { Text("Вставьте AI Studio API ключ (AIza...)", color = Color.Gray, fontSize = 11.sp) },
+                                    placeholder = { Text("Вставьте скопированный API ключ (необязательно)", color = Color.Gray, fontSize = 11.sp) },
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(10.dp),
@@ -746,31 +861,30 @@ private fun ColorPill(label: String, color: Color, hex: String, modifier: Modifi
 
 private suspend fun loadBitmapFromUri(context: android.content.Context, uri: Uri): Bitmap? = withContext(Dispatchers.IO) {
     try {
+        var w = 0
+        var h = 0
         context.contentResolver.openInputStream(uri)?.use { stream ->
             val options = BitmapFactory.Options().apply {
                 inJustDecodeBounds = true
             }
             BitmapFactory.decodeStream(stream, null, options)
+            w = options.outWidth
+            h = options.outHeight
+        }
+
+        var sample = 1
+        while ((w > 0 && w / sample > 1024) || (h > 0 && h / sample > 1024)) {
+            sample *= 2
         }
 
         context.contentResolver.openInputStream(uri)?.use { stream ->
-            val sampleSize = calculateInSampleSize(800, 800)
             val options = BitmapFactory.Options().apply {
-                inSampleSize = sampleSize
+                inSampleSize = sample
                 inPreferredConfig = Bitmap.Config.ARGB_8888
             }
             BitmapFactory.decodeStream(stream, null, options)
         }
-    } catch (_: Exception) {
+    } catch (_: Throwable) {
         null
     }
-}
-
-private fun calculateInSampleSize(reqWidth: Int, reqHeight: Int): Int {
-    var inSampleSize = 1
-    // Keep it reasonable so memory footprint is light
-    if (reqWidth > 400 || reqHeight > 400) {
-        inSampleSize = 2
-    }
-    return inSampleSize
 }

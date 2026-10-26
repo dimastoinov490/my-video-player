@@ -4,15 +4,14 @@ import java.security.MessageDigest
 import java.security.SecureRandom
 import javax.crypto.Cipher
 import javax.crypto.SecretKeyFactory
-import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.PBEKeySpec
 import javax.crypto.spec.SecretKeySpec
 
 private const val KEY_LENGTH = 256
 private const val ITERATIONS = 120_000
 private const val AES = "AES"
-private const val TRANSFORMATION = "AES/GCM/NoPadding"
-private const val TAG_LENGTH_BITS = 128
+private const val TRANSFORMATION = "AES/CTR/NoPadding"
 
 data class EncryptedVaultPayload(
     val salt: ByteArray,
@@ -23,7 +22,7 @@ data class EncryptedVaultPayload(
 object VaultCrypto {
     fun generateSalt(): ByteArray = ByteArray(16).apply { SecureRandom().nextBytes(this) }
 
-    fun generateIv(): ByteArray = ByteArray(12).apply { SecureRandom().nextBytes(this) }
+    fun generateIv(): ByteArray = ByteArray(16).apply { SecureRandom().nextBytes(this) }
 
     fun deriveKey(password: String, salt: ByteArray): SecretKeySpec {
         val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
@@ -35,14 +34,14 @@ object VaultCrypto {
     fun getEncryptCipher(password: String, salt: ByteArray, iv: ByteArray): Cipher {
         val key = deriveKey(password, salt)
         val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(TAG_LENGTH_BITS, iv))
+        cipher.init(Cipher.ENCRYPT_MODE, key, IvParameterSpec(iv))
         return cipher
     }
 
     fun getDecryptCipher(password: String, salt: ByteArray, iv: ByteArray): Cipher {
         val key = deriveKey(password, salt)
         val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(TAG_LENGTH_BITS, iv))
+        cipher.init(Cipher.DECRYPT_MODE, key, IvParameterSpec(iv))
         return cipher
     }
 
