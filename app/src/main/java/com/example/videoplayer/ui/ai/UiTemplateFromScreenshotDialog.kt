@@ -1,11 +1,12 @@
 package com.example.videoplayer.ui.ai
 
 import android.content.Context
-import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -28,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -56,33 +58,73 @@ fun UiTemplateFromScreenshotDialog(
     var mainScreenBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var playerScreenBitmap by remember { mutableStateOf<Bitmap?>(null) }
 
-    // Synchronize bitmaps from incoming URIs
+    // Direct, ultra-reliable in-dialog system image pickers (ActivityResultContracts.GetContent)
+    val directMainPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            coroutineScope.launch {
+                val bmp = loadBitmapFromUri(context, uri)
+                if (bmp != null) {
+                    mainScreenBitmap = bmp
+                    Toast.makeText(context, "Скриншот главного экрана загружен!", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, "Не удалось декодировать изображение", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    val directPlayerPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            coroutineScope.launch {
+                val bmp = loadBitmapFromUri(context, uri)
+                if (bmp != null) {
+                    playerScreenBitmap = bmp
+                    Toast.makeText(context, "Скриншот экрана плеера загружен!", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, "Не удалось декодировать изображение", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    // Synchronize bitmaps from incoming external URIs if provided
     LaunchedEffect(mainScreenshotUri) {
-        if (mainScreenshotUri != null) {
+        if (mainScreenshotUri != null && mainScreenBitmap == null) {
             mainScreenBitmap = loadBitmapFromUri(context, mainScreenshotUri)
-        } else {
-            mainScreenBitmap = null
         }
     }
 
     LaunchedEffect(playerScreenshotUri) {
-        if (playerScreenshotUri != null) {
+        if (playerScreenshotUri != null && playerScreenBitmap == null) {
             playerScreenBitmap = loadBitmapFromUri(context, playerScreenshotUri)
-        } else {
-            playerScreenBitmap = null
         }
     }
 
-    // Google Gemini in-app authorization state
-    var isGeminiAuthorized by remember { mutableStateOf<Boolean>(ThemeManager.isGeminiAuthorized(context)) }
-    var apiKeyInput by remember { mutableStateOf(ThemeManager.getSavedGeminiKey(context) ?: "") }
-    var showAuthPanel by remember { mutableStateOf<Boolean>(!isGeminiAuthorized) }
-    var isAuthorizing by remember { mutableStateOf(false) }
-    var authFeedbackText by remember { mutableStateOf("") }
-
     var isAnalyzing by remember { mutableStateOf(false) }
-    var analysisResult by remember { mutableStateOf<ScreenshotAnalysisResult?>(null) }
+    var extractedConfig by remember { mutableStateOf<ExtractedPlayerUiConfig?>(null) }
+    var generatedJsonOutput by remember { mutableStateOf("") }
+    var showJsonViewer by remember { mutableStateOf(false) }
     var statusText by remember { mutableStateOf("") }
+
+    fun triggerPickMain() {
+        try {
+            directMainPickerLauncher.launch("image/*")
+        } catch (e: Exception) {
+            onRequestPickMain()
+        }
+    }
+
+    fun triggerPickPlayer() {
+        try {
+            directPlayerPickerLauncher.launch("image/*")
+        } catch (e: Exception) {
+            onRequestPickPlayer()
+        }
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -91,7 +133,7 @@ fun UiTemplateFromScreenshotDialog(
         Surface(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
+                .padding(14.dp),
             shape = RoundedCornerShape(24.dp),
             color = activeTheme.background,
             border = BorderStroke(1.5.dp, activeTheme.cardBorder),
@@ -100,7 +142,7 @@ fun UiTemplateFromScreenshotDialog(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(20.dp)
+                    .padding(18.dp)
             ) {
                 // Top Header
                 Row(
@@ -133,7 +175,7 @@ fun UiTemplateFromScreenshotDialog(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                "Точная подгонка макета плеера по образцу",
+                                "Извлечение палитры через AndroidX Palette API",
                                 color = activeTheme.secondary,
                                 fontSize = 11.sp
                             )
@@ -165,7 +207,7 @@ fun UiTemplateFromScreenshotDialog(
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     Text(
-                        "Загрузите скриншоты желаемого интерфейса — механизм распознает цветовую палитру, расположение кнопок и скругления, и сделает плеер в точности как на картинке.",
+                        "Загрузите скриншот желаемого интерфейса — механизм на базе AndroidX Palette API извлечет доминирующие цвета (фон, акцент кнопок, текст), определит геометрию панели управления и сформирует точный стиль плеера.",
                         color = Color.LightGray,
                         fontSize = 12.sp,
                         lineHeight = 16.sp
@@ -174,9 +216,9 @@ fun UiTemplateFromScreenshotDialog(
                     // Screenshot 1: Main Screen
                     ScreenshotUploadCard(
                         title = "Скриншот 1: Главный экран",
-                        subtitle = "Библиотека, каталог или карточки фильмов",
+                        subtitle = "Интерфейс каталога или карточек видео",
                         bitmap = mainScreenBitmap,
-                        onPickClick = onRequestPickMain,
+                        onPickClick = { triggerPickMain() },
                         onClearClick = {
                             mainScreenBitmap = null
                             onClearMain()
@@ -187,9 +229,9 @@ fun UiTemplateFromScreenshotDialog(
                     // Screenshot 2: Player Screen
                     ScreenshotUploadCard(
                         title = "Скриншот 2: Экран плеера",
-                        subtitle = "Панель управления видео, таймлайн, кнопки воспроизведения и перемотки",
+                        subtitle = "Панель управления, кнопки Play/Pause и таймлайн",
                         bitmap = playerScreenBitmap,
-                        onPickClick = onRequestPickPlayer,
+                        onPickClick = { triggerPickPlayer() },
                         onClearClick = {
                             playerScreenBitmap = null
                             onClearPlayer()
@@ -197,189 +239,24 @@ fun UiTemplateFromScreenshotDialog(
                         theme = activeTheme
                     )
 
-                    // Google Gemini in-app authorization card
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        color = activeTheme.surface,
-                        border = BorderStroke(
-                            1.dp,
-                            if (isGeminiAuthorized) Color(0xFF4CAF50).copy(alpha = 0.6f) else Color.White.copy(alpha = 0.12f)
-                        )
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { showAuthPanel = !showAuthPanel },
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(32.dp)
-                                            .background(
-                                                if (isGeminiAuthorized) Color(0xFF4CAF50).copy(alpha = 0.2f) else activeTheme.primary.copy(alpha = 0.15f),
-                                                CircleShape
-                                            ),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = if (isGeminiAuthorized) Icons.Default.CheckCircle else Icons.Default.VpnKey,
-                                            contentDescription = null,
-                                            tint = if (isGeminiAuthorized) Color(0xFF4CAF50) else activeTheme.primary,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-
-                                    Column {
-                                        Text(
-                                            if (isGeminiAuthorized) "🟢 Google Gemini AI авторизован" else "Авторизация Google Gemini AI",
-                                            color = Color.White,
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Text(
-                                            if (isGeminiAuthorized) "Онлайн-нейросеть активна для анализа" else "Локальный ИИ активен • Нажмите для подключения Gemini",
-                                            color = if (isGeminiAuthorized) Color(0xFF81C784) else Color.Gray,
-                                            fontSize = 11.sp
-                                        )
-                                    }
-                                }
-
-                                Icon(
-                                    imageVector = if (showAuthPanel) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                    contentDescription = null,
-                                    tint = Color.LightGray,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-
-                            if (showAuthPanel) {
-                                Spacer(modifier = Modifier.height(12.dp))
-                                HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
-                                Spacer(modifier = Modifier.height(12.dp))
-
-                                Text(
-                                    "Авторизуйте Google Gemini в приложении, чтобы нейросеть анализировала скриншоты напрямую через официальный облачный AI:",
-                                    color = Color.LightGray,
-                                    fontSize = 11.sp,
-                                    lineHeight = 15.sp
-                                )
-
-                                Spacer(modifier = Modifier.height(10.dp))
-
-                                OutlinedTextField(
-                                    value = apiKeyInput,
-                                    onValueChange = { apiKeyInput = it },
-                                    label = { Text("Ключ Google AI (Gemini API Key)", fontSize = 11.sp) },
-                                    placeholder = { Text("AIzaSy...", color = Color.Gray, fontSize = 11.sp) },
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedBorderColor = activeTheme.primary,
-                                        unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
-                                        focusedTextColor = Color.White,
-                                        unfocusedTextColor = Color.White
-                                    )
-                                )
-
-                                Spacer(modifier = Modifier.height(10.dp))
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Button(
-                                        onClick = {
-                                            if (apiKeyInput.isBlank()) {
-                                                authFeedbackText = "Введите ключ API для авторизации"
-                                                return@Button
-                                            }
-                                            isAuthorizing = true
-                                            authFeedbackText = "Проверка ключа в Google AI..."
-                                            coroutineScope.launch {
-                                                val (success, message) = ThemeManager.verifyAndAuthorizeGemini(context, apiKeyInput.trim())
-                                                isAuthorizing = false
-                                                if (success) {
-                                                    isGeminiAuthorized = true
-                                                    authFeedbackText = "✅ $message"
-                                                    Toast.makeText(context, "Google Gemini успешно авторизован!", Toast.LENGTH_SHORT).show()
-                                                } else {
-                                                    isGeminiAuthorized = false
-                                                    authFeedbackText = "❌ $message"
-                                                }
-                                            }
-                                        },
-                                        modifier = Modifier.weight(1f),
-                                        colors = ButtonDefaults.buttonColors(containerColor = activeTheme.primary),
-                                        shape = RoundedCornerShape(10.dp),
-                                        enabled = !isAuthorizing
-                                    ) {
-                                        if (isAuthorizing) {
-                                            CircularProgressIndicator(color = Color.Black, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text("Проверка...", color = Color.Black, fontSize = 11.sp)
-                                        } else {
-                                            Icon(Icons.Default.VpnKey, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text("Авторизовать в приложении", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                        }
-                                    }
-
-                                    OutlinedButton(
-                                        onClick = {
-                                            try {
-                                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://aistudio.google.com/app/apikey"))
-                                                context.startActivity(intent)
-                                            } catch (e: Exception) {
-                                                Toast.makeText(context, "Не удалось открыть браузер: ${e.message}", Toast.LENGTH_SHORT).show()
-                                            }
-                                        },
-                                        shape = RoundedCornerShape(10.dp),
-                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
-                                    ) {
-                                        Text("Получить ключ", fontSize = 11.sp)
-                                    }
-                                }
-
-                                if (authFeedbackText.isNotBlank()) {
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text(
-                                        text = authFeedbackText,
-                                        color = if (authFeedbackText.startsWith("✅")) Color(0xFF81C784) else Color(0xFFFF8A80),
-                                        fontSize = 11.sp
-                                    )
-                                }
-                            }
-                        }
-                    }
-
                     // Analysis Action Button
                     Button(
                         onClick = {
-                            if (mainScreenBitmap == null && playerScreenBitmap == null) {
+                            val targetBitmap = playerScreenBitmap ?: mainScreenBitmap
+                            if (targetBitmap == null) {
                                 Toast.makeText(context, "Выберите хотя бы один скриншот", Toast.LENGTH_SHORT).show()
                                 return@Button
                             }
                             isAnalyzing = true
-                            statusText = if (isGeminiAuthorized) "Gemini Vision анализирует скриншоты..." else "Анализ скриншотов и извлечение палитры..."
+                            statusText = "AndroidX Palette извлекает цвета и параметры макета..."
                             coroutineScope.launch {
                                 try {
-                                    val result = ScreenshotThemeExtractor.extractThemeFromScreenshots(
-                                        context = context,
-                                        mainScreenBitmap = mainScreenBitmap,
-                                        playerScreenBitmap = playerScreenBitmap,
-                                        customApiKey = apiKeyInput.ifBlank { null }
-                                    )
-                                    analysisResult = result
-                                    statusText = "Стиль «${result.name}» успешно распознан!"
+                                    val (config, json) = withContext(Dispatchers.Default) {
+                                        ScreenshotPaletteExtractor.extractUiConfigFromScreenshot(targetBitmap)
+                                    }
+                                    extractedConfig = config
+                                    generatedJsonOutput = json
+                                    statusText = "Палитра и стиль плеера успешно извлечены!"
                                 } catch (e: Exception) {
                                     statusText = "Ошибка анализа: ${e.message}"
                                 } finally {
@@ -401,7 +278,7 @@ fun UiTemplateFromScreenshotDialog(
                                 strokeWidth = 2.dp
                             )
                             Spacer(modifier = Modifier.width(10.dp))
-                            Text("Распознавание макета...", color = Color.Black, fontWeight = FontWeight.Bold)
+                            Text("Анализ палитры...", color = Color.Black, fontWeight = FontWeight.Bold)
                         } else {
                             Icon(
                                 imageVector = Icons.Default.AutoAwesome,
@@ -429,29 +306,207 @@ fun UiTemplateFromScreenshotDialog(
                         )
                     }
 
-                    // Result and Live Preview Card
-                    analysisResult?.let { res ->
-                        AnalysisPreviewCard(
-                            result = res,
-                            onApply = {
-                                ThemeManager.saveAndApplyAiTheme(
-                                    context = context,
-                                    name = res.name,
-                                    description = res.description,
-                                    primary = res.theme.primary,
-                                    secondary = res.theme.secondary,
-                                    background = res.theme.background,
-                                    surface = res.theme.surface,
-                                    playerControlStyle = res.playerControlStyle,
-                                    buttonSize = res.buttonSize,
-                                    cornerRadiusDp = res.cornerRadiusDp,
-                                    controlPanelBg = res.theme.controlPanelBg
+                    // Result Card with Live Preview and JSON output
+                    extractedConfig?.let { cfg ->
+                        val primaryColor = ThemeManager.parseHexColor(cfg.primaryAccentColorHex)
+                        val secondaryColor = ThemeManager.parseHexColor(cfg.secondaryAccentColorHex)
+                        val bgColor = ThemeManager.parseHexColor(cfg.backgroundColorHex)
+                        val surfaceColor = ThemeManager.parseHexColor(cfg.surfaceColorHex)
+
+                        val ctrlStyle = when (cfg.controlPanelPosition) {
+                            "floating_bottom" -> PlayerControlStyle.MODERN_FLOAT
+                            "overlay" -> PlayerControlStyle.CINEMATIC_FULL
+                            else -> PlayerControlStyle.CLASSIC_VLC
+                        }
+
+                        val btnSize = when (cfg.buttonSize) {
+                            "large" -> ButtonSizeOption.LARGE
+                            "compact" -> ButtonSizeOption.COMPACT
+                            else -> ButtonSizeOption.STANDARD
+                        }
+
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(18.dp),
+                            color = bgColor,
+                            border = BorderStroke(2.dp, primaryColor),
+                            shadowElevation = 12.dp
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = primaryColor.copy(alpha = 0.2f),
+                                        border = BorderStroke(1.dp, primaryColor.copy(alpha = 0.5f))
+                                    ) {
+                                        Text(
+                                            text = "ANDROIDX PALETTE EXTRACTOR",
+                                            color = primaryColor,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+
+                                    TextButton(onClick = { showJsonViewer = !showJsonViewer }) {
+                                        Icon(Icons.Default.Code, null, tint = primaryColor, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(if (showJsonViewer) "Скрыть JSON" else "Показать JSON", color = primaryColor, fontSize = 11.sp)
+                                    }
+                                }
+
+                                if (showJsonViewer) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = Color.Black.copy(alpha = 0.6f),
+                                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f))
+                                    ) {
+                                        Text(
+                                            text = generatedJsonOutput,
+                                            color = Color(0xFF00FF66),
+                                            fontSize = 10.sp,
+                                            fontFamily = FontFamily.Monospace,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(10.dp)
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                Text(
+                                    "ИЗВЛЕЧЕННАЯ ЦВЕТОВАЯ ПАЛИТРА",
+                                    color = primaryColor,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.sp
                                 )
-                                Toast.makeText(context, "Оформление «${res.name}» успешно применено к плееру и экранам!", Toast.LENGTH_LONG).show()
-                                onDismiss()
-                            },
-                            currentTheme = activeTheme
-                        )
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    ColorPill(label = "Фон", color = bgColor, hex = cfg.backgroundColorHex, modifier = Modifier.weight(1f))
+                                    ColorPill(label = "Акцент", color = primaryColor, hex = cfg.primaryAccentColorHex, modifier = Modifier.weight(1f))
+                                    ColorPill(label = "Второй", color = secondaryColor, hex = cfg.secondaryAccentColorHex, modifier = Modifier.weight(1f))
+                                    ColorPill(label = "Текст", color = ThemeManager.parseHexColor(cfg.textColorHex), hex = cfg.textColorHex, modifier = Modifier.weight(1f))
+                                    ColorPill(label = "Панель", color = surfaceColor, hex = cfg.surfaceColorHex, modifier = Modifier.weight(1f))
+                                }
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                // Mini player mockup preview
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(cfg.cornerRadiusDp.dp),
+                                    color = surfaceColor,
+                                    border = BorderStroke(1.dp, primaryColor.copy(alpha = 0.4f))
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text("Макет плеера по образцу", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            Text(
+                                                "${cfg.controlPanelPosition} • ${cfg.buttonSize}",
+                                                color = secondaryColor,
+                                                fontSize = 10.sp
+                                            )
+                                        }
+
+                                        Spacer(modifier = Modifier.height(8.dp))
+
+                                        // Seekbar
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(4.dp)
+                                                .background(Color.White.copy(alpha = 0.2f), CircleShape)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth(0.4f)
+                                                    .fillMaxHeight()
+                                                    .background(primaryColor, CircleShape)
+                                            )
+                                        }
+
+                                        Spacer(modifier = Modifier.height(10.dp))
+
+                                        val playBtnSize = when (btnSize) {
+                                            ButtonSizeOption.LARGE -> 44.dp
+                                            ButtonSizeOption.STANDARD -> 36.dp
+                                            ButtonSizeOption.COMPACT -> 30.dp
+                                        }
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.Center,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(Icons.Default.Replay10, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                            Spacer(modifier = Modifier.width(16.dp))
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(playBtnSize)
+                                                    .background(primaryColor, CircleShape),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(Icons.Default.PlayArrow, null, tint = Color.Black, modifier = Modifier.size(22.dp))
+                                            }
+                                            Spacer(modifier = Modifier.width(16.dp))
+                                            Icon(Icons.Default.Forward10, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(14.dp))
+
+                                // Apply button
+                                Button(
+                                    onClick = {
+                                        ThemeManager.saveAndApplyAiTheme(
+                                            context = context,
+                                            name = "Макет по скриншоту (Palette)",
+                                            description = "Адаптация палитры ${cfg.primaryAccentColorHex} и стиля ${cfg.controlPanelPosition}",
+                                            primary = primaryColor,
+                                            secondary = secondaryColor,
+                                            background = bgColor,
+                                            surface = surfaceColor,
+                                            playerControlStyle = ctrlStyle,
+                                            buttonSize = btnSize,
+                                            cornerRadiusDp = cfg.cornerRadiusDp,
+                                            controlPanelBg = surfaceColor
+                                        )
+                                        Toast.makeText(context, "Оформление по скриншоту успешно применено!", Toast.LENGTH_LONG).show()
+                                        onDismiss()
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
+                                ) {
+                                    Icon(Icons.Default.Check, null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        "Применить оформление к плееру",
+                                        color = Color.Black,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -556,254 +611,11 @@ private fun ScreenshotUploadCard(
                         Text(
                             "Выбрать скриншот из галереи",
                             color = Color.White.copy(alpha = 0.85f),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun AnalysisPreviewCard(
-    result: ScreenshotAnalysisResult,
-    onApply: () -> Unit,
-    currentTheme: AppCustomTheme
-) {
-    val theme = result.theme
-
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        color = theme.background,
-        border = BorderStroke(2.dp, theme.primary),
-        shadowElevation = 12.dp
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            // Source badge
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = theme.primary.copy(alpha = 0.15f),
-                border = BorderStroke(1.dp, theme.primary.copy(alpha = 0.4f))
-            ) {
-                Text(
-                    text = "ИСТОЧНИК: ${result.analysisSource.uppercase()}",
-                    color = theme.primary,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = result.name,
-                color = Color.White,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = result.description,
-                color = Color.LightGray,
-                fontSize = 11.sp
-            )
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Color Swatches
-            Text(
-                "ИЗВЛЕЧЕННАЯ ЦВЕТОВАЯ ПАЛИТРА",
-                color = theme.primary,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                ColorPill(label = "Основной", color = theme.primary, hex = result.primaryHex, modifier = Modifier.weight(1f))
-                ColorPill(label = "Второй", color = theme.secondary, hex = result.secondaryHex, modifier = Modifier.weight(1f))
-                ColorPill(label = "Фон", color = theme.background, hex = result.backgroundHex, modifier = Modifier.weight(1f))
-                ColorPill(label = "Панель", color = theme.surface, hex = result.surfaceHex, modifier = Modifier.weight(1f))
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Detected layout properties
-            Text(
-                "ПАРАМЕТРЫ РАСПОЛОЖЕНИЯ И КНОПОК",
-                color = theme.primary,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = theme.surface,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Column(modifier = Modifier.padding(8.dp)) {
-                        Text("Стиль плеера", color = Color.Gray, fontSize = 9.sp)
-                        Text(
-                            when (result.playerControlStyle) {
-                                PlayerControlStyle.MODERN_FLOAT -> "Плавающая панель"
-                                PlayerControlStyle.CLASSIC_VLC -> "Классика VLC"
-                                PlayerControlStyle.MINIMAL_COMPACT -> "Минимализм"
-                                PlayerControlStyle.CINEMATIC_FULL -> "Кинематографичный"
-                            },
-                            color = Color.White,
-                            fontSize = 11.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
                 }
-
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = theme.surface,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Column(modifier = Modifier.padding(8.dp)) {
-                        Text("Кнопки", color = Color.Gray, fontSize = 9.sp)
-                        Text(
-                            when (result.buttonSize) {
-                                ButtonSizeOption.LARGE -> "Крупные"
-                                ButtonSizeOption.STANDARD -> "Стандарт"
-                                ButtonSizeOption.COMPACT -> "Компакт"
-                            },
-                            color = Color.White,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = theme.surface,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Column(modifier = Modifier.padding(8.dp)) {
-                        Text("Скругление", color = Color.Gray, fontSize = 9.sp)
-                        Text("${result.cornerRadiusDp} dp", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Mini player mockup preview
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(result.cornerRadiusDp.dp),
-                color = theme.surface,
-                border = BorderStroke(1.dp, theme.primary.copy(alpha = 0.4f))
-            ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Пример панели плеера", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        Text("04:12 / 12:45", color = theme.secondary, fontSize = 10.sp)
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // Simulated seekbar
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(4.dp)
-                            .background(Color.White.copy(alpha = 0.2f), CircleShape)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(0.35f)
-                                .fillMaxHeight()
-                                .background(theme.primary, CircleShape)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .background(Color.White.copy(alpha = 0.1f), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.Replay10, null, tint = Color.White, modifier = Modifier.size(16.dp))
-                        }
-
-                        Spacer(modifier = Modifier.width(16.dp))
-
-                        Box(
-                            modifier = Modifier
-                                .size(
-                                    when (result.buttonSize) {
-                                        ButtonSizeOption.LARGE -> 48.dp
-                                        ButtonSizeOption.STANDARD -> 40.dp
-                                        ButtonSizeOption.COMPACT -> 34.dp
-                                    }
-                                )
-                                .background(theme.primary, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.PlayArrow, null, tint = Color.Black, modifier = Modifier.size(22.dp))
-                        }
-
-                        Spacer(modifier = Modifier.width(16.dp))
-
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .background(Color.White.copy(alpha = 0.1f), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.Forward10, null, tint = Color.White, modifier = Modifier.size(16.dp))
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Apply button
-            Button(
-                onClick = onApply,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = theme.primary)
-            ) {
-                Icon(Icons.Default.Check, null, tint = Color.Black, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    "Применить ко всему приложению",
-                    color = Color.Black,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp
-                )
             }
         }
     }
@@ -828,7 +640,7 @@ private fun ColorPill(label: String, color: Color, hex: String, modifier: Modifi
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(label, color = Color.Gray, fontSize = 9.sp)
-            Text(hex, color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            Text(hex, color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold)
         }
     }
 }

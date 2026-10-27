@@ -127,28 +127,24 @@ fun MoreHubView(
 
     fun requestPickMainScreenshot() {
         try {
-            pickMainPhotoLauncher.launch(
-                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-            )
-        } catch (_: Throwable) {
+            pickMainContentLauncher.launch("image/*")
+        } catch (e: Throwable) {
             try {
-                pickMainContentLauncher.launch("image/*")
-            } catch (e: Throwable) {
-                Toast.makeText(context, "Не удалось открыть выбор файлов: ${e.message}", Toast.LENGTH_SHORT).show()
+                pickMainPhotoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            } catch (err: Throwable) {
+                Toast.makeText(context, "Не удалось открыть выбор файлов: ${err.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
     fun requestPickPlayerScreenshot() {
         try {
-            pickPlayerPhotoLauncher.launch(
-                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-            )
-        } catch (_: Throwable) {
+            pickPlayerContentLauncher.launch("image/*")
+        } catch (e: Throwable) {
             try {
-                pickPlayerContentLauncher.launch("image/*")
-            } catch (e: Throwable) {
-                Toast.makeText(context, "Не удалось открыть выбор файлов: ${e.message}", Toast.LENGTH_SHORT).show()
+                pickPlayerPhotoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            } catch (err: Throwable) {
+                Toast.makeText(context, "Не удалось открыть выбор файлов: ${err.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }

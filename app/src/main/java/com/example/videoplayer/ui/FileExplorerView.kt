@@ -46,8 +46,10 @@ fun FileExplorerView(
     var currentPath by remember { mutableStateOf(rootPath) }
     var searchQuery by remember { mutableStateOf("") }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+
     val items = remember(currentPath, searchQuery) {
-        getDirectoryItems(currentPath, rootPath, searchQuery)
+        getDirectoryItems(context, currentPath, rootPath, searchQuery)
     }
 
     Column(
@@ -243,8 +245,12 @@ private fun formatBreadcrumbs(path: String, root: String): String {
     return "Хранилище / " + relative.replace('/', ' ')
 }
 
-private fun getDirectoryItems(path: String, root: String, query: String): List<ExplorerItem> {
+private fun getDirectoryItems(context: android.content.Context, path: String, root: String, query: String): List<ExplorerItem> {
     val results = mutableListOf<ExplorerItem>()
+    val secureRepo = com.example.videoplayer.security.SecureVaultRepository(context)
+    val hiddenItems = try { secureRepo.getHiddenItems() } catch (_: Exception) { emptySet() }
+    val vaultNames = try { secureRepo.listItems().map { it.displayName.lowercase(Locale.ROOT).trim() }.toSet() } catch (_: Exception) { emptySet() }
+
     try {
         val dir = File(path)
         if (dir.exists() && dir.isDirectory) {
@@ -252,6 +258,9 @@ private fun getDirectoryItems(path: String, root: String, query: String): List<E
             if (files != null) {
                 for (f in files) {
                     if (f.name.startsWith(".") || f.name.endsWith(".enc") || f.name.contains("secure_vault")) continue
+                    val nameLower = f.name.lowercase(Locale.ROOT).trim()
+                    val pathLower = f.absolutePath.lowercase(Locale.ROOT).trim()
+                    if (hiddenItems.contains(nameLower) || vaultNames.contains(nameLower) || hiddenItems.contains(pathLower) || hiddenItems.any { pathLower.endsWith(it) }) continue
                     val isDir = f.isDirectory
                     val ext = f.extension.lowercase(Locale.ROOT)
                     val isVideo = ext in listOf("mp4", "mkv", "avi", "mov", "webm", "ts", "flv", "wmv", "3gp")

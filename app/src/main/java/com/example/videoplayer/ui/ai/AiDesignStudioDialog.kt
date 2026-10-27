@@ -1,7 +1,5 @@
 package com.example.videoplayer.ui.ai
 
-import android.content.Intent
-import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -39,13 +37,6 @@ fun AiDesignStudioDialog(
 
     var selectedPreset by remember { mutableStateOf(ThemeManager.activeTheme) }
     var aiPrompt by remember { mutableStateOf("") }
-
-    // Google Gemini in-app authorization state
-    var isGeminiAuthorized by remember { mutableStateOf<Boolean>(ThemeManager.isGeminiAuthorized(context)) }
-    var apiKeyInput by remember { mutableStateOf(ThemeManager.getSavedGeminiKey(context) ?: "") }
-    var showAuthPanel by remember { mutableStateOf<Boolean>(!isGeminiAuthorized) }
-    var isAuthorizing by remember { mutableStateOf(false) }
-    var authFeedbackText by remember { mutableStateOf("") }
 
     var isGenerating by remember { mutableStateOf(false) }
     var generatedTheme by remember { mutableStateOf<AppCustomTheme?>(null) }
@@ -97,7 +88,7 @@ fun AiDesignStudioDialog(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        "Генерация оформления и кастомизация плеера",
+                        "Оффлайн генерация и кастомизация оформления",
                         color = currentAppTheme.secondary,
                         fontSize = 11.sp
                     )
@@ -241,172 +232,9 @@ fun AiDesignStudioDialog(
                     }
                 }
 
-                // Gemini Authorization Card
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    color = currentAppTheme.surface,
-                    border = BorderStroke(
-                        1.dp,
-                        if (isGeminiAuthorized) Color(0xFF4CAF50).copy(alpha = 0.6f) else Color.White.copy(alpha = 0.12f)
-                    )
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { showAuthPanel = !showAuthPanel },
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(30.dp)
-                                        .background(
-                                            if (isGeminiAuthorized) Color(0xFF4CAF50).copy(alpha = 0.2f) else currentAppTheme.primary.copy(alpha = 0.15f),
-                                            CircleShape
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = if (isGeminiAuthorized) Icons.Default.CheckCircle else Icons.Default.VpnKey,
-                                        contentDescription = null,
-                                        tint = if (isGeminiAuthorized) Color(0xFF4CAF50) else currentAppTheme.primary,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-
-                                Column {
-                                    Text(
-                                        if (isGeminiAuthorized) "🟢 Google Gemini AI авторизован" else "Авторизация Google Gemini AI",
-                                        color = Color.White,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        if (isGeminiAuthorized) "Онлайн-нейросеть генерирует стили" else "Встроенный оффлайн-ИИ активен",
-                                        color = if (isGeminiAuthorized) Color(0xFF81C784) else Color.Gray,
-                                        fontSize = 10.sp
-                                    )
-                                }
-                            }
-
-                            Icon(
-                                imageVector = if (showAuthPanel) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                contentDescription = null,
-                                tint = Color.LightGray,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-
-                        if (showAuthPanel) {
-                            Spacer(modifier = Modifier.height(10.dp))
-                            HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
-                            Spacer(modifier = Modifier.height(10.dp))
-
-                            Text(
-                                "Авторизуйте Google Gemini в приложении для онлайн генерации уникальных макетов:",
-                                color = Color.LightGray,
-                                fontSize = 11.sp
-                            )
-
-                            Spacer(modifier = Modifier.height(8.dp))
-
-                            OutlinedTextField(
-                                value = apiKeyInput,
-                                onValueChange = { apiKeyInput = it },
-                                label = { Text("Ключ Google AI (Gemini API Key)", fontSize = 11.sp) },
-                                placeholder = { Text("AIzaSy...", color = Color.Gray, fontSize = 11.sp) },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(10.dp),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = currentAppTheme.primary,
-                                    unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
-                                    focusedTextColor = Color.White,
-                                    unfocusedTextColor = Color.White
-                                )
-                            )
-
-                            Spacer(modifier = Modifier.height(8.dp))
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Button(
-                                    onClick = {
-                                        if (apiKeyInput.isBlank()) {
-                                            authFeedbackText = "Введите ключ API для авторизации"
-                                            return@Button
-                                        }
-                                        isAuthorizing = true
-                                        authFeedbackText = "Проверка ключа в Google AI..."
-                                        coroutineScope.launch {
-                                            val (success, message) = ThemeManager.verifyAndAuthorizeGemini(context, apiKeyInput.trim())
-                                            isAuthorizing = false
-                                            if (success) {
-                                                isGeminiAuthorized = true
-                                                authFeedbackText = "✅ $message"
-                                                Toast.makeText(context, "Google Gemini успешно авторизован!", Toast.LENGTH_SHORT).show()
-                                            } else {
-                                                isGeminiAuthorized = false
-                                                authFeedbackText = "❌ $message"
-                                            }
-                                        }
-                                    },
-                                    modifier = Modifier.weight(1f),
-                                    colors = ButtonDefaults.buttonColors(containerColor = currentAppTheme.primary),
-                                    shape = RoundedCornerShape(10.dp),
-                                    enabled = !isAuthorizing
-                                ) {
-                                    if (isAuthorizing) {
-                                        CircularProgressIndicator(color = Color.Black, modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Проверка...", color = Color.Black, fontSize = 10.sp)
-                                    } else {
-                                        Icon(Icons.Default.VpnKey, contentDescription = null, tint = Color.Black, modifier = Modifier.size(14.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Авторизовать в приложении", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-
-                                OutlinedButton(
-                                    onClick = {
-                                        try {
-                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://aistudio.google.com/app/apikey"))
-                                            context.startActivity(intent)
-                                        } catch (e: Exception) {
-                                            Toast.makeText(context, "Не удалось открыть браузер: ${e.message}", Toast.LENGTH_SHORT).show()
-                                        }
-                                    },
-                                    shape = RoundedCornerShape(10.dp),
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
-                                ) {
-                                    Text("Получить ключ", fontSize = 10.sp)
-                                }
-                            }
-
-                            if (authFeedbackText.isNotBlank()) {
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    text = authFeedbackText,
-                                    color = if (authFeedbackText.startsWith("✅")) Color(0xFF81C784) else Color(0xFFFF8A80),
-                                    fontSize = 11.sp
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // AI Generator Section
+                // AI Generator Section (100% Offline, Fast & Free)
                 Text(
-                    "ГЕНЕРАЦИЯ СТИЛЯ ПО ОПИСАНИЮ",
+                    "ОФФЛАЙН ИИ-ГЕНЕРАТОР СТИЛЯ",
                     color = currentAppTheme.primary,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
@@ -458,13 +286,12 @@ fun AiDesignStudioDialog(
                             return@Button
                         }
                         isGenerating = true
-                        statusMessage = if (isGeminiAuthorized) "Gemini генерирует оформление..." else "ИИ синтезирует уникальную палитру..."
+                        statusMessage = "ИИ синтезирует уникальную палитру..."
                         coroutineScope.launch {
                             try {
                                 val generated = ThemeManager.generateAiDesign(
                                     context = context,
-                                    prompt = aiPrompt,
-                                    customKey = apiKeyInput.ifBlank { null }
+                                    prompt = aiPrompt
                                 )
                                 generatedTheme = generated
                                 activeControlStyle = generated.playerControlStyle
@@ -596,9 +423,9 @@ fun AiDesignStudioDialog(
 
                 HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
 
-                // Ready Presets Section
+                // Ready Presets Section (12 Distinct Presets)
                 Text(
-                    "ГОТОВЫЕ ДИЗАЙНЕРСКИЕ ПРЕСЕТЫ",
+                    "ГОТОВЫЕ ДИЗАЙНЕРСКИЕ ПРЕСЕТЫ (12 ВАРИАНТОВ)",
                     color = currentAppTheme.primary,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
@@ -625,7 +452,7 @@ fun AiDesignStudioDialog(
                                 if (isSel) 2.dp else 1.dp,
                                 if (isSel) preset.primary else Color.White.copy(alpha = 0.1f)
                             ),
-                            modifier = Modifier.width(130.dp)
+                            modifier = Modifier.width(140.dp)
                         ) {
                             Column(modifier = Modifier.padding(10.dp)) {
                                 Row(
@@ -633,13 +460,26 @@ fun AiDesignStudioDialog(
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Box(modifier = Modifier.size(14.dp).background(preset.primary, CircleShape))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Box(modifier = Modifier.size(12.dp).background(preset.primary, CircleShape))
+                                        Box(modifier = Modifier.size(12.dp).background(preset.secondary, CircleShape))
+                                    }
                                     if (isSel) {
                                         Icon(Icons.Default.Check, contentDescription = null, tint = preset.primary, modifier = Modifier.size(16.dp))
                                     }
                                 }
                                 Spacer(modifier = Modifier.height(6.dp))
-                                Text(preset.name, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                                Text(preset.name, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                                Text(
+                                    when (preset.playerControlStyle) {
+                                        PlayerControlStyle.MODERN_FLOAT -> "Плавающий"
+                                        PlayerControlStyle.CINEMATIC_FULL -> "Киноэкран"
+                                        PlayerControlStyle.CLASSIC_VLC -> "Классика"
+                                        PlayerControlStyle.MINIMAL_COMPACT -> "Мини"
+                                    },
+                                    color = Color.Gray,
+                                    fontSize = 9.sp
+                                )
                             }
                         }
                     }

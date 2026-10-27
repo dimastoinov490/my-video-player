@@ -1,6 +1,8 @@
 package com.example.videoplayer.security
 
+import android.content.ContentUris
 import android.content.Context
+import android.media.MediaScannerConnection
 import android.net.Uri
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -29,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import android.os.Build
+import android.os.Environment
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
@@ -150,7 +153,10 @@ fun SecureVaultScreen(
         contract = ActivityResultContracts.StartIntentSenderForResult()
     ) { result ->
         if (result.resultCode == android.app.Activity.RESULT_OK) {
-            statusText = "Файл скрыт, а исходный оригинал удален с устройства"
+            statusText = "Оригинальный файл успешно удален из памяти устройства!"
+            files = vaultRepository.listItems()
+        } else {
+            statusText = "Файл зашифрован в сейф. Для очистки проводника подтвердите удаление в системном диалоге"
         }
     }
 
@@ -169,28 +175,115 @@ fun SecureVaultScreen(
         return uri.lastPathSegment?.substringAfterLast('/') ?: "video_${System.currentTimeMillis()}.mp4"
     }
 
+    fun resolveFilePath(uri: Uri, displayName: String): String? {
+        if (uri.scheme == "file") return uri.path
+        try {
+            context.contentResolver.query(uri, arrayOf(MediaStore.MediaColumns.DATA), null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val idx = cursor.getColumnIndex(MediaStore.MediaColumns.DATA)
+                    if (idx >= 0) {
+                        val path = cursor.getString(idx)
+                        if (!path.isNullOrBlank()) return path
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        val checkDirs = listOf(
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM),
+            File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera"),
+            Environment.getExternalStorageDirectory()
+        )
+        for (dir in checkDirs) {
+            val candidate = File(dir, displayName)
+            if (candidate.exists() && candidate.isFile) {
+                return candidate.absolutePath
+            }
+        }
+        return null
+    }
+
+    fun resolveMediaStoreUri(uri: Uri, displayName: String): Uri? {
+        if (uri.authority == "media") return uri
+        try {
+            context.contentResolver.query(
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                arrayOf(MediaStore.Video.Media._ID),
+                "${MediaStore.Video.Media.DISPLAY_NAME} = ?",
+                arrayOf(displayName),
+                null
+            )?.use { c ->
+                if (c.moveToFirst()) {
+                    val id = c.getLong(0)
+                    return ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id)
+                }
+            }
+        } catch (_: Exception) {}
+        return null
+    }
+
     fun importUriToVault(uri: Uri, displayName: String) {
         coroutineScope.launch {
             isBusy = true
-            busyMessage = "Шифрование и скрытие файла: $displayName..."
+            busyMessage = "Шифрование и удаление оригинала: $displayName..."
             try {
                 withContext(Dispatchers.IO) {
                     val input = context.contentResolver.openInputStream(uri)
                         ?: throw IllegalStateException("Не удалось прочитать выбранный файл")
                     vaultRepository.addStream(input, password, displayName)
+
+                    val resolvedPath = resolveFilePath(uri, displayName)
+                    val mediaStoreUri = resolveMediaStoreUri(uri, displayName)
+
+                    // 1. Immediately register in hidden vault registry to hide from player & file explorer
                     vaultRepository.recordHiddenItem(displayName)
+                    vaultRepository.recordHiddenItem(displayName.lowercase())
                     vaultRepository.recordHiddenItem(displayName.substringBeforeLast('.'))
                     vaultRepository.recordHiddenItem(uri.toString())
+                    if (!resolvedPath.isNullOrBlank()) {
+                        vaultRepository.recordHiddenItem(resolvedPath)
+                        vaultRepository.recordHiddenItem(resolvedPath.lowercase())
+                    }
+                    if (mediaStoreUri != null) {
+                        vaultRepository.recordHiddenItem(mediaStoreUri.toString())
+                    }
 
-                    // Delete original file so it is no longer visible in phone gallery/folders
+                    // 2. Physical disk deletion & truncation of the original file
                     var originalDeleted = false
+
+                    if (!resolvedPath.isNullOrBlank()) {
+                        try {
+                            val f = File(resolvedPath)
+                            if (f.exists()) {
+                                // Truncate first to zero-out bytes in case OS blocks full unlinking
+                                try {
+                                    java.io.FileOutputStream(f).use { /* 0 bytes */ }
+                                } catch (_: Exception) {}
+                                originalDeleted = f.delete()
+                                MediaScannerConnection.scanFile(context, arrayOf(f.absolutePath), null, null)
+                            }
+                        } catch (_: Exception) {}
+                    }
+
+                    // 3. Truncate via ContentResolver stream so other apps see empty file
                     try {
-                        originalDeleted = DocumentsContract.deleteDocument(context.contentResolver, uri)
+                        context.contentResolver.openOutputStream(uri, "wt")?.use { /* write 0 bytes */ }
                     } catch (_: Exception) {}
 
+                    // 4. Try DocumentsContract deletion
                     if (!originalDeleted) {
                         try {
-                            val rows = context.contentResolver.delete(uri, null, null)
+                            originalDeleted = DocumentsContract.deleteDocument(context.contentResolver, uri)
+                        } catch (_: Exception) {}
+                    }
+
+                    // 5. Try MediaStore / ContentResolver deletion
+                    val targetDeleteUri = mediaStoreUri ?: uri
+                    if (!originalDeleted) {
+                        try {
+                            val rows = context.contentResolver.delete(targetDeleteUri, null, null)
                             originalDeleted = rows > 0
                         } catch (sec: android.app.RecoverableSecurityException) {
                             withContext(Dispatchers.Main) {
@@ -198,10 +291,10 @@ fun SecureVaultScreen(
                                     IntentSenderRequest.Builder(sec.userAction.actionIntent.intentSender).build()
                                 )
                             }
-                        } catch (e: Exception) {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        } catch (_: Exception) {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && mediaStoreUri != null) {
                                 try {
-                                    val deleteReq = MediaStore.createDeleteRequest(context.contentResolver, listOf(uri))
+                                    val deleteReq = MediaStore.createDeleteRequest(context.contentResolver, listOf(mediaStoreUri))
                                     withContext(Dispatchers.Main) {
                                         deleteOriginalLauncher.launch(
                                             IntentSenderRequest.Builder(deleteReq.intentSender).build()
@@ -211,9 +304,13 @@ fun SecureVaultScreen(
                             }
                         }
                     }
+
+                    if (!resolvedPath.isNullOrBlank()) {
+                        MediaScannerConnection.scanFile(context, arrayOf(resolvedPath), null, null)
+                    }
                 }
                 files = vaultRepository.listItems()
-                statusText = "Файл «$displayName» успешно зашифрован и скрыт из общей памяти!"
+                statusText = "Файл «$displayName» зашифрован в защищенную папку и скрыт из проводника!"
                 lockDeadline = System.currentTimeMillis() + 120_000L
             } catch (e: Throwable) {
                 Log.e("SecureVault", "Error adding file", e)

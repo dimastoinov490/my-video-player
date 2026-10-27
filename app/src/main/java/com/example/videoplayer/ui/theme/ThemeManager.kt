@@ -48,89 +48,210 @@ data class AppCustomTheme(
 object ThemePresets {
     val NexoraNeon = AppCustomTheme(
         id = "nexora_neon",
-        name = "Ночной Неон (Оригинал)",
-        description = "Ваше оригинальное оформление Nexora: неоновый оранжевый, теплый янтарь и глубокий темный фон",
-        primary = Color(0xFFFF8A00),
-        secondary = Color(0xFFFF9500),
-        background = Color(0xFF0D0D0D),
-        surface = Color(0xFF1E1E1E),
-        cardBorder = Color(0x33FF8A00),
-        glow = Color(0x66FF8A00)
+        name = "Nexora Prime Неон (Оригинал)",
+        description = "Фирменный стиль Nexora: глубокий карбон, янтарно-золотой акцент и плавающая панель управления",
+        primary = Color(0xFFFF9500),
+        secondary = Color(0xFFFF5E00),
+        background = Color(0xFF0A0C10),
+        surface = Color(0xFF141822),
+        cardBorder = Color(0x44FF9500),
+        glow = Color(0x66FF9500),
+        playerControlStyle = PlayerControlStyle.MODERN_FLOAT,
+        buttonSize = ButtonSizeOption.LARGE,
+        cornerRadiusDp = 22,
+        controlPanelBg = Color(0xFF121620)
     )
 
     val Cyberpunk = AppCustomTheme(
         id = "cyberpunk",
-        name = "Cyberpunk 2077",
-        description = "Футуристический стиль с неоновым цианом и неоновым розовым",
+        name = "Cyberpunk Night City",
+        description = "Футуристический стиль 2077 с неоновым цианом, неоновой фуксией и широкоформатным кино-плеером",
         primary = Color(0xFF00F0FF),
         secondary = Color(0xFFFF0055),
-        background = Color(0xFF080D14),
-        surface = Color(0xFF101926),
+        background = Color(0xFF04060C),
+        surface = Color(0xFF0B1220),
         cardBorder = Color(0x4400F0FF),
-        glow = Color(0x6600F0FF)
-    )
-
-    val Emerald = AppCustomTheme(
-        id = "emerald",
-        name = "Изумрудный Неон",
-        description = "Энергичный лаймово-изумрудный стиль с глубоким темным фоном",
-        primary = Color(0xFF00E676),
-        secondary = Color(0xFF76FF03),
-        background = Color(0xFF061209),
-        surface = Color(0xFF0E2214),
-        cardBorder = Color(0x4400E676),
-        glow = Color(0x6600E676)
+        glow = Color(0x6600F0FF),
+        playerControlStyle = PlayerControlStyle.CINEMATIC_FULL,
+        buttonSize = ButtonSizeOption.LARGE,
+        cornerRadiusDp = 14,
+        controlPanelBg = Color(0xFF080D1A)
     )
 
     val DeepOled = AppCustomTheme(
         id = "deep_oled",
-        name = "Глубокий OLED",
-        description = "Ультра-минималистичный контрастный монохром для экономии батареи",
+        name = "Obsidian AMOLED Luxury",
+        description = "Ультра-минималистичный чистый черный фон с акцентом электрик-циан для OLED экранов",
         primary = Color(0xFFFFFFFF),
-        secondary = Color(0xFF94A3B8),
-        background = Color(0xFF000000),
-        surface = Color(0xFF141414),
-        cardBorder = Color(0x33FFFFFF),
-        glow = Color(0x44FFFFFF)
-    )
-
-    val Sunset = AppCustomTheme(
-        id = "sunset",
-        name = "Закат в Неваде",
-        description = "Теплый коралловый и янтарный градиент закатного неба",
-        primary = Color(0xFFFF5722),
-        secondary = Color(0xFFFFC107),
-        background = Color(0xFF120808),
-        surface = Color(0xFF221111),
-        cardBorder = Color(0x44FF5722),
-        glow = Color(0x66FF5722)
-    )
-
-    val MidnightSapphire = AppCustomTheme(
-        id = "sapphire",
-        name = "Полночный Сапфир",
-        description = "Глубокий синий индиго с лазурным электрическим акцентом",
-        primary = Color(0xFF2979FF),
         secondary = Color(0xFF00E5FF),
-        background = Color(0xFF070B19),
-        surface = Color(0xFF0F1733),
-        cardBorder = Color(0x442979FF),
-        glow = Color(0x662979FF)
+        background = Color(0xFF000000),
+        surface = Color(0xFF111111),
+        cardBorder = Color(0x33FFFFFF),
+        glow = Color(0x44FFFFFF),
+        playerControlStyle = PlayerControlStyle.MINIMAL_COMPACT,
+        buttonSize = ButtonSizeOption.STANDARD,
+        cornerRadiusDp = 24,
+        controlPanelBg = Color(0xFF161616)
     )
 
-    val Amethyst = AppCustomTheme(
-        id = "amethyst",
-        name = "Аметистовый Шторм",
-        description = "Таинственный фиолетово-маджентовый стиль с глубокими тенями",
-        primary = Color(0xFFD500F9),
+    val TokyoSakura = AppCustomTheme(
+        id = "tokyo_sakura",
+        name = "Токио Сакура Аниме",
+        description = "Нежный неоново-розовый стиль цветущей сакуры с плавающим интерфейсом и крупными кнопками",
+        primary = Color(0xFFFF6584),
+        secondary = Color(0xFFFFB3C6),
+        background = Color(0xFF0D0712),
+        surface = Color(0xFF1B1024),
+        cardBorder = Color(0x44FF6584),
+        glow = Color(0x66FF6584),
+        playerControlStyle = PlayerControlStyle.MODERN_FLOAT,
+        buttonSize = ButtonSizeOption.STANDARD,
+        cornerRadiusDp = 26,
+        controlPanelBg = Color(0xFF1E1228)
+    )
+
+    val Steampunk = AppCustomTheme(
+        id = "steampunk",
+        name = "Стимпанк Медь и Латунь",
+        description = "Винтажный викторианский стиль с полированной медью, теплой латунью и классической панелью VLC",
+        primary = Color(0xFFF4A261),
+        secondary = Color(0xFFE76F51),
+        background = Color(0xFF120E0A),
+        surface = Color(0xFF221A14),
+        cardBorder = Color(0x44F4A261),
+        glow = Color(0x55F4A261),
+        playerControlStyle = PlayerControlStyle.CLASSIC_VLC,
+        buttonSize = ButtonSizeOption.STANDARD,
+        cornerRadiusDp = 10,
+        controlPanelBg = Color(0xFF1E1712)
+    )
+
+    val Synthwave = AppCustomTheme(
+        id = "synthwave",
+        name = "Синтвейв Outrun 1984",
+        description = "Ностальгический неоновый закат: лазерный пурпур, ретро-маджента и яркая плавающая панель",
+        primary = Color(0xFFFF2A85),
+        secondary = Color(0xFF05D9E8),
+        background = Color(0xFF0E041A),
+        surface = Color(0xFF1C0933),
+        cardBorder = Color(0x44FF2A85),
+        glow = Color(0x66FF2A85),
+        playerControlStyle = PlayerControlStyle.MODERN_FLOAT,
+        buttonSize = ButtonSizeOption.LARGE,
+        cornerRadiusDp = 20,
+        controlPanelBg = Color(0xFF1F0A38)
+    )
+
+    val ArcticSapphire = AppCustomTheme(
+        id = "arctic_sapphire",
+        name = "Ледяной Сапфир Арктики",
+        description = "Холодный кристальный аквамарин и глубокий океанский индиго с кинематографичным плеером",
+        primary = Color(0xFF00D2FF),
+        secondary = Color(0xFF3A7BD5),
+        background = Color(0xFF040A14),
+        surface = Color(0xFF0A162B),
+        cardBorder = Color(0x4400D2FF),
+        glow = Color(0x6600D2FF),
+        playerControlStyle = PlayerControlStyle.CINEMATIC_FULL,
+        buttonSize = ButtonSizeOption.LARGE,
+        cornerRadiusDp = 20,
+        controlPanelBg = Color(0xFF0D1D3A)
+    )
+
+    val Matrix = AppCustomTheme(
+        id = "matrix",
+        name = "Терминал Матрицы",
+        description = "Кислотный фосфорный зеленый терминал хакера с классическим плотным управлением",
+        primary = Color(0xFF00FF66),
+        secondary = Color(0xFF39FF14),
+        background = Color(0xFF020904),
+        surface = Color(0xFF071B0B),
+        cardBorder = Color(0x4400FF66),
+        glow = Color(0x6600FF66),
+        playerControlStyle = PlayerControlStyle.CLASSIC_VLC,
+        buttonSize = ButtonSizeOption.COMPACT,
+        cornerRadiusDp = 8,
+        controlPanelBg = Color(0xFF051709)
+    )
+
+    val CrimsonDragon = AppCustomTheme(
+        id = "crimson_dragon",
+        name = "Красный Дракон (Рубин)",
+        description = "Агрессивный огненный рубин и магматический оранжевый с контрастной плавающей панелью",
+        primary = Color(0xFFFF1744),
+        secondary = Color(0xFFFF5252),
+        background = Color(0xFF120305),
+        surface = Color(0xFF24070B),
+        cardBorder = Color(0x44FF1744),
+        glow = Color(0x66FF1744),
+        playerControlStyle = PlayerControlStyle.MODERN_FLOAT,
+        buttonSize = ButtonSizeOption.LARGE,
+        cornerRadiusDp = 18,
+        controlPanelBg = Color(0xFF2A090D)
+    )
+
+    val RoyalEmerald = AppCustomTheme(
+        id = "royal_emerald",
+        name = "Королевский Изумруд",
+        description = "Благородный изумрудный нефрит с золотым тиснением и просторными скругленными карточками",
+        primary = Color(0xFF00E676),
+        secondary = Color(0xFFFFD700),
+        background = Color(0xFF031208),
+        surface = Color(0xFF082612),
+        cardBorder = Color(0x4400E676),
+        glow = Color(0x6600E676),
+        playerControlStyle = PlayerControlStyle.MODERN_FLOAT,
+        buttonSize = ButtonSizeOption.STANDARD,
+        cornerRadiusDp = 24,
+        controlPanelBg = Color(0xFF0A2E16)
+    )
+
+    val WarmMocha = AppCustomTheme(
+        id = "warm_mocha",
+        name = "Теплый Мокко и Карамель",
+        description = "Уютные кофейно-карамельные тона с мягким минималистичным управлением",
+        primary = Color(0xFFD4A373),
+        secondary = Color(0xFFFAEDCD),
+        background = Color(0xFF100C09),
+        surface = Color(0xFF211914),
+        cardBorder = Color(0x44D4A373),
+        glow = Color(0x55D4A373),
+        playerControlStyle = PlayerControlStyle.MINIMAL_COMPACT,
+        buttonSize = ButtonSizeOption.STANDARD,
+        cornerRadiusDp = 18,
+        controlPanelBg = Color(0xFF1D1612)
+    )
+
+    val CosmicNebula = AppCustomTheme(
+        id = "cosmic_nebula",
+        name = "Космическая Туманность",
+        description = "Глубокий межзвездный ультрафиолет и сияющий аметист с широкоэкранным кино-плеером",
+        primary = Color(0xFFB388FF),
         secondary = Color(0xFF7C4DFF),
-        background = Color(0xFF0E0717),
-        surface = Color(0xFF1D102E),
-        cardBorder = Color(0x44D500F9),
-        glow = Color(0x66D500F9)
+        background = Color(0xFF090514),
+        surface = Color(0xFF140D2B),
+        cardBorder = Color(0x44B388FF),
+        glow = Color(0x66B388FF),
+        playerControlStyle = PlayerControlStyle.CINEMATIC_FULL,
+        buttonSize = ButtonSizeOption.LARGE,
+        cornerRadiusDp = 22,
+        controlPanelBg = Color(0xFF170F32)
     )
 
-    val allPresets = listOf(NexoraNeon, Cyberpunk, Emerald, DeepOled, Sunset, MidnightSapphire, Amethyst)
+    val allPresets = listOf(
+        NexoraNeon,
+        Cyberpunk,
+        DeepOled,
+        TokyoSakura,
+        Steampunk,
+        Synthwave,
+        ArcticSapphire,
+        Matrix,
+        CrimsonDragon,
+        RoyalEmerald,
+        WarmMocha,
+        CosmicNebula
+    )
 }
 
 val LocalAppTheme = compositionLocalOf { ThemePresets.NexoraNeon }
