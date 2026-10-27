@@ -28,6 +28,18 @@ enum class ButtonSizeOption {
     LARGE
 }
 
+enum class PlayerButtonType {
+    PLAY_PAUSE,
+    SEEK_BACK,
+    SEEK_FORWARD,
+    ASPECT_RATIO,
+    REPEAT_MODE,
+    LOCK_CONTROLS,
+    SPEED_MENU,
+    AUDIO_TRACK,
+    BOOKMARK
+}
+
 data class AppCustomTheme(
     val id: String,
     val name: String,
@@ -42,25 +54,53 @@ data class AppCustomTheme(
     val playerControlStyle: PlayerControlStyle = PlayerControlStyle.CLASSIC_VLC,
     val buttonSize: ButtonSizeOption = ButtonSizeOption.STANDARD,
     val cornerRadiusDp: Int = 16,
-    val controlPanelBg: Color? = null
+    val controlPanelBg: Color? = null,
+    val buttonShape: String = "circle",
+    val activeButtons: List<PlayerButtonType> = listOf(
+        PlayerButtonType.SEEK_BACK,
+        PlayerButtonType.PLAY_PAUSE,
+        PlayerButtonType.SEEK_FORWARD,
+        PlayerButtonType.ASPECT_RATIO,
+        PlayerButtonType.REPEAT_MODE,
+        PlayerButtonType.LOCK_CONTROLS
+    )
 )
 
 object ThemePresets {
-    val NexoraNeon = AppCustomTheme(
-        id = "nexora_neon",
-        name = "Nexora Prime Неон (Оригинал)",
-        description = "Фирменный стиль Nexora: глубокий карбон, янтарно-золотой акцент и плавающая панель управления",
-        primary = Color(0xFFFF9500),
-        secondary = Color(0xFFFF5E00),
+    val NexoraOriginalOrange = AppCustomTheme(
+        id = "nexora_orange_original",
+        name = "Оригинальная тема (Оранжевый неон)",
+        description = "Фирменный оранжевый неон Nexora / VLC: янтарный акцент (#FF7A00), яркий оранжевый FAB и теплые контуры",
+        primary = Color(0xFFFF7A00),
+        secondary = Color(0xFFFFAA00),
         background = Color(0xFF0A0C10),
         surface = Color(0xFF141822),
-        cardBorder = Color(0x44FF9500),
-        glow = Color(0x66FF9500),
+        cardBorder = Color(0x55FF7A00),
+        glow = Color(0x66FF7A00),
         playerControlStyle = PlayerControlStyle.MODERN_FLOAT,
         buttonSize = ButtonSizeOption.LARGE,
-        cornerRadiusDp = 22,
+        cornerRadiusDp = 20,
         controlPanelBg = Color(0xFF121620)
     )
+
+    val NexoraCyberScreenshot = AppCustomTheme(
+        id = "nexora_neon_screenshot",
+        name = "Моя тема Неон (со скриншота)",
+        description = "Точный дизайн со скриншота: глубокий фон (#05050D), неоновый сиреневый (#9D00FF) и циан (#00E5FF), градиентный бар и луч",
+        primary = Color(0xFF9D00FF),
+        secondary = Color(0xFF00E5FF),
+        background = Color(0xFF05050D),
+        surface = Color(0xFF0E101A),
+        cardBorder = Color(0x559D00FF),
+        glow = Color(0x6600E5FF),
+        playerControlStyle = PlayerControlStyle.MODERN_FLOAT,
+        buttonSize = ButtonSizeOption.LARGE,
+        cornerRadiusDp = 18,
+        controlPanelBg = Color(0xFF05050D)
+    )
+
+    val NexoraScreenshot = NexoraCyberScreenshot
+    val NexoraNeon = NexoraOriginalOrange
 
     val Cyberpunk = AppCustomTheme(
         id = "cyberpunk",
@@ -239,7 +279,8 @@ object ThemePresets {
     )
 
     val allPresets = listOf(
-        NexoraNeon,
+        NexoraOriginalOrange,
+        NexoraCyberScreenshot,
         Cyberpunk,
         DeepOled,
         TokyoSakura,
@@ -254,7 +295,7 @@ object ThemePresets {
     )
 }
 
-val LocalAppTheme = compositionLocalOf { ThemePresets.NexoraNeon }
+val LocalAppTheme = compositionLocalOf { ThemePresets.NexoraScreenshot }
 
 object ThemeManager {
     private const val PREFS_NAME = "nexora_theme_prefs"
@@ -269,9 +310,45 @@ object ThemeManager {
     private const val KEY_CUSTOM_BTN_SIZE = "custom_btn_size"
     private const val KEY_CUSTOM_CORNER_RADIUS = "custom_corner_radius"
     private const val KEY_CUSTOM_CTRL_BG = "custom_ctrl_bg"
+    private const val KEY_CUSTOM_BTN_SHAPE = "custom_btn_shape"
+    private const val KEY_CUSTOM_BUTTONS = "custom_buttons"
 
-    var activeTheme by mutableStateOf<AppCustomTheme>(ThemePresets.NexoraNeon)
+    const val MODEL_GEMINI_VISION = "gemini_vision"
+    const val MODEL_MOBILENET_VISION = "mobilenet_v3_ui"
+    const val MODEL_YOLO_DETECTOR = "yolo_ui_detector"
+    const val MODEL_PALETTE_PRO = "palette_pro"
+
+    private const val KEY_ACTIVE_AI_MODEL = "active_ai_model"
+    private const val KEY_INSTALLED_MODELS = "installed_ai_models"
+
+    var activeTheme by mutableStateOf<AppCustomTheme>(ThemePresets.NexoraScreenshot)
         private set
+
+    fun getActiveAiModel(context: Context): String {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(KEY_ACTIVE_AI_MODEL, MODEL_MOBILENET_VISION) ?: MODEL_MOBILENET_VISION
+    }
+
+    fun setActiveAiModel(context: Context, modelId: String) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_ACTIVE_AI_MODEL, modelId)
+            .apply()
+    }
+
+    fun isModelInstalled(context: Context, modelId: String): Boolean {
+        if (modelId == MODEL_PALETTE_PRO || modelId == MODEL_GEMINI_VISION) return true
+        val installed = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getStringSet(KEY_INSTALLED_MODELS, emptySet()) ?: emptySet()
+        return installed.contains(modelId)
+    }
+
+    fun markModelInstalled(context: Context, modelId: String) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val installed = (prefs.getStringSet(KEY_INSTALLED_MODELS, emptySet()) ?: emptySet()).toMutableSet()
+        installed.add(modelId)
+        prefs.edit().putStringSet(KEY_INSTALLED_MODELS, installed).apply()
+    }
 
     fun colorToInt(color: Color): Int {
         val a = (color.alpha * 255.0f + 0.5f).toInt().coerceIn(0, 255)
@@ -305,6 +382,8 @@ object ThemeManager {
                 val btnSizeStr = prefs.getString(KEY_CUSTOM_BTN_SIZE, ButtonSizeOption.STANDARD.name)
                 val cornerRadius = prefs.getInt(KEY_CUSTOM_CORNER_RADIUS, 16)
                 val ctrlBgInt = prefs.getInt(KEY_CUSTOM_CTRL_BG, 0)
+                val btnShape = prefs.getString(KEY_CUSTOM_BTN_SHAPE, "circle") ?: "circle"
+                val btnStrList = prefs.getString(KEY_CUSTOM_BUTTONS, null)
 
                 val ctrlStyle = try {
                     PlayerControlStyle.valueOf(ctrlStyleStr ?: PlayerControlStyle.CLASSIC_VLC.name)
@@ -316,6 +395,21 @@ object ThemeManager {
                     ButtonSizeOption.valueOf(btnSizeStr ?: ButtonSizeOption.STANDARD.name)
                 } catch (_: Exception) {
                     ButtonSizeOption.STANDARD
+                }
+
+                val activeButtons = if (!btnStrList.isNullOrBlank()) {
+                    btnStrList.split(",").mapNotNull { name ->
+                        try { PlayerButtonType.valueOf(name.trim()) } catch (_: Exception) { null }
+                    }
+                } else {
+                    listOf(
+                        PlayerButtonType.SEEK_BACK,
+                        PlayerButtonType.PLAY_PAUSE,
+                        PlayerButtonType.SEEK_FORWARD,
+                        PlayerButtonType.ASPECT_RATIO,
+                        PlayerButtonType.REPEAT_MODE,
+                        PlayerButtonType.LOCK_CONTROLS
+                    )
                 }
 
                 val primary = colorFromInt(primaryInt)
@@ -336,14 +430,16 @@ object ThemeManager {
                     playerControlStyle = ctrlStyle,
                     buttonSize = btnSize,
                     cornerRadiusDp = cornerRadius,
-                    controlPanelBg = if (ctrlBgInt != 0) colorFromInt(ctrlBgInt) else null
+                    controlPanelBg = if (ctrlBgInt != 0) colorFromInt(ctrlBgInt) else null,
+                    buttonShape = btnShape,
+                    activeButtons = activeButtons
                 )
             } else {
-                activeTheme = ThemePresets.allPresets.find { it.id == themeId } ?: ThemePresets.NexoraNeon
+                activeTheme = ThemePresets.allPresets.find { it.id == themeId } ?: ThemePresets.NexoraScreenshot
             }
         } catch (e: Throwable) {
-            Log.e("ThemeManager", "Error initializing theme, falling back to original neon", e)
-            activeTheme = ThemePresets.NexoraNeon
+            Log.e("ThemeManager", "Error initializing theme, falling back to screenshot design", e)
+            activeTheme = ThemePresets.NexoraScreenshot
         }
     }
 
@@ -354,7 +450,49 @@ object ThemeManager {
     }
 
     fun resetToOriginalNeon(context: Context) {
-        applyTheme(context, ThemePresets.NexoraNeon)
+        applyDefaultPreset(context, ThemePresets.NexoraOriginalOrange)
+    }
+
+    fun applyDefaultPreset(context: Context, theme: AppCustomTheme) {
+        applyTheme(context, theme)
+        when (theme.id) {
+            "nexora_neon_screenshot", "nexora_screenshot" -> {
+                ThemeConfigManager.applyConfig(DynamicPlayerConfig.screenshotPreset(), context)
+            }
+            "nexora_orange_original", "nexora_neon" -> {
+                ThemeConfigManager.applyConfig(DynamicPlayerConfig.neonOrangePreset(), context)
+            }
+            "cyberpunk" -> {
+                ThemeConfigManager.applyConfig(DynamicPlayerConfig.cyberpunkPreset(), context)
+            }
+            "deep_oled" -> {
+                ThemeConfigManager.applyConfig(DynamicPlayerConfig.oledPreset(), context)
+            }
+            else -> {
+                val hexPrimary = colorToHex(theme.primary)
+                val hexSecondary = colorToHex(theme.secondary)
+                val hexBg = colorToHex(theme.background)
+                val hexSurface = colorToHex(theme.surface)
+                ThemeConfigManager.applyConfig(
+                    DynamicPlayerConfig(
+                        backgroundHex = hexBg,
+                        primaryAccentHex = hexPrimary,
+                        secondaryAccentHex = hexSecondary,
+                        surfaceHex = hexSurface,
+                        progressBarStartHex = hexSecondary,
+                        progressBarEndHex = hexPrimary
+                    ),
+                    context
+                )
+            }
+        }
+    }
+
+    private fun colorToHex(color: Color): String {
+        val r = (color.red * 255f).toInt().coerceIn(0, 255)
+        val g = (color.green * 255f).toInt().coerceIn(0, 255)
+        val b = (color.blue * 255f).toInt().coerceIn(0, 255)
+        return String.format("#%02X%02X%02X", r, g, b)
     }
 
     fun saveAndApplyAiTheme(
@@ -368,7 +506,16 @@ object ThemeManager {
         playerControlStyle: PlayerControlStyle = PlayerControlStyle.CLASSIC_VLC,
         buttonSize: ButtonSizeOption = ButtonSizeOption.STANDARD,
         cornerRadiusDp: Int = 16,
-        controlPanelBg: Color? = null
+        controlPanelBg: Color? = null,
+        buttonShape: String = "circle",
+        activeButtons: List<PlayerButtonType> = listOf(
+            PlayerButtonType.SEEK_BACK,
+            PlayerButtonType.PLAY_PAUSE,
+            PlayerButtonType.SEEK_FORWARD,
+            PlayerButtonType.ASPECT_RATIO,
+            PlayerButtonType.REPEAT_MODE,
+            PlayerButtonType.LOCK_CONTROLS
+        )
     ): AppCustomTheme {
         val custom = AppCustomTheme(
             id = "custom_ai",
@@ -383,7 +530,9 @@ object ThemeManager {
             playerControlStyle = playerControlStyle,
             buttonSize = buttonSize,
             cornerRadiusDp = cornerRadiusDp,
-            controlPanelBg = controlPanelBg
+            controlPanelBg = controlPanelBg,
+            buttonShape = buttonShape,
+            activeButtons = activeButtons
         )
         activeTheme = custom
 
@@ -400,6 +549,8 @@ object ThemeManager {
             .putString(KEY_CUSTOM_BTN_SIZE, buttonSize.name)
             .putInt(KEY_CUSTOM_CORNER_RADIUS, cornerRadiusDp)
             .putInt(KEY_CUSTOM_CTRL_BG, controlPanelBg?.let { colorToInt(it) } ?: 0)
+            .putString(KEY_CUSTOM_BTN_SHAPE, buttonShape)
+            .putString(KEY_CUSTOM_BUTTONS, activeButtons.joinToString(",") { it.name })
             .apply()
 
         return custom

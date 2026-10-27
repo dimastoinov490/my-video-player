@@ -5,6 +5,7 @@ import android.content.Context
 import android.media.MediaScannerConnection
 import android.net.Uri
 import android.util.Log
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.FragmentActivity
@@ -52,6 +53,8 @@ fun SecureVaultScreen(
     onOpenVaultFile: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    BackHandler { onBack() }
+
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val vaultRepository = remember { SecureVaultRepository(context) }

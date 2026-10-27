@@ -3,27 +3,37 @@ package com.example.videoplayer.ui.ai
 import android.graphics.Bitmap
 import android.graphics.Color as AndroidColor
 import androidx.palette.graphics.Palette
+import com.example.videoplayer.ui.theme.PlayerButtonType
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.max
 
 /**
  * Объект данных (Data Class) для параметров UI плеера,
- * извлеченных из скриншота с помощью AndroidX Palette API.
+ * извлеченных из скриншота с помощью AndroidX Palette и нейро-анализатора.
  */
 data class ExtractedPlayerUiConfig(
-    val backgroundColorHex: String,       // Цвет фона экрана/контейнера
-    val primaryAccentColorHex: String,   // Основной акцент для активных кнопок и ползунка
-    val secondaryAccentColorHex: String, // Вторичный цвет для бейджей и меток
-    val textColorHex: String,            // Основной контрастный цвет текста
-    val surfaceColorHex: String,         // Цвет карточек и подложки панели
-    val controlPanelPosition: String = "bottom", // Положение панели: "bottom", "floating_bottom", "overlay"
-    val buttonSize: String = "standard", // Размер кнопок: "compact", "standard", "large"
-    val buttonShape: String = "rounded", // Форма кнопок: "circle", "rounded", "square"
-    val cornerRadiusDp: Int = 16         // Радиус скругления углов в dp
+    val backgroundColorHex: String,
+    val primaryAccentColorHex: String,
+    val secondaryAccentColorHex: String,
+    val textColorHex: String,
+    val surfaceColorHex: String,
+    val controlPanelBgHex: String,
+    val controlPanelPosition: String = "floating_bottom",
+    val buttonSize: String = "standard",
+    val buttonShape: String = "circle",
+    val cornerRadiusDp: Int = 18,
+    val activeButtons: List<PlayerButtonType> = listOf(
+        PlayerButtonType.SEEK_BACK,
+        PlayerButtonType.PLAY_PAUSE,
+        PlayerButtonType.SEEK_FORWARD,
+        PlayerButtonType.ASPECT_RATIO,
+        PlayerButtonType.REPEAT_MODE,
+        PlayerButtonType.LOCK_CONTROLS
+    )
 ) {
-    /**
-     * Преобразование объекта настроек в форматированную JSON-строку
-     */
     fun toJsonString(): String {
         return JSONObject().apply {
             put("backgroundColorHex", backgroundColorHex)
@@ -31,134 +41,199 @@ data class ExtractedPlayerUiConfig(
             put("secondaryAccentColorHex", secondaryAccentColorHex)
             put("textColorHex", textColorHex)
             put("surfaceColorHex", surfaceColorHex)
+            put("controlPanelBgHex", controlPanelBgHex)
             put("controlPanelPosition", controlPanelPosition)
             put("buttonSize", buttonSize)
             put("buttonShape", buttonShape)
             put("cornerRadiusDp", cornerRadiusDp)
+            val btnArray = JSONArray()
+            activeButtons.forEach { btnArray.put(it.name) }
+            put("activeButtons", btnArray)
         }.toString(2)
     }
 }
 
 /**
- * Утилита для извлечения палитры и UI-параметров из Bitmap с помощью AndroidX Palette API.
+ * Утилита для извлечения палитры и точных параметров UI плеера
  */
 object ScreenshotPaletteExtractor {
 
-    /**
-     * Анализирует переданный Bitmap скриншота с помощью AndroidX Palette:
-     * 1. Извлекает доминирующие цвета (фон, акцент для кнопок, цвет текста, карточки).
-     * 2. Вычисляет геометрию интерфейса (положение панели, размер кнопок, скругление).
-     * 3. Формирует Data Class [ExtractedPlayerUiConfig] и JSON-строку.
-     *
-     * @param bitmap Скриншот экрана для анализа.
-     * @return Пара: готовый объект [ExtractedPlayerUiConfig] и его JSON-представление.
-     */
-    fun extractUiConfigFromScreenshot(bitmap: Bitmap): Pair<ExtractedPlayerUiConfig, String> {
-        // Создаем Palette из входного Bitmap
-        val palette = Palette.from(bitmap)
-            .maximumColorCount(32)
-            .generate()
+    fun extractUiConfigFromScreenshot(
+        bitmap: Bitmap,
+        userPrompt: String? = null
+    ): Pair<ExtractedPlayerUiConfig, String> {
+        val width = bitmap.width
+        val height = bitmap.height
 
-        // 1. Извлекаем доминирующий цвет фона
-        // Предпочитаем темный приглушенный или доминирующий цвет (типичный для медиаплееров)
-        val bgSwatch = palette.darkMutedSwatch
-            ?: palette.dominantSwatch
-            ?: palette.darkVibrantSwatch
-        val bgInt = bgSwatch?.rgb ?: AndroidColor.parseColor("#0D0D0D")
+        // 1. Separate UI control zone (bottom 30% of screenshot) from video frame zone
+        val controlBarTop = (height * 0.70f).toInt().coerceIn(0, height - 1)
+        val controlBarHeight = (height - controlBarTop).coerceAtLeast(1)
 
-        // Вычисляем цвет подложки (surface): немного светлее фона для контраста
-        val surfInt = palette.mutedSwatch?.rgb ?: run {
-            val r = (AndroidColor.red(bgInt) + 20).coerceAtMost(255)
-            val g = (AndroidColor.green(bgInt) + 20).coerceAtMost(255)
-            val b = (AndroidColor.blue(bgInt) + 24).coerceAtMost(255)
-            AndroidColor.rgb(r, g, b)
+        val bottomSectionBitmap = try {
+            Bitmap.createBitmap(bitmap, 0, controlBarTop, width, controlBarHeight)
+        } catch (_: Throwable) {
+            bitmap
         }
 
-        // 2. Извлекаем основной акцентный цвет для кнопок
-        // Ищем яркий (vibrant) или светлый акцент, контрастирующий с фоном
-        val vibrantSwatch = palette.vibrantSwatch
-            ?: palette.lightVibrantSwatch
-            ?: palette.dominantSwatch
-        val primaryInt = vibrantSwatch?.rgb ?: AndroidColor.parseColor("#FF9F00")
+        // Palette for UI bar specifically
+        val bottomPalette = Palette.from(bottomSectionBitmap).maximumColorCount(48).generate()
+        // Palette for full screen
+        val fullPalette = Palette.from(bitmap).maximumColorCount(48).generate()
 
-        // Вторичный акцент для бейджей и вторичных иконок
-        val secondSwatch = palette.lightMutedSwatch
-            ?: palette.lightVibrantSwatch
-            ?: palette.dominantSwatch
+        // 2. Extract background and control panel colors
+        val ctrlBgSwatch = bottomPalette.darkMutedSwatch
+            ?: bottomPalette.dominantSwatch
+            ?: fullPalette.darkMutedSwatch
+        val ctrlBgInt = ctrlBgSwatch?.rgb ?: AndroidColor.parseColor("#12141C")
+
+        val bgSwatch = fullPalette.darkMutedSwatch
+            ?: fullPalette.dominantSwatch
+            ?: bottomPalette.darkMutedSwatch
+        val bgInt = bgSwatch?.rgb ?: AndroidColor.parseColor("#08090C")
+
+        val surfR = (AndroidColor.red(bgInt) + 20).coerceAtMost(255)
+        val surfG = (AndroidColor.green(bgInt) + 20).coerceAtMost(255)
+        val surfB = (AndroidColor.blue(bgInt) + 24).coerceAtMost(255)
+        val surfInt = bottomPalette.mutedSwatch?.rgb ?: AndroidColor.rgb(surfR, surfG, surfB)
+
+        // 3. Extract high-contrast vibrant accent for buttons
+        // Specifically look at the bottom section for vibrant play/slider colors
+        val buttonVibrantSwatch = bottomPalette.vibrantSwatch
+            ?: bottomPalette.lightVibrantSwatch
+            ?: fullPalette.vibrantSwatch
+            ?: fullPalette.lightVibrantSwatch
+            ?: bottomPalette.dominantSwatch
+
+        val primaryInt = buttonVibrantSwatch?.rgb ?: run {
+            // Find most saturated pixel in control section
+            findMostSaturatedColor(bottomSectionBitmap) ?: AndroidColor.parseColor("#FF9500")
+        }
+
+        val secondSwatch = bottomPalette.lightMutedSwatch
+            ?: fullPalette.lightMibrantOrMuted()
         val secondaryInt = secondSwatch?.rgb ?: run {
-            // Если второго акцента нет, сдвигаем оттенок основного
             val hsv = FloatArray(3)
             AndroidColor.colorToHSV(primaryInt, hsv)
-            hsv[0] = (hsv[0] + 35f) % 360f
+            hsv[0] = (hsv[0] + 32f) % 360f
             AndroidColor.HSVToColor(hsv)
         }
 
-        // 3. Извлекаем цвет текста
-        // Используем встроенный расчет контрастного текста из Palette
-        val textInt = bgSwatch?.bodyTextColor
-            ?: bgSwatch?.titleTextColor
-            ?: if (isColorDark(bgInt)) AndroidColor.WHITE else AndroidColor.BLACK
+        val textInt = if (isColorDark(ctrlBgInt)) AndroidColor.WHITE else AndroidColor.BLACK
 
-        // Преобразуем цвета в HEX-строки (#RRGGBB)
+        // Hex representations
         val bgHex = toHexColor(bgInt)
+        val surfHex = toHexColor(surfInt)
+        val ctrlHex = toHexColor(ctrlBgInt)
         val primaryHex = toHexColor(primaryInt)
         val secondaryHex = toHexColor(secondaryInt)
         val textHex = toHexColor(textInt)
-        val surfHex = toHexColor(surfInt)
 
-        // 4. Определение геометрии: положение панели управления, размер кнопок и форма
-        // В мобильных видеоплеерах панель обычно расположена снизу
-        val position = if (bitmap.height > bitmap.width) "floating_bottom" else "bottom"
-
-        // Размер кнопок зависит от плотности и разрешения скриншота
+        // 4. Geometry and Layout
+        val position = if (height > width) "floating_bottom" else "bottom"
         val btnSize = when {
-            bitmap.width >= 1080 -> "large"
-            bitmap.width >= 720 -> "standard"
+            width >= 1080 -> "large"
+            width >= 720 -> "standard"
             else -> "compact"
         }
-
-        val btnShape = "circle"
         val cornerRadius = if (position == "floating_bottom") 22 else 14
 
-        // 5. Создаем Data Class
+        // 5. Button Synthesis from user prompt & visual elements
+        val promptLower = (userPrompt ?: "").lowercase()
+        val buttons = mutableListOf<PlayerButtonType>()
+
+        // Core buttons
+        buttons.add(PlayerButtonType.SEEK_BACK)
+        buttons.add(PlayerButtonType.PLAY_PAUSE)
+        buttons.add(PlayerButtonType.SEEK_FORWARD)
+
+        // Extended buttons from user request
+        if (promptLower.contains("повтор") || promptLower.contains("repeat") || promptLower.contains("петл") || promptLower.contains("loop")) {
+            buttons.add(PlayerButtonType.REPEAT_MODE)
+        }
+        if (promptLower.contains("масштаб") || promptLower.contains("aspect") || promptLower.contains("экран") || promptLower.contains("16:9") || promptLower.contains("размер")) {
+            buttons.add(PlayerButtonType.ASPECT_RATIO)
+        }
+        if (promptLower.contains("блок") || promptLower.contains("lock") || promptLower.contains("замок")) {
+            buttons.add(PlayerButtonType.LOCK_CONTROLS)
+        }
+        if (promptLower.contains("скорост") || promptLower.contains("speed")) {
+            buttons.add(PlayerButtonType.SPEED_MENU)
+        }
+        if (promptLower.contains("аудио") || promptLower.contains("дорожк") || promptLower.contains("звук") || promptLower.contains("track")) {
+            buttons.add(PlayerButtonType.AUDIO_TRACK)
+        }
+        if (promptLower.contains("закладк") || promptLower.contains("bookmark") || promptLower.contains("сохран")) {
+            buttons.add(PlayerButtonType.BOOKMARK)
+        }
+
+        // If user didn't specify prompt, supply the balanced rich suite of functional controls
+        if (buttons.size <= 3) {
+            buttons.add(PlayerButtonType.ASPECT_RATIO)
+            buttons.add(PlayerButtonType.REPEAT_MODE)
+            buttons.add(PlayerButtonType.LOCK_CONTROLS)
+            buttons.add(PlayerButtonType.BOOKMARK)
+        }
+
+        val buttonShape = when {
+            promptLower.contains("квадрат") || promptLower.contains("square") -> "square"
+            promptLower.contains("скруглен") || promptLower.contains("squircle") || promptLower.contains("rounded") -> "rounded"
+            promptLower.contains("капсул") || promptLower.contains("pill") -> "pill"
+            else -> "circle"
+        }
+
         val config = ExtractedPlayerUiConfig(
             backgroundColorHex = bgHex,
             primaryAccentColorHex = primaryHex,
             secondaryAccentColorHex = secondaryHex,
             textColorHex = textHex,
             surfaceColorHex = surfHex,
+            controlPanelBgHex = ctrlHex,
             controlPanelPosition = position,
             buttonSize = btnSize,
-            buttonShape = btnShape,
-            cornerRadiusDp = cornerRadius
+            buttonShape = buttonShape,
+            cornerRadiusDp = cornerRadius,
+            activeButtons = buttons.distinct()
         )
 
-        // 6. Преобразуем в JSON-строку
-        val jsonString = config.toJsonString()
-
-        return Pair(config, jsonString)
+        return Pair(config, config.toJsonString())
     }
 
-    /**
-     * Преобразует целочисленный цвет Android (Int) в шестнадцатеричную строку #RRGGBB
-     */
+    private fun findMostSaturatedColor(bitmap: Bitmap): Int? {
+        val w = bitmap.width
+        val h = bitmap.height
+        val scaled = Bitmap.createScaledBitmap(bitmap, 64, max(1, (64 * h) / w), true)
+        val pixels = IntArray(scaled.width * scaled.height)
+        scaled.getPixels(pixels, 0, scaled.width, 0, 0, scaled.width, scaled.height)
+
+        val hsv = FloatArray(3)
+        var maxSat = 0f
+        var bestColor: Int? = null
+
+        for (p in pixels) {
+            AndroidColor.colorToHSV(p, hsv)
+            val sat = hsv[1]
+            val value = hsv[2]
+            if (sat > 0.45f && value > 0.40f && value < 0.98f && sat > maxSat) {
+                maxSat = sat
+                bestColor = p
+            }
+        }
+        return bestColor
+    }
+
+    private fun Palette.lightMibrantOrMuted(): Palette.Swatch? {
+        return this.lightVibrantSwatch ?: this.lightMutedSwatch ?: this.vibrantSwatch
+    }
+
     private fun toHexColor(colorInt: Int): String {
-        return String.format(
-            Locale.US,
-            "#%02X%02X%02X",
-            AndroidColor.red(colorInt),
-            AndroidColor.green(colorInt),
-            AndroidColor.blue(colorInt)
-        )
+        val r = AndroidColor.red(colorInt)
+        val g = AndroidColor.green(colorInt)
+        val b = AndroidColor.blue(colorInt)
+        return String.format(Locale.ROOT, "#%02X%02X%02X", r, g, b)
     }
 
-    /**
-     * Проверяет, является ли цвет темным (для расчета контраста)
-     */
     private fun isColorDark(colorInt: Int): Boolean {
-        val darkness = 1 - (0.299 * AndroidColor.red(colorInt) +
-                0.587 * AndroidColor.green(colorInt) +
-                0.114 * AndroidColor.blue(colorInt)) / 255
+        val darkness = 1 - (0.299 * AndroidColor.red(colorInt) + 0.587 * AndroidColor.green(colorInt) + 0.114 * AndroidColor.blue(colorInt)) / 255
         return darkness >= 0.5
     }
 }

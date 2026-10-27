@@ -258,9 +258,7 @@ private fun getDirectoryItems(context: android.content.Context, path: String, ro
             if (files != null) {
                 for (f in files) {
                     if (f.name.startsWith(".") || f.name.endsWith(".enc") || f.name.contains("secure_vault")) continue
-                    val nameLower = f.name.lowercase(Locale.ROOT).trim()
-                    val pathLower = f.absolutePath.lowercase(Locale.ROOT).trim()
-                    if (hiddenItems.contains(nameLower) || vaultNames.contains(nameLower) || hiddenItems.contains(pathLower) || hiddenItems.any { pathLower.endsWith(it) }) continue
+                    if (secureRepo.isItemHidden(path = f.absolutePath, name = f.name)) continue
                     val isDir = f.isDirectory
                     val ext = f.extension.lowercase(Locale.ROOT)
                     val isVideo = ext in listOf("mp4", "mkv", "avi", "mov", "webm", "ts", "flv", "wmv", "3gp")

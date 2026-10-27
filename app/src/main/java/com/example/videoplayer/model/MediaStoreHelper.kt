@@ -76,11 +76,16 @@ object MediaStoreHelper {
                     val nameLower = displayName.lowercase().trim()
                     val titleLower = title.lowercase().trim()
                     val pathLower = dataPath?.lowercase()?.trim()
-                    val isHidden = hiddenItems.contains(nameLower) ||
-                            hiddenItems.contains(titleLower) ||
-                            (pathLower != null && (hiddenItems.contains(pathLower) || hiddenItems.any { pathLower.endsWith(it) })) ||
-                            vaultNames.contains(nameLower) ||
-                            vaultNames.contains(titleLower)
+                    val contentUriCandidate = if (id >= 0) {
+                        ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id).toString()
+                    } else null
+
+                    val isHidden = secureRepo.isItemHidden(
+                        id = if (id >= 0) id.toString() else null,
+                        uri = contentUriCandidate,
+                        path = dataPath,
+                        name = displayName
+                    ) || secureRepo.isItemHidden(name = title)
                     if (isHidden) {
                         continue // Hidden in secure vault
                     }
@@ -250,8 +255,7 @@ object MediaStoreHelper {
                     val size = if (sizeCol >= 0) it.getLong(sizeCol) else 0L
                     val dateAdded = if (dateCol >= 0) it.getLong(dateCol) else 0L
 
-                    val titleLower = title.lowercase().trim()
-                    if (hiddenItems.contains(titleLower) || vaultNames.contains(titleLower)) {
+                    if (secureRepo.isItemHidden(id = if (id >= 0) id.toString() else null, name = title)) {
                         continue
                     }
 

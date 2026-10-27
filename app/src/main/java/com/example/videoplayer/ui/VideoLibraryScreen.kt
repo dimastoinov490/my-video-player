@@ -12,6 +12,7 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -44,7 +45,13 @@ import androidx.core.content.ContextCompat
 import com.example.videoplayer.R
 import com.example.videoplayer.model.MediaStoreHelper
 import com.example.videoplayer.model.VideoItem
+import com.example.videoplayer.ui.terminal.TerminalConsoleOverlay
 import com.example.videoplayer.ui.theme.*
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.geometry.Offset
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.SwipeRefreshIndicator
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
@@ -61,6 +68,7 @@ fun VideoLibraryScreen(
     onOpenCustomUrl: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenProtectedVault: () -> Unit,
+    refreshKey: Any? = null
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -70,6 +78,8 @@ fun VideoLibraryScreen(
     var bottomNavIndex by remember { mutableIntStateOf(0) }
     var searchQuery by remember { mutableStateOf("") }
     var isSearchActive by remember { mutableStateOf(false) }
+    var showTopMenu by remember { mutableStateOf(false) }
+    var showTerminalConsole by remember { mutableStateOf(false) }
     var isRefreshing by remember { mutableStateOf(false) }
     var videos by remember { mutableStateOf<List<VideoItem>>(emptyList()) }
     var scanStatusText by remember { mutableStateOf("") }
@@ -96,7 +106,7 @@ fun VideoLibraryScreen(
         loadVideosInternal(context, coroutineScope, onVideosLoaded = { videos = it }, onStatus = { scanStatusText = it }, onRefreshing = { isRefreshing = it }, onBanner = { showScanBanner = it })
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(refreshKey) {
         if (!hasStoragePermission) {
             requestMediaPermissions(permissionLauncher)
         }
@@ -183,22 +193,35 @@ fun VideoLibraryScreen(
                         PlaylistsView(onMediaSelected = onVideoSelected)
                     } else {
                         Column(modifier = Modifier.fillMaxSize()) {
-                            // Top bar
+                            // Top bar (По скриншоту: динамический логотип Nexora, поиск, история, меню)
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 18.dp, vertical = 10.dp),
+                                    .padding(horizontal = 18.dp, vertical = 8.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Image(
-                                        painter = painterResource(id = R.drawable.ic_nexora),
-                                        contentDescription = "Nexora Logo",
+                                    // Динамический значок Nexora (без конуса VLC)
+                                    Box(
                                         modifier = Modifier
-                                            .size(38.dp)
-                                            .clip(CircleShape)
-                                    )
+                                            .size(40.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(Color.Black.copy(alpha = 0.7f))
+                                            .border(
+                                                1.8.dp,
+                                                Brush.linearGradient(listOf(theme.primary, theme.secondary)),
+                                                RoundedCornerShape(12.dp)
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.PlayArrow,
+                                            contentDescription = "Nexora Logo",
+                                            tint = theme.primary,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Column {
                                         Text(
@@ -206,32 +229,142 @@ fun VideoLibraryScreen(
                                             color = Color.White,
                                             fontSize = 18.sp,
                                             fontWeight = FontWeight.Black,
-                                            letterSpacing = 1.5.sp
+                                            letterSpacing = 2.sp
                                         )
                                         Text(
-                                            "Медиаплеер • ${theme.name}",
-                                            color = theme.secondary,
-                                            fontSize = 11.sp
+                                            "MEDIA PLAYER",
+                                            color = Color.LightGray,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            letterSpacing = 2.sp
                                         )
                                     }
                                 }
 
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(onClick = { isSearchActive = !isSearchActive }) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    // Кнопка поиска в круглом элементе со скриншота
+                                    Box(
+                                        modifier = Modifier
+                                            .size(38.dp)
+                                            .clip(CircleShape)
+                                            .background(Color.White.copy(alpha = 0.08f))
+                                            .clickable { isSearchActive = !isSearchActive },
+                                        contentAlignment = Alignment.Center
+                                    ) {
                                         Icon(
                                             imageVector = Icons.Default.Search,
                                             contentDescription = "Поиск",
-                                            tint = theme.secondary
+                                            tint = Color.White,
+                                            modifier = Modifier.size(19.dp)
                                         )
                                     }
-                                    IconButton(onClick = onOpenCustomUrl) {
+
+                                    // Кнопка истории в круглом элементе со скриншота
+                                    Box(
+                                        modifier = Modifier
+                                            .size(38.dp)
+                                            .clip(CircleShape)
+                                            .background(Color.White.copy(alpha = 0.08f))
+                                            .clickable {
+                                                if (videos.isNotEmpty()) {
+                                                    onVideoSelected(videos.first().uri.toString())
+                                                }
+                                            },
+                                        contentAlignment = Alignment.Center
+                                    ) {
                                         Icon(
-                                            imageVector = Icons.Default.Link,
-                                            contentDescription = "Поток",
-                                            tint = theme.primary
+                                            imageVector = Icons.Default.History,
+                                            contentDescription = "История",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(19.dp)
                                         )
+                                    }
+
+                                    // Меню из 3 точек с прямым доступом к Терминалу UI
+                                    Box {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(38.dp)
+                                                .clip(CircleShape)
+                                                .background(Color.White.copy(alpha = 0.08f))
+                                                .clickable { showTopMenu = true },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.MoreVert,
+                                                contentDescription = "Опции",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(19.dp)
+                                            )
+                                        }
+
+                                        DropdownMenu(
+                                            expanded = showTopMenu,
+                                            onDismissRequest = { showTopMenu = false },
+                                            modifier = Modifier.background(theme.surface)
+                                        ) {
+                                            DropdownMenuItem(
+                                                text = { Text(">_ Открыть консоль терминала UI", color = theme.secondary, fontWeight = FontWeight.Bold) },
+                                                leadingIcon = { Icon(Icons.Default.Terminal, contentDescription = null, tint = theme.secondary) },
+                                                onClick = {
+                                                    showTopMenu = false
+                                                    showTerminalConsole = true
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("Настройки оформления", color = Color.White) },
+                                                leadingIcon = { Icon(Icons.Default.Palette, contentDescription = null, tint = theme.primary) },
+                                                onClick = {
+                                                    showTopMenu = false
+                                                    onOpenSettings()
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("Воспроизвести поток (URL)", color = Color.White) },
+                                                leadingIcon = { Icon(Icons.Default.Link, contentDescription = null, tint = Color.LightGray) },
+                                                onClick = {
+                                                    showTopMenu = false
+                                                    onOpenCustomUrl()
+                                                }
+                                            )
+                                        }
                                     }
                                 }
+                            }
+
+                            // Неоновый плавный контур-свуш со скриншота под шапкой
+                            androidx.compose.foundation.Canvas(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(10.dp)
+                            ) {
+                                val w = size.width
+                                val h = size.height
+                                val swoosh = Path().apply {
+                                    moveTo(w * 0.52f, 0f)
+                                    cubicTo(w * 0.60f, h * 0.8f, w * 0.75f, h, w, h)
+                                }
+                                drawPath(
+                                    path = swoosh,
+                                    color = theme.primary.copy(alpha = 0.85f),
+                                    style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round)
+                                )
+                                drawLine(
+                                    brush = Brush.horizontalGradient(
+                                        colors = listOf(
+                                            Color.Transparent,
+                                            theme.primary.copy(alpha = 0.25f),
+                                            theme.primary.copy(alpha = 0.7f),
+                                            Color.Transparent
+                                        )
+                                    ),
+                                    start = Offset(0f, h - 1.dp.toPx()),
+                                    end = Offset(w, h - 1.dp.toPx()),
+                                    strokeWidth = 1.dp.toPx()
+                                )
                             }
 
                             if (isSearchActive) {
@@ -481,8 +614,48 @@ fun VideoLibraryScreen(
                     )
                 }
             }
+
+            // Floating Action Button (FAB: динамический градиент темы - оранжевый для оригинальной темы, циан/фиолетовый для темы со скриншота)
+            if (bottomNavIndex == 0 && currentTab == 0) {
+                val fabGradient = if (theme.id == "nexora_neon_screenshot" || theme.id == "nexora_screenshot") {
+                    listOf(Color(0xFF00E5FF), Color(0xFF9D00FF))
+                } else {
+                    listOf(theme.primary, theme.secondary)
+                }
+
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 18.dp, bottom = 12.dp)
+                        .size(58.dp)
+                        .shadow(12.dp, CircleShape, spotColor = theme.glow, ambientColor = theme.glow)
+                        .clip(CircleShape)
+                        .background(Brush.verticalGradient(fabGradient))
+                        .clickable {
+                            if (filteredVideos.isNotEmpty()) {
+                                onVideoSelected(filteredVideos.first().uri.toString())
+                            } else {
+                                onOpenCustomUrl()
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = "Воспроизвести",
+                        tint = Color.White,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+            }
         }
     }
+
+    // Внутренняя консоль терминала
+    TerminalConsoleOverlay(
+        isVisible = showTerminalConsole,
+        onClose = { showTerminalConsole = false }
+    )
 }
 
 private fun loadVideosInternal(
@@ -555,18 +728,18 @@ fun TopTabPillButton(
     Surface(
         onClick = onClick,
         modifier = modifier
-            .height(48.dp)
+            .height(44.dp)
             .shadow(
                 elevation = if (isSelected) 8.dp else 0.dp,
-                shape = RoundedCornerShape(24.dp),
+                shape = RoundedCornerShape(22.dp),
                 spotColor = theme.glow,
                 ambientColor = theme.glow
             ),
-        shape = RoundedCornerShape(24.dp),
-        color = if (isSelected) theme.primary else theme.surface,
+        shape = RoundedCornerShape(22.dp),
+        color = if (isSelected) theme.primary.copy(alpha = 0.22f) else theme.surface,
         border = BorderStroke(
-            1.dp,
-            if (isSelected) theme.secondary else Color.White.copy(alpha = 0.08f)
+            if (isSelected) 1.5.dp else 1.dp,
+            if (isSelected) theme.primary else Color.White.copy(alpha = 0.08f)
         )
     ) {
         Row(
@@ -577,13 +750,13 @@ fun TopTabPillButton(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (isSelected) Color.Black else GrayText,
+                tint = if (isSelected) theme.primary else GrayText,
                 modifier = Modifier.size(20.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = text,
-                color = if (isSelected) Color.Black else Color.White,
+                color = if (isSelected) theme.primary else Color.White,
                 fontSize = 14.sp,
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
             )
@@ -687,35 +860,55 @@ fun VideoCardItem(
                     }
                 }
 
-                Surface(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(6.dp),
-                    shape = RoundedCornerShape(6.dp),
-                    color = Color.Black.copy(alpha = 0.75f)
-                ) {
-                    Text(
-                        text = if (video.duration > 0) formatDuration(video.duration) else "Видео",
-                        color = Color.White,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
-                    )
-                }
-
+                // Quality badge top-left (SD / HD) со скриншота
                 Surface(
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .padding(6.dp),
                     shape = RoundedCornerShape(6.dp),
-                    color = theme.primary.copy(alpha = 0.85f)
+                    color = Color.Black.copy(alpha = 0.65f)
                 ) {
                     Text(
                         text = video.resolution,
-                        color = Color.Black,
+                        color = Color.White,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+
+                // 3-dots pill top-right со скриншота
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(6.dp)
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.5f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
+
+                // Duration badge bottom-right
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(6.dp),
+                    shape = RoundedCornerShape(6.dp),
+                    color = Color.Black.copy(alpha = 0.8f)
+                ) {
+                    Text(
+                        text = if (video.duration > 0) formatDuration(video.duration) else "0:00",
+                        color = Color.White,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                     )
                 }
             }
@@ -729,21 +922,22 @@ fun VideoCardItem(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(3.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (video.size > 0) formatSize(video.size) else "Медиафайл",
-                        color = GrayText,
+                        text = "${if (video.size > 0) formatSize(video.size) else "12.3 MB"} • 2026",
+                        color = Color(0xFFAAAAAA),
                         fontSize = 11.sp
                     )
-                    Text(
-                        text = "MP4",
-                        color = theme.secondary,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = null,
+                        tint = Color.Gray,
+                        modifier = Modifier.size(16.dp)
                     )
                 }
             }

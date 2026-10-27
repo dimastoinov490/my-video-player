@@ -23,6 +23,7 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ThemeManager.init(this)
+        ThemeConfigManager.init(this)
         enableEdgeToEdge()
 
         setContent {
@@ -36,6 +37,7 @@ class MainActivity : FragmentActivity() {
                     var showCustomUrlDialog by remember { mutableStateOf(false) }
                     var showSettingsScreen by remember { mutableStateOf(false) }
                     var showProtectedVault by remember { mutableStateOf(false) }
+                    var vaultClosedKey by remember { mutableIntStateOf(0) }
 
                     if (selectedVideoUri != null) {
                         PlayerScreen(
@@ -48,7 +50,10 @@ class MainActivity : FragmentActivity() {
                         )
                     } else if (showProtectedVault) {
                         SecureVaultScreen(
-                            onBack = { showProtectedVault = false },
+                            onBack = {
+                                showProtectedVault = false
+                                vaultClosedKey++
+                            },
                             onOpenVaultFile = { path -> selectedVideoUri = path }
                         )
                     } else {
@@ -56,7 +61,8 @@ class MainActivity : FragmentActivity() {
                             onVideoSelected = { uri -> selectedVideoUri = uri },
                             onOpenCustomUrl = { showCustomUrlDialog = true },
                             onOpenSettings = { showSettingsScreen = true },
-                            onOpenProtectedVault = { showProtectedVault = true }
+                            onOpenProtectedVault = { showProtectedVault = true },
+                            refreshKey = vaultClosedKey
                         )
 
                         if (showCustomUrlDialog) {

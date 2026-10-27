@@ -14,6 +14,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,10 +25,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -38,6 +41,7 @@ import com.example.videoplayer.service.WifiDirectInfo
 import com.example.videoplayer.service.WifiDirectManager
 import com.example.videoplayer.ui.ai.AiDesignStudioDialog
 import com.example.videoplayer.ui.ai.UiTemplateFromScreenshotDialog
+import com.example.videoplayer.ui.terminal.TerminalConsoleOverlay
 import com.example.videoplayer.ui.theme.*
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
@@ -91,6 +95,7 @@ fun MoreHubView(
     var showDirectModal by remember { mutableStateOf(false) }
     var showAiStudioDialog by remember { mutableStateOf(false) }
     var showScreenshotCloneDialog by remember { mutableStateOf(false) }
+    var showTerminalConsole by remember { mutableStateOf(false) }
 
     var screenshotMainUri by remember { mutableStateOf<Uri?>(null) }
     var screenshotPlayerUri by remember { mutableStateOf<Uri?>(null) }
@@ -174,8 +179,9 @@ fun MoreHubView(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 20.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column {
                 Text(
@@ -190,6 +196,29 @@ fun MoreHubView(
                     fontSize = 12.sp
                 )
             }
+
+            // Прямая кнопка вызова терминала в шапке
+            Button(
+                onClick = { showTerminalConsole = true },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF).copy(alpha = 0.2f)),
+                border = BorderStroke(1.5.dp, Color(0xFF00E5FF)),
+                shape = RoundedCornerShape(12.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Terminal,
+                    contentDescription = "Консоль UI",
+                    tint = Color(0xFF00E5FF),
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    ">_ Консоль",
+                    color = Color(0xFF00E5FF),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
 
         LazyColumn(
@@ -199,6 +228,119 @@ fun MoreHubView(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            // ЭЛЕМЕНТ 1: ГЛАВНАЯ КАРТОЧКА КОНСОЛИ ТЕРМИНАЛА (JSON & ДЕТЕКТОР)
+            item {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showTerminalConsole = true },
+                    shape = RoundedCornerShape(22.dp),
+                    color = Color(0xFF0B101D),
+                    border = BorderStroke(2.dp, Color(0xFF00E5FF))
+                ) {
+                    Column(modifier = Modifier.padding(18.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(52.dp)
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(
+                                            Brush.linearGradient(
+                                                listOf(Color(0xFF9D00FF), Color(0xFF00E5FF))
+                                            )
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Terminal,
+                                        contentDescription = "Консоль",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                }
+
+                                Column {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            "КОНСОЛЬ ТЕРМИНАЛА UI",
+                                            color = Color.White,
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Surface(
+                                            shape = RoundedCornerShape(4.dp),
+                                            color = Color(0xFF00E5FF).copy(alpha = 0.25f)
+                                        ) {
+                                            Text(
+                                                ">_ ACTIVE",
+                                                color = Color(0xFF00E5FF),
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Black,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                    Text(
+                                        "Динамическая смена UI, JSON-пайплайн и YOLO инжекция",
+                                        color = Color(0xFF00E5FF),
+                                        fontSize = 11.sp,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFF05070D)
+                        ) {
+                            Text(
+                                "root@nexora:~# load_preset screenshot_neon\n✓ JSON pipeline applied (0ms, no APK rebuild)",
+                                color = Color(0xFF39FF14),
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Button(
+                            onClick = { showTerminalConsole = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF)),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Code,
+                                contentDescription = null,
+                                tint = Color.Black,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "ОТКРЫТЬ КОНСОЛЬ ТЕРМИНАЛА",
+                                color = Color.Black,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
+                }
+            }
+
             // Settings card for HTTP Server & Broadcast placed directly above HTTP Server
             item {
                 Surface(
@@ -875,6 +1017,11 @@ fun MoreHubView(
             onDismiss = { showAiStudioDialog = false }
         )
     }
+
+    TerminalConsoleOverlay(
+        isVisible = showTerminalConsole,
+        onClose = { showTerminalConsole = false }
+    )
 
     // Modal with Wi-Fi Direct and File Download QR
     if (showDirectModal) {

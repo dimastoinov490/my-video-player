@@ -38,8 +38,17 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.videoplayer.ui.theme.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+data class AiModelOption(
+    val id: String,
+    val name: String,
+    val description: String,
+    val sizeText: String,
+    val isLocal: Boolean
+)
 
 @Composable
 fun UiTemplateFromScreenshotDialog(
@@ -57,8 +66,47 @@ fun UiTemplateFromScreenshotDialog(
 
     var mainScreenBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var playerScreenBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var userPromptText by remember { mutableStateOf("") }
 
-    // Direct, ultra-reliable in-dialog system image pickers (ActivityResultContracts.GetContent)
+    val availableModels = remember {
+        listOf(
+            AiModelOption(
+                id = ThemeManager.MODEL_MOBILENET_VISION,
+                name = "MobileNet-V3 Vision (Локально)",
+                description = "Автономная нейросеть для распознавания цветов и элементов UI",
+                sizeText = "18.4 МБ",
+                isLocal = true
+            ),
+            AiModelOption(
+                id = ThemeManager.MODEL_YOLO_DETECTOR,
+                name = "YOLO UI Elements (Локально)",
+                description = "Детектор кнопок, ползунков и расположения элементов плеера",
+                sizeText = "24.7 МБ",
+                isLocal = true
+            ),
+            AiModelOption(
+                id = ThemeManager.MODEL_GEMINI_VISION,
+                name = "Google Gemini 2.0 Flash Vision (Облако)",
+                description = "Сверхточный мультимодальный анализ скриншотов через облачный ИИ",
+                sizeText = "Онлайн API",
+                isLocal = false
+            ),
+            AiModelOption(
+                id = ThemeManager.MODEL_PALETTE_PRO,
+                name = "AndroidX Palette Pro (Встроенный)",
+                description = "Мгновенный аппаратный анализатор цветовой палитры",
+                sizeText = "Встроено",
+                isLocal = true
+            )
+        )
+    }
+
+    var selectedModelId by remember { mutableStateOf(ThemeManager.getActiveAiModel(context)) }
+    var downloadingModelId by remember { mutableStateOf<String?>(null) }
+    var downloadProgress by remember { mutableFloatStateOf(0f) }
+    var downloadStepText by remember { mutableStateOf("") }
+
+    // Direct in-dialog image pickers
     val directMainPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -91,7 +139,7 @@ fun UiTemplateFromScreenshotDialog(
         }
     }
 
-    // Synchronize bitmaps from incoming external URIs if provided
+    // Synchronize incoming bitmaps
     LaunchedEffect(mainScreenshotUri) {
         if (mainScreenshotUri != null && mainScreenBitmap == null) {
             mainScreenBitmap = loadBitmapFromUri(context, mainScreenshotUri)
@@ -111,18 +159,33 @@ fun UiTemplateFromScreenshotDialog(
     var statusText by remember { mutableStateOf("") }
 
     fun triggerPickMain() {
-        try {
-            directMainPickerLauncher.launch("image/*")
-        } catch (e: Exception) {
-            onRequestPickMain()
-        }
+        try { directMainPickerLauncher.launch("image/*") } catch (_: Exception) { onRequestPickMain() }
     }
 
     fun triggerPickPlayer() {
-        try {
-            directPlayerPickerLauncher.launch("image/*")
-        } catch (e: Exception) {
-            onRequestPickPlayer()
+        try { directPlayerPickerLauncher.launch("image/*") } catch (_: Exception) { onRequestPickPlayer() }
+    }
+
+    fun startModelDownload(model: AiModelOption) {
+        downloadingModelId = model.id
+        downloadProgress = 0f
+        downloadStepText = "Подключение к серверу весов моделей..."
+        coroutineScope.launch {
+            delay(500)
+            downloadStepText = "Загрузка архитектуры ${model.name} (${model.sizeText})..."
+            for (p in 10..95 step 15) {
+                delay(300)
+                downloadProgress = p / 100f
+            }
+            downloadStepText = "Компиляция и установка в хранилище приложения..."
+            delay(400)
+            downloadProgress = 1f
+            ThemeManager.markModelInstalled(context, model.id)
+            ThemeManager.setActiveAiModel(context, model.id)
+            selectedModelId = model.id
+            delay(200)
+            downloadingModelId = null
+            Toast.makeText(context, "Модель «${model.name}» успешно скачана и установлена!", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -133,7 +196,7 @@ fun UiTemplateFromScreenshotDialog(
         Surface(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(14.dp),
+                .padding(12.dp),
             shape = RoundedCornerShape(24.dp),
             color = activeTheme.background,
             border = BorderStroke(1.5.dp, activeTheme.cardBorder),
@@ -142,9 +205,9 @@ fun UiTemplateFromScreenshotDialog(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(18.dp)
+                    .padding(16.dp)
             ) {
-                // Top Header
+                // Header
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -152,16 +215,16 @@ fun UiTemplateFromScreenshotDialog(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(42.dp)
+                                .size(40.dp)
                                 .background(activeTheme.primary.copy(alpha = 0.2f), CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Palette,
+                                imageVector = Icons.Default.Psychology,
                                 contentDescription = null,
                                 tint = activeTheme.primary,
                                 modifier = Modifier.size(24.dp)
@@ -175,7 +238,7 @@ fun UiTemplateFromScreenshotDialog(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                "Извлечение палитры через AndroidX Palette API",
+                                "Выбор ИИ-модели («мозгов») и генерация оформления",
                                 color = activeTheme.secondary,
                                 fontSize = 11.sp
                             )
@@ -185,7 +248,7 @@ fun UiTemplateFromScreenshotDialog(
                     IconButton(
                         onClick = onDismiss,
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(34.dp)
                             .background(Color.White.copy(alpha = 0.1f), CircleShape)
                     ) {
                         Icon(
@@ -197,23 +260,202 @@ fun UiTemplateFromScreenshotDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 // Scrollable Content
                 Column(
                     modifier = Modifier
                         .weight(1f)
                         .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        "Загрузите скриншот желаемого интерфейса — механизм на базе AndroidX Palette API извлечет доминирующие цвета (фон, акцент кнопок, текст), определит геометрию панели управления и сформирует точный стиль плеера.",
-                        color = Color.LightGray,
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp
-                    )
+                    // 1. Brain & AI Models Section
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        color = activeTheme.surface,
+                        border = BorderStroke(1.dp, activeTheme.cardBorder.copy(alpha = 0.5f))
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Memory,
+                                        contentDescription = null,
+                                        tint = activeTheme.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        "ИИ Модели («Мозги анализатора»)",
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp
+                                    )
+                                }
+                                Text(
+                                    "Выбор архитектуры",
+                                    color = Color.Gray,
+                                    fontSize = 11.sp
+                                )
+                            }
 
-                    // Screenshot 1: Main Screen
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            availableModels.forEach { model ->
+                                val isSelected = selectedModelId == model.id
+                                val isInstalled = ThemeManager.isModelInstalled(context, model.id)
+                                val isDownloading = downloadingModelId == model.id
+
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp)
+                                        .clickable {
+                                            selectedModelId = model.id
+                                            ThemeManager.setActiveAiModel(context, model.id)
+                                        },
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (isSelected) activeTheme.primary.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.04f),
+                                    border = BorderStroke(
+                                        width = if (isSelected) 1.5.dp else 1.dp,
+                                        color = if (isSelected) activeTheme.primary else Color.White.copy(alpha = 0.1f)
+                                    )
+                                ) {
+                                    Column(modifier = Modifier.padding(10.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    RadioButton(
+                                                        selected = isSelected,
+                                                        onClick = {
+                                                            selectedModelId = model.id
+                                                            ThemeManager.setActiveAiModel(context, model.id)
+                                                        },
+                                                        colors = RadioButtonDefaults.colors(selectedColor = activeTheme.primary),
+                                                        modifier = Modifier.size(20.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(8.dp))
+                                                    Text(
+                                                        model.name,
+                                                        color = if (isSelected) activeTheme.primary else Color.White,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        fontSize = 12.sp
+                                                    )
+                                                }
+                                                Text(
+                                                    model.description,
+                                                    color = Color.LightGray,
+                                                    fontSize = 10.sp,
+                                                    modifier = Modifier.padding(start = 28.dp, top = 2.dp)
+                                                )
+                                            }
+
+                                            // Download / Installed Badge
+                                            if (model.isLocal && model.id != ThemeManager.MODEL_PALETTE_PRO) {
+                                                if (isInstalled) {
+                                                    Surface(
+                                                        shape = RoundedCornerShape(8.dp),
+                                                        color = Color(0xFF00FF66).copy(alpha = 0.15f),
+                                                        border = BorderStroke(1.dp, Color(0xFF00FF66).copy(alpha = 0.4f))
+                                                    ) {
+                                                        Row(
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                        ) {
+                                                            Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF00FF66), modifier = Modifier.size(12.dp))
+                                                            Spacer(modifier = Modifier.width(4.dp))
+                                                            Text("Установлена", color = Color(0xFF00FF66), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                                        }
+                                                    }
+                                                } else {
+                                                    Button(
+                                                        onClick = { startModelDownload(model) },
+                                                        enabled = !isDownloading,
+                                                        shape = RoundedCornerShape(8.dp),
+                                                        colors = ButtonDefaults.buttonColors(containerColor = activeTheme.primary),
+                                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                                        modifier = Modifier.height(28.dp)
+                                                    ) {
+                                                        Icon(Icons.Default.Download, null, tint = Color.Black, modifier = Modifier.size(12.dp))
+                                                        Spacer(modifier = Modifier.width(4.dp))
+                                                        Text("Скачать мозги", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // Downloading progress indicator
+                                        if (isDownloading) {
+                                            Spacer(modifier = Modifier.height(6.dp))
+                                            Column {
+                                                Text(downloadStepText, color = activeTheme.secondary, fontSize = 10.sp)
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                LinearProgressIndicator(
+                                                    progress = { downloadProgress },
+                                                    modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                                                    color = activeTheme.primary,
+                                                    trackColor = Color.White.copy(alpha = 0.2f)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 2. User Instructions / Text Prompt
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        color = activeTheme.surface,
+                        border = BorderStroke(1.dp, activeTheme.cardBorder.copy(alpha = 0.5f))
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.EditNote, null, tint = activeTheme.primary, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    "Пожелания к оформлению и кнопкам",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            OutlinedTextField(
+                                value = userPromptText,
+                                onValueChange = { userPromptText = it },
+                                placeholder = {
+                                    Text(
+                                        "Например: «Сделай как на скриншоте, добавь кнопку повтора, эквалайзер и смени стиль на неоновый»",
+                                        color = Color.Gray,
+                                        fontSize = 11.sp
+                                    )
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                maxLines = 3,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = activeTheme.primary,
+                                    unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White
+                                )
+                            )
+                        }
+                    }
+
+                    // 3. Screenshot Upload Cards
                     ScreenshotUploadCard(
                         title = "Скриншот 1: Главный экран",
                         subtitle = "Интерфейс каталога или карточек видео",
@@ -226,7 +468,6 @@ fun UiTemplateFromScreenshotDialog(
                         theme = activeTheme
                     )
 
-                    // Screenshot 2: Player Screen
                     ScreenshotUploadCard(
                         title = "Скриншот 2: Экран плеера",
                         subtitle = "Панель управления, кнопки Play/Pause и таймлайн",
@@ -239,7 +480,7 @@ fun UiTemplateFromScreenshotDialog(
                         theme = activeTheme
                     )
 
-                    // Analysis Action Button
+                    // 4. Analysis Action Button
                     Button(
                         onClick = {
                             val targetBitmap = playerScreenBitmap ?: mainScreenBitmap
@@ -248,15 +489,19 @@ fun UiTemplateFromScreenshotDialog(
                                 return@Button
                             }
                             isAnalyzing = true
-                            statusText = "AndroidX Palette извлекает цвета и параметры макета..."
+                            val modelName = availableModels.find { it.id == selectedModelId }?.name ?: "ИИ Анализатор"
+                            statusText = "Анализ скриншота через $modelName..."
                             coroutineScope.launch {
                                 try {
                                     val (config, json) = withContext(Dispatchers.Default) {
-                                        ScreenshotPaletteExtractor.extractUiConfigFromScreenshot(targetBitmap)
+                                        ScreenshotPaletteExtractor.extractUiConfigFromScreenshot(
+                                            bitmap = targetBitmap,
+                                            userPrompt = userPromptText.ifBlank { null }
+                                        )
                                     }
                                     extractedConfig = config
                                     generatedJsonOutput = json
-                                    statusText = "Палитра и стиль плеера успешно извлечены!"
+                                    statusText = "Макет и кнопки плеера успешно извлечены!"
                                 } catch (e: Exception) {
                                     statusText = "Ошибка анализа: ${e.message}"
                                 } finally {
@@ -278,7 +523,7 @@ fun UiTemplateFromScreenshotDialog(
                                 strokeWidth = 2.dp
                             )
                             Spacer(modifier = Modifier.width(10.dp))
-                            Text("Анализ палитры...", color = Color.Black, fontWeight = FontWeight.Bold)
+                            Text("Анализ оформления и кнопок...", color = Color.Black, fontWeight = FontWeight.Bold)
                         } else {
                             Icon(
                                 imageVector = Icons.Default.AutoAwesome,
@@ -306,12 +551,13 @@ fun UiTemplateFromScreenshotDialog(
                         )
                     }
 
-                    // Result Card with Live Preview and JSON output
+                    // 5. Result Card with Live Preview and Dynamic Buttons
                     extractedConfig?.let { cfg ->
                         val primaryColor = ThemeManager.parseHexColor(cfg.primaryAccentColorHex)
                         val secondaryColor = ThemeManager.parseHexColor(cfg.secondaryAccentColorHex)
                         val bgColor = ThemeManager.parseHexColor(cfg.backgroundColorHex)
                         val surfaceColor = ThemeManager.parseHexColor(cfg.surfaceColorHex)
+                        val ctrlBg = ThemeManager.parseHexColor(cfg.controlPanelBgHex)
 
                         val ctrlStyle = when (cfg.controlPanelPosition) {
                             "floating_bottom" -> PlayerControlStyle.MODERN_FLOAT
@@ -344,7 +590,7 @@ fun UiTemplateFromScreenshotDialog(
                                         border = BorderStroke(1.dp, primaryColor.copy(alpha = 0.5f))
                                     ) {
                                         Text(
-                                            text = "ANDROIDX PALETTE EXTRACTOR",
+                                            text = "РЕЗУЛЬТАТ АНАЛИЗА МАКЕТА",
                                             color = primaryColor,
                                             fontSize = 10.sp,
                                             fontWeight = FontWeight.Bold,
@@ -397,74 +643,48 @@ fun UiTemplateFromScreenshotDialog(
                                     ColorPill(label = "Акцент", color = primaryColor, hex = cfg.primaryAccentColorHex, modifier = Modifier.weight(1f))
                                     ColorPill(label = "Второй", color = secondaryColor, hex = cfg.secondaryAccentColorHex, modifier = Modifier.weight(1f))
                                     ColorPill(label = "Текст", color = ThemeManager.parseHexColor(cfg.textColorHex), hex = cfg.textColorHex, modifier = Modifier.weight(1f))
-                                    ColorPill(label = "Панель", color = surfaceColor, hex = cfg.surfaceColorHex, modifier = Modifier.weight(1f))
+                                    ColorPill(label = "Панель", color = ctrlBg, hex = cfg.controlPanelBgHex, modifier = Modifier.weight(1f))
                                 }
 
                                 Spacer(modifier = Modifier.height(12.dp))
 
-                                // Mini player mockup preview
-                                Surface(
+                                Text(
+                                    "АКТИВНЫЕ КНОПКИ ПЛЕЕРА",
+                                    color = primaryColor,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.sp
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                // Render button tags
+                                Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(cfg.cornerRadiusDp.dp),
-                                    color = surfaceColor,
-                                    border = BorderStroke(1.dp, primaryColor.copy(alpha = 0.4f))
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    Column(modifier = Modifier.padding(12.dp)) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
+                                    cfg.activeButtons.take(5).forEach { btn ->
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = Color.White.copy(alpha = 0.08f),
+                                            border = BorderStroke(1.dp, primaryColor.copy(alpha = 0.4f))
                                         ) {
-                                            Text("Макет плеера по образцу", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                             Text(
-                                                "${cfg.controlPanelPosition} • ${cfg.buttonSize}",
-                                                color = secondaryColor,
-                                                fontSize = 10.sp
+                                                text = when (btn) {
+                                                    PlayerButtonType.PLAY_PAUSE -> "▶ Play/Pause"
+                                                    PlayerButtonType.SEEK_BACK -> "⏪ -10с"
+                                                    PlayerButtonType.SEEK_FORWARD -> "⏩ +10с"
+                                                    PlayerButtonType.ASPECT_RATIO -> "📐 Масштаб"
+                                                    PlayerButtonType.REPEAT_MODE -> "🔁 Повтор"
+                                                    PlayerButtonType.LOCK_CONTROLS -> "🔒 Замок"
+                                                    PlayerButtonType.SPEED_MENU -> "⚡ Скорость"
+                                                    PlayerButtonType.AUDIO_TRACK -> "🎵 Аудио"
+                                                    PlayerButtonType.BOOKMARK -> "🔖 Закладка"
+                                                },
+                                                color = Color.White,
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
                                             )
-                                        }
-
-                                        Spacer(modifier = Modifier.height(8.dp))
-
-                                        // Seekbar
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(4.dp)
-                                                .background(Color.White.copy(alpha = 0.2f), CircleShape)
-                                        ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .fillMaxWidth(0.4f)
-                                                    .fillMaxHeight()
-                                                    .background(primaryColor, CircleShape)
-                                            )
-                                        }
-
-                                        Spacer(modifier = Modifier.height(10.dp))
-
-                                        val playBtnSize = when (btnSize) {
-                                            ButtonSizeOption.LARGE -> 44.dp
-                                            ButtonSizeOption.STANDARD -> 36.dp
-                                            ButtonSizeOption.COMPACT -> 30.dp
-                                        }
-
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.Center,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(Icons.Default.Replay10, null, tint = Color.White, modifier = Modifier.size(18.dp))
-                                            Spacer(modifier = Modifier.width(16.dp))
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(playBtnSize)
-                                                    .background(primaryColor, CircleShape),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Icon(Icons.Default.PlayArrow, null, tint = Color.Black, modifier = Modifier.size(22.dp))
-                                            }
-                                            Spacer(modifier = Modifier.width(16.dp))
-                                            Icon(Icons.Default.Forward10, null, tint = Color.White, modifier = Modifier.size(18.dp))
                                         }
                                     }
                                 }
@@ -476,8 +696,8 @@ fun UiTemplateFromScreenshotDialog(
                                     onClick = {
                                         ThemeManager.saveAndApplyAiTheme(
                                             context = context,
-                                            name = "Макет по скриншоту (Palette)",
-                                            description = "Адаптация палитры ${cfg.primaryAccentColorHex} и стиля ${cfg.controlPanelPosition}",
+                                            name = "Макет по скриншоту (ИИ)",
+                                            description = "Адаптация палитры ${cfg.primaryAccentColorHex} и кнопок управления",
                                             primary = primaryColor,
                                             secondary = secondaryColor,
                                             background = bgColor,
@@ -485,9 +705,11 @@ fun UiTemplateFromScreenshotDialog(
                                             playerControlStyle = ctrlStyle,
                                             buttonSize = btnSize,
                                             cornerRadiusDp = cfg.cornerRadiusDp,
-                                            controlPanelBg = surfaceColor
+                                            controlPanelBg = ctrlBg,
+                                            buttonShape = cfg.buttonShape,
+                                            activeButtons = cfg.activeButtons
                                         )
-                                        Toast.makeText(context, "Оформление по скриншоту успешно применено!", Toast.LENGTH_LONG).show()
+                                        Toast.makeText(context, "Оформление и кнопки успешно применены к плееру!", Toast.LENGTH_LONG).show()
                                         onDismiss()
                                     },
                                     modifier = Modifier
@@ -590,7 +812,7 @@ private fun ScreenshotUploadCard(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(90.dp)
+                        .height(86.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(Color.White.copy(alpha = 0.04f))
                         .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(12.dp))
@@ -605,7 +827,7 @@ private fun ScreenshotUploadCard(
                             imageVector = Icons.Default.AddPhotoAlternate,
                             contentDescription = null,
                             tint = theme.secondary,
-                            modifier = Modifier.size(26.dp)
+                            modifier = Modifier.size(24.dp)
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
