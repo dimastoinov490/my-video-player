@@ -101,14 +101,20 @@ class VlcPlayerManager(private val context: Context) {
             return
         }
 
+        val targetUrl = if (urlOrUri.startsWith("sample://")) {
+            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+        } else {
+            urlOrUri
+        }
+
         try {
             try {
                 currentPfd?.close()
             } catch (_: Throwable) {}
             currentPfd = null
 
-            val media = if (urlOrUri.startsWith("content://")) {
-                val uri = Uri.parse(urlOrUri)
+            val media = if (targetUrl.startsWith("content://")) {
+                val uri = Uri.parse(targetUrl)
                 val pfd = try {
                     context.contentResolver.openFileDescriptor(uri, "r")
                 } catch (e: Throwable) {

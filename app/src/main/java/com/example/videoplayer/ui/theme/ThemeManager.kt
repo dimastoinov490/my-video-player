@@ -72,7 +72,7 @@ object ThemePresets {
         name = "Оригинальная тема (Оранжевый неон)",
         description = "Фирменный оранжевый неон Nexora / VLC: янтарный акцент (#FF7A00), яркий оранжевый FAB и теплые контуры",
         primary = Color(0xFFFF7A00),
-        secondary = Color(0xFFFFAA00),
+        secondary = Color(0xFFFF7A00),
         background = Color(0xFF0A0C10),
         surface = Color(0xFF141822),
         cardBorder = Color(0x55FF7A00),

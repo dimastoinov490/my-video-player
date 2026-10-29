@@ -78,6 +78,17 @@ enum class VideoRepeatMode(val label: String) {
 
 fun resolveVideoTitle(context: Context, uriString: String): String {
     try {
+        if (uriString.startsWith("sample://")) {
+            return when {
+                uriString.contains("western_full") -> "Django_osvobojdenn.mp4"
+                uriString.contains("western") -> "2026 09 19 172839.mp4"
+                uriString.contains("scifi_full") -> "Solo A Star Wars Story.mp4"
+                uriString.contains("scifi") -> "Izgoi_Odin_Zvyozdnyy.mp4"
+                uriString.contains("nature") -> "Природа_4K.mp4"
+                uriString.contains("cyber") -> "Киберпанк.mp4"
+                else -> "Демо_видео.mp4"
+            }
+        }
         if (uriString.startsWith("content://")) {
             val uri = Uri.parse(uriString)
             context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
@@ -293,10 +304,10 @@ fun PlayerScreen(
                     factory = { ctx ->
                         VideoView(ctx).apply {
                             nativeVideoView = this
-                            val uri = if (videoUri.startsWith("content://") || videoUri.startsWith("file://") || videoUri.startsWith("http")) {
-                                Uri.parse(videoUri)
-                            } else {
-                                Uri.fromFile(File(videoUri))
+                            val uri = when {
+                                videoUri.startsWith("sample://") -> Uri.parse("https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4")
+                                videoUri.startsWith("content://") || videoUri.startsWith("file://") || videoUri.startsWith("http") -> Uri.parse(videoUri)
+                                else -> Uri.fromFile(File(videoUri))
                             }
                             setVideoURI(uri)
                             setOnPreparedListener { mp ->

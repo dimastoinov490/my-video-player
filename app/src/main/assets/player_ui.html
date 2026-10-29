@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Video Player UI</title>
+<style>
+/* All sizes are measured from a 1024px-wide screenshot.
+   1u = 1/1024 of the screen width, so the UI scales proportionally on any phone. */
+:root{
+  --bg:#020306;
+  --panel:#0a0c10;
+  --btn:#080b0e;
+  --line:rgba(255,255,255,.13);
+  --orange:#ff7a00;
+  --orange-hot:#fe7100;
+  --orange-dim:#3a1502;
+  --glow:rgba(255,110,0,.55);
+  --text:#eceef2;
+  --muted:#8a90a0;
+  --red:#f48a92;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:#000;overflow:hidden;
+  font-family:Roboto,"Segoe UI",system-ui,sans-serif;color:var(--text)}
+.app{container-type:inline-size;height:100%;max-width:520px;margin:0 auto;background:var(--bg)}
+.screen{--u:.09765625cqw;position:relative;height:100%;overflow:hidden;
+  background:radial-gradient(90% 25% at 25% 0%,#080a0d 0%,var(--bg) 100%)}
+
+/* ---------- Header ---------- */
+.header{position:absolute;left:0;top:0;width:100%;height:calc(200*var(--u))}
+.header svg.curve{position:absolute;left:0;top:0;width:100%;height:100%}
+.header::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(38% 75% at 58% 100%,rgba(255,100,0,.12),transparent 70%)}
+.hbtn{position:absolute;top:calc(74*var(--u));height:calc(84*var(--u));display:grid;place-items:center;
+  background:linear-gradient(180deg,#0c1014,var(--btn));border:calc(2*var(--u)) solid var(--line);
+  color:#c6c9d0;cursor:pointer;transition:transform .12s,box-shadow .2s}
+.hbtn:active{transform:scale(.92)}
+.hbtn.round{width:calc(84*var(--u));border-radius:50%}
+.hbtn svg{width:calc(46*var(--u));height:calc(46*var(--u))}
+.hbtn.search{left:calc(699*var(--u))}
+.hbtn.history{left:calc(813*var(--u));color:var(--red);border-color:rgba(255,110,90,.4);
+  box-shadow:0 0 calc(16*var(--u)) rgba(255,90,70,.2)}
+.hbtn.menu{left:calc(928*var(--u));width:calc(62*var(--u));border-radius:calc(30*var(--u))}
+
+/* ---------- Tabs ---------- */
+.tabs{position:absolute;left:calc(37*var(--u));top:calc(203*var(--u));width:calc(950*var(--u));height:calc(84*var(--u));
+  border-radius:calc(42*var(--u));background:linear-gradient(180deg,#0b0e13,#07090d);
+  border:calc(2*var(--u)) solid var(--line);border-left-color:rgba(255,122,0,.55);
+  box-shadow:inset calc(6*var(--u)) 0 calc(14*var(--u)) rgba(255,110,0,.14)}
+.tab{position:absolute;top:calc(3*var(--u));height:calc(76*var(--u));display:flex;align-items:center;
+  justify-content:center;gap:calc(22*var(--u));font-size:calc(30*var(--u));color:var(--muted);
+  background:transparent;border:0;cursor:pointer;transition:color .25s}
+.tab svg{width:calc(46*var(--u));height:calc(46*var(--u))}
+.tab.t1{left:0;width:calc(468*var(--u))}
+.tab.t2{left:calc(468*var(--u));width:calc(478*var(--u))}
+.tab.active{color:var(--orange)}
+.pill{position:absolute;left:calc(1*var(--u));top:calc(2*var(--u));width:calc(466*var(--u));height:calc(76*var(--u));
+  border-radius:calc(34*var(--u));background:linear-gradient(180deg,#44180a 0%,#331203 60%,#2a0f02);
+  border:calc(2*var(--u)) solid rgba(255,110,0,.55);
+  box-shadow:0 0 calc(22*var(--u)) rgba(255,110,0,.3),inset calc(4*var(--u)) 0 calc(10*var(--u)) rgba(255,110,0,.25);transition:transform .4s cubic-bezier(.34,1.3,.5,1)}
+.underline{position:absolute;left:calc(8*var(--u));top:calc(72*var(--u));width:calc(450*var(--u));height:calc(6*var(--u));
+  border-radius:calc(6*var(--u));background:linear-gradient(90deg,#ff9020,var(--orange-hot));
+  box-shadow:0 0 calc(18*var(--u)) var(--orange),0 calc(6*var(--u)) calc(14*var(--u)) rgba(255,100,0,.5);
+  transition:transform .4s cubic-bezier(.34,1.3,.5,1)}
+.tabs.second .pill,.tabs.second .underline{transform:translateX(calc(478*var(--u)))}
+
+/* ---------- Content (empty list) ---------- */
+.content{position:absolute;left:0;right:0;top:calc(305*var(--u));bottom:calc(190*var(--u));
+  overflow-y:auto;padding:0 calc(37*var(--u))}
+#video-list{display:grid;grid-template-columns:1fr 1fr;gap:calc(18*var(--u))}
+/* card template for JS:
+<div class="card"><div class="thumb"><span class="badge">SD</span><span class="dur">0:14</span></div>
+<div class="title">name.mp4</div><div class="meta">12.3 MB • 19.09.2026</div></div> */
+.card{background:linear-gradient(180deg,#0d0f14,#080a0e);border:calc(2*var(--u)) solid var(--line);
+  border-radius:calc(30*var(--u));padding:calc(14*var(--u))}
+.thumb{position:relative;aspect-ratio:440/218;border-radius:calc(22*var(--u));background:#1a1c24;overflow:hidden}
+.badge{position:absolute;left:calc(12*var(--u));top:calc(12*var(--u));padding:calc(4*var(--u)) calc(14*var(--u));
+  border-radius:calc(14*var(--u));background:rgba(0,0,0,.6);font-size:calc(22*var(--u))}
+.dur{position:absolute;right:calc(14*var(--u));bottom:calc(12*var(--u));padding:calc(4*var(--u)) calc(14*var(--u));
+  border-radius:calc(14*var(--u));background:rgba(0,0,0,.6);font-size:calc(22*var(--u))}
+.title{margin-top:calc(14*var(--u));font-size:calc(28*var(--u))}
+.meta{margin-top:calc(6*var(--u));font-size:calc(23*var(--u));color:var(--muted)}
+
+/* ---------- Play button ---------- */
+.fab{position:absolute;left:calc(873*var(--u));top:calc(1234*var(--u));width:calc(108*var(--u));height:calc(108*var(--u));
+  border-radius:50%;border:0;display:grid;place-items:center;cursor:pointer;color:#fff3e6;
+  background:radial-gradient(circle at 30% 20%,#ff9410,var(--orange-hot) 50%,#f84a00);
+  box-shadow:0 0 0 calc(8*var(--u)) #2a0f04,0 0 0 calc(10*var(--u)) rgba(255,110,0,.5),0 0 0 calc(14*var(--u)) rgba(255,90,0,.08),
+             0 0 calc(40*var(--u)) rgba(255,90,0,.45);
+  animation:pulse 3s ease-in-out infinite;transition:transform .12s}
+.fab:active{transform:scale(.92)}
+.fab svg{width:calc(52*var(--u));height:calc(52*var(--u));margin-left:calc(5*var(--u))}
+@keyframes pulse{50%{box-shadow:0 0 0 calc(8*var(--u)) #2a0f04,0 0 0 calc(10*var(--u)) rgba(255,110,0,.7),0 0 0 calc(14*var(--u)) rgba(255,90,0,.12),
+  0 0 calc(56*var(--u)) rgba(255,90,0,.65)}}
+
+/* ---------- Bottom nav ---------- */
+.nav{position:absolute;left:0;top:calc(1360*var(--u));width:100%;height:calc(140*var(--u))}
+.nav svg.shape{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.ni{position:absolute;top:0;height:calc(140*var(--u));width:calc(204*var(--u));display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:calc(8*var(--u));padding-bottom:calc(18*var(--u));
+  font-size:calc(24*var(--u));color:var(--muted);background:transparent;border:0;cursor:pointer;transition:color .2s}
+.ni svg{width:calc(46*var(--u));height:calc(46*var(--u));transition:transform .15s}
+.ni:active svg{transform:scale(.88)}
+.ni.active{color:var(--orange)}
+.ni.active svg{animation:pop .4s ease}
+@keyframes pop{40%{transform:scale(1.2)}}
+.nav-active{position:absolute;left:0;top:calc(2*var(--u));width:calc(215*var(--u));height:calc(137*var(--u));
+  border-radius:calc(48*var(--u)) calc(48*var(--u)) calc(40*var(--u)) calc(52*var(--u));
+  background:linear-gradient(180deg,rgba(255,122,0,.07),rgba(255,255,255,.012));
+  border:calc(2*var(--u)) solid rgba(255,122,0,.55);border-bottom-color:transparent;border-right-color:rgba(255,122,0,.1);
+  transition:transform .42s cubic-bezier(.34,1.3,.5,1)}
+.nav-active::after{content:"";position:absolute;left:calc(14*var(--u));right:calc(-6*var(--u));bottom:calc(-1*var(--u));
+  height:calc(4*var(--u));border-radius:calc(4*var(--u));
+  background:linear-gradient(90deg,#ff6a00,#ff9a30 50%,rgba(255,106,0,0));
+  box-shadow:0 0 calc(16*var(--u)) rgba(255,100,0,.85)}
+.ni.active svg{filter:drop-shadow(0 0 calc(8*var(--u)) rgba(255,110,0,.6))}
+.homebar{position:absolute;left:calc(428*var(--u));top:calc(1496*var(--u));width:calc(170*var(--u));height:calc(7*var(--u));
+  border-radius:calc(7*var(--u));background:#f1f1f1}
+</style>
+</head>
+<body>
+<div class="app"><div class="screen">
+
+  <!-- Header: dark panel with glowing orange curve + 3 buttons -->
+  <header class="header">
+    <svg class="curve" viewBox="0 0 1024 200" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="gl" x1="0" y1="1" x2="1" y2="0">
+          <stop offset="0" stop-color="#ff7a00" stop-opacity=".9"/><stop offset="1" stop-color="#ff7a00" stop-opacity=".25"/>
+        </linearGradient>
+        <filter id="blur"><feGaussianBlur stdDeviation="8"/></filter>
+      </defs>
+      <path d="M0 0 H775 C700 35 668 62 646 112 C622 168 600 188 556 189 H0 Z" fill="#06080b" opacity=".95"/>
+      <path d="M556 189 C600 188 622 168 646 112 C668 62 700 35 775 0" fill="none" stroke="#ff5a00" stroke-width="26" opacity=".4" filter="url(#blur)"/>
+      <path d="M556 189 C600 188 622 168 646 112 C668 62 700 35 775 0" fill="none" stroke="url(#gl)" stroke-width="3"/>
+    </svg>
+    <button class="hbtn round search" aria-label="Поиск">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>
+    </button>
+    <button class="hbtn round history" aria-label="История">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.5"/><path d="M3.5 3.5v5h5"/><path d="M12 7.5V12l3 2"/></svg>
+    </button>
+    <button class="hbtn menu" aria-label="Меню">
+      <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/></svg>
+    </button>
+  </header>
+
+  <!-- Tabs -->
+  <div class="tabs" id="tabs">
+    <div class="pill"></div><div class="underline"></div>
+    <button class="tab t1 active" data-i="0">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><rect x="3" y="8" width="18" height="12" rx="2.2"/><path d="M3 8l2.5-4M8 8l2.5-4M13 8l2.5-4M18 8l2.5-4M3 12h18" /></svg>
+      Видео
+    </button>
+    <button class="tab t2" data-i="1">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 3.5v11.2A3.4 3.4 0 1 0 11 17.8V8.2l8-1.7v6.7a3.4 3.4 0 1 0 2 3.1V2.2z" opacity=".95"/></svg>
+      Плейлисты
+    </button>
+  </div>
+
+  <!-- Empty list -->
+  <main class="content"><div id="video-list"></div></main>
+
+  <button class="fab" aria-label="Воспроизвести">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.6v14.8a1 1 0 0 0 1.5.86l12-7.4a1 1 0 0 0 0-1.72l-12-7.4A1 1 0 0 0 7 4.6z"/></svg>
+  </button>
+
+  <!-- Bottom navigation -->
+  <nav class="nav">
+    <svg class="shape" viewBox="0 0 1024 140" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="nb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0c0f14"/><stop offset="1" stop-color="#05070a"/></linearGradient>
+        <linearGradient id="ob" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ff7a00" stop-opacity=".3"/><stop offset=".5" stop-color="#ff7a00" stop-opacity=".18"/><stop offset=".85" stop-color="#ff7a00" stop-opacity=".25"/><stop offset="1" stop-color="#ff7a00" stop-opacity=".55"/></linearGradient>
+        <filter id="nbl"><feGaussianBlur stdDeviation="4"/></filter>
+      </defs>
+      <path d="M0 86 C0 40 28 8 84 8 H940 C996 8 1024 40 1024 86 C1024 124 996 138 940 138 H84 C28 138 0 124 0 86Z" fill="url(#nb)" stroke="rgba(255,255,255,.07)" stroke-width="2"/>
+      <path d="M232 8 H940 C996 8 1024 40 1024 86" fill="none" stroke="url(#ob)" stroke-width="2"/>
+      <path d="M620 137 C780 140 900 139 996 122" fill="none" stroke="rgba(255,110,0,.4)" stroke-width="2"/>
+    </svg>
+    <div class="nav-active" id="navActive"></div>
+    <button class="ni active" style="left:16px;left:calc(16*var(--u))">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><rect x="3" y="8" width="18" height="12" rx="2.2"/><path d="M3 8l2.5-4M8 8l2.5-4M13 8l2.5-4M18 8l2.5-4M3 12h18"/></svg>Видео
+    </button>
+    <button class="ni" style="left:calc(214*var(--u))">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 3.5v11.2A3.4 3.4 0 1 0 11 17.8V8.2l8-1.7v6.7a3.4 3.4 0 1 0 2 3.1V2.2z"/></svg>Аудио
+    </button>
+    <button class="ni" style="left:calc(410*var(--u))">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 6.5A2 2 0 0 1 5 4.5h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Обзор
+    </button>
+    <button class="ni" style="left:calc(608*var(--u))">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 6h11M3 11h11M3 16h6"/><path d="M19 7v9"/><circle cx="16.8" cy="17" r="2.4" fill="currentColor"/><path d="M19 7l2.5 1.5"/></svg>Плейлисты
+    </button>
+    <button class="ni" style="left:calc(805*var(--u))">
+      <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>Ещё
+    </button>
+  </nav>
+  <div class="homebar"></div>
+
+</div></div>
+
+<script>
+  // Tab switching + bottom nav highlight (animated like the original)
+  const tabs=document.getElementById('tabs');
+  tabs.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{
+    tabs.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active'); tabs.classList.toggle('second',b.dataset.i==='1');
+  }));
+  const navX=[0,209,405,603,800], navActive=document.getElementById('navActive');
+  function setNavIndex(i) {
+    document.querySelectorAll('.ni').forEach((x, idx)=>{
+      if (idx === i) x.classList.add('active');
+      else x.classList.remove('active');
+    });
+    if (navActive && navX[i] !== undefined) {
+      navActive.style.transform='translateX(calc('+navX[i]+'*var(--u)))';
+    }
+  }
+  document.querySelectorAll('.ni').forEach((b,i)=>b.addEventListener('click',()=>{
+    setNavIndex(i);
+  }));
+  window.setActiveNavTab = setNavIndex;
+
+  // --- Functional Logic ---
+  let allVideos = [];
+  let currentTabIndex = 0; // 0 = Видео, 1 = Плейлисты
+  let currentFilter = '';
+
+  // Сэмпл видео и постеры со скриншота (офлайн/встроенные)
+  const defaultSampleVideos = [
+    {
+      title: "2026 09 19 172839.mp4",
+      meta: "12.3 MB • 19.09.2026",
+      badge: "SD",
+      dur: "0:14",
+      uri: "sample://western_clip",
+      thumb: "thumb_western.jpg"
+    },
+    {
+      title: "Django_osvobojdenn.mp4",
+      meta: "1.4 GB • 18.09.2026",
+      badge: "SD",
+      dur: "2:45:22",
+      uri: "sample://western_full",
+      thumb: "thumb_western.jpg"
+    },
+    {
+      title: "Izgoi_Odin_Zvyozdnyy.mp4",
+      meta: "976 MB • 16.09.2026",
+      badge: "SD",
+      dur: "2:13:57",
+      uri: "sample://scifi_clip",
+      thumb: "thumb_scifi.jpg"
+    },
+    {
+      title: "Solo A Star Wars Story.mp4",
+      meta: "1.2 GB • 14.09.2026",
+      badge: "SD",
+      dur: "2:14:46",
+      uri: "sample://scifi_full",
+      thumb: "thumb_scifi.jpg"
+    },
+    {
+      title: "Природа_4K.mp4",
+      meta: "2.8 GB • 12.09.2026",
+      badge: "HD",
+      dur: "1:32:10",
+      uri: "sample://nature",
+      thumb: "thumb_nature.jpg"
+    },
+    {
+      title: "Киберпанк.mp4",
+      meta: "742 MB • 10.09.2026",
+      badge: "SD",
+      dur: "0:48:32",
+      uri: "sample://cyberpunk",
+      thumb: "thumb_cyberpunk.jpg"
+    }
+  ];
+
+  const defaultPlaylists = [
+    {
+      title: "Избранные фильмы",
+      meta: "4 видео • 5.1 GB",
+      badge: "LIST",
+      dur: "4 видео",
+      uri: "playlist://favorites",
+      thumb: "thumb_western.jpg"
+    },
+    {
+      title: "Фантастика и 4K",
+      meta: "2 видео • 4.0 GB",
+      badge: "LIST",
+      dur: "2 видео",
+      uri: "playlist://scifi",
+      thumb: "thumb_scifi.jpg"
+    }
+  ];
+
+  function renderList() {
+    const listEl = document.getElementById('video-list');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+
+    const items = currentTabIndex === 1 ? defaultPlaylists : (allVideos.length > 0 ? allVideos : defaultSampleVideos);
+    const filtered = currentFilter ? items.filter(v => (v.title || '').toLowerCase().includes(currentFilter.toLowerCase())) : items;
+
+    filtered.forEach((v) => {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.style.cursor = 'pointer';
+
+      const thumb = document.createElement('div');
+      thumb.className = 'thumb';
+      if (v.thumb) {
+        thumb.style.backgroundImage = 'url(' + v.thumb + ')';
+        thumb.style.backgroundSize = 'cover';
+        thumb.style.backgroundPosition = 'center';
+      }
+
+      const badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.textContent = v.badge || 'SD';
+
+      const dur = document.createElement('span');
+      dur.className = 'dur';
+      dur.textContent = v.dur || '0:00';
+
+      thumb.appendChild(badge);
+      thumb.appendChild(dur);
+
+      const title = document.createElement('div');
+      title.className = 'title';
+      title.textContent = v.title;
+
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      meta.textContent = v.meta || '';
+
+      card.appendChild(thumb);
+      card.appendChild(title);
+      card.appendChild(meta);
+
+      card.addEventListener('click', () => {
+        playVideo(v.uri || v.title);
+      });
+
+      listEl.appendChild(card);
+    });
+  }
+
+  function playVideo(uri) {
+    if (window.AndroidBridge && window.AndroidBridge.playVideo) {
+      window.AndroidBridge.playVideo(uri);
+    } else {
+      console.log("Playing video:", uri);
+    }
+  }
+
+  // Передача списка видео из Android MediaStore
+  window.setVideos = function(jsonStr) {
+    try {
+      const data = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
+      if (Array.isArray(data) && data.length > 0) {
+        allVideos = data;
+        renderList();
+      }
+    } catch(e) {
+      console.error("Failed to parse videos json:", e);
+    }
+  };
+
+  // Кнопка FAB Play: запуск первого/последнего видео
+  const fab = document.querySelector('.fab');
+  if (fab) {
+    fab.addEventListener('click', () => {
+      if (window.AndroidBridge && window.AndroidBridge.playLastVideo) {
+        window.AndroidBridge.playLastVideo();
+      } else {
+        const items = allVideos.length > 0 ? allVideos : defaultSampleVideos;
+        if (items.length > 0) {
+          playVideo(items[0].uri);
+        }
+      }
+    });
+  }
+
+  // Переключение вкладок «Видео» / «Плейлисты»
+  tabs.querySelectorAll('.tab').forEach(b => {
+    b.addEventListener('click', () => {
+      currentTabIndex = b.dataset.i === '1' ? 1 : 0;
+      renderList();
+    });
+  });
+
+  // Навигация нижнего меню
+  const navButtons = document.querySelectorAll('.ni');
+  const navTabs = ['video', 'audio', 'explorer', 'playlists', 'more'];
+  navButtons.forEach((b, i) => {
+    b.addEventListener('click', () => {
+      const tabName = navTabs[i];
+      if (window.AndroidBridge && window.AndroidBridge.onNavTab) {
+        window.AndroidBridge.onNavTab(tabName, i);
+      }
+    });
+  });
+
+  // Кнопка поиска в шапке
+  const searchBtn = document.querySelector('.hbtn.search');
+  if (searchBtn) {
+    searchBtn.addEventListener('click', () => {
+      const q = prompt("Поиск видео:", currentFilter);
+      if (q !== null) {
+        currentFilter = q.trim();
+        renderList();
+      }
+    });
+  }
+
+  // Кнопка истории в шапке
+  const historyBtn = document.querySelector('.hbtn.history');
+  if (historyBtn) {
+    historyBtn.addEventListener('click', () => {
+      if (window.AndroidBridge && window.AndroidBridge.openHistory) {
+        window.AndroidBridge.openHistory();
+      } else {
+        const items = allVideos.length > 0 ? allVideos : defaultSampleVideos;
+        if (items.length > 0) playVideo(items[0].uri);
+      }
+    });
+  }
+
+  // Кнопка меню (три точки) в шапке
+  const menuBtn = document.querySelector('.hbtn.menu');
+  if (menuBtn) {
+    menuBtn.addEventListener('click', () => {
+      if (window.AndroidBridge && window.AndroidBridge.openMenu) {
+        window.AndroidBridge.openMenu();
+      }
+    });
+  }
+
+  // Инициализация при загрузке страницы
+  if (window.AndroidBridge && window.AndroidBridge.requestVideos) {
+    window.AndroidBridge.requestVideos();
+  }
+  renderList();
+</script>
+</body>
+</html>

@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.os.Build
 import android.util.Log
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -121,74 +122,56 @@ fun VideoLibraryScreen(
         }
     }
 
+    if (bottomNavIndex != 0) {
+        BackHandler {
+            bottomNavIndex = 0
+        }
+    }
+
     Scaffold(
-        containerColor = theme.background,
+        containerColor = Color(0xFF020306),
         bottomBar = {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
-                    .shadow(
-                        elevation = 16.dp,
-                        shape = RoundedCornerShape(28.dp),
-                        spotColor = theme.glow,
-                        ambientColor = theme.glow
-                    ),
-                shape = RoundedCornerShape(28.dp),
-                color = theme.surface,
-                border = BorderStroke(1.dp, theme.primary.copy(alpha = 0.25f))
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceAround,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    BottomNavRoundedItem(
-                        icon = Icons.Default.PlayCircle,
-                        label = "Видео",
-                        isSelected = bottomNavIndex == 0,
-                        onClick = {
-                            bottomNavIndex = 0
-                            currentTab = 0
-                        }
-                    )
-                    BottomNavRoundedItem(
-                        icon = Icons.Default.MusicNote,
-                        label = "Аудио",
-                        isSelected = bottomNavIndex == 1,
-                        onClick = { bottomNavIndex = 1 }
-                    )
-                    BottomNavRoundedItem(
-                        icon = Icons.Default.Folder,
-                        label = "Обзор",
-                        isSelected = bottomNavIndex == 2,
-                        onClick = { bottomNavIndex = 2 }
-                    )
-                    BottomNavRoundedItem(
-                        icon = Icons.Default.PlaylistPlay,
-                        label = "Плейлист",
-                        isSelected = bottomNavIndex == 3,
-                        onClick = { bottomNavIndex = 3 }
-                    )
-                    BottomNavRoundedItem(
-                        icon = Icons.Default.MoreHoriz,
-                        label = "Ещё",
-                        isSelected = bottomNavIndex == 4,
-                        onClick = { bottomNavIndex = 4 }
-                    )
-                }
+            if (bottomNavIndex != 0) {
+                ApprovedExactBottomBar(
+                    selectedIndex = bottomNavIndex,
+                    onTabSelected = { newIndex ->
+                        bottomNavIndex = newIndex
+                    }
+                )
             }
         }
     ) { innerPadding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .then(if (bottomNavIndex != 0) Modifier.padding(innerPadding) else Modifier)
         ) {
             when (bottomNavIndex) {
                 0 -> {
+                    ExactHtmlVideoLibraryView(
+                        videos = videos,
+                        onVideoSelected = onVideoSelected,
+                        onNavTab = { tabName, _ ->
+                            when (tabName) {
+                                "video" -> bottomNavIndex = 0
+                                "audio" -> bottomNavIndex = 1
+                                "explorer" -> bottomNavIndex = 2
+                                "playlists" -> bottomNavIndex = 3
+                                "more" -> bottomNavIndex = 4
+                            }
+                        },
+                        onOpenSearch = {
+                            isSearchActive = true
+                        },
+                        onOpenHistory = {
+                            val target = videos.firstOrNull()?.uri?.toString() ?: "sample://western_full"
+                            onVideoSelected(target)
+                        },
+                        onOpenMenu = onOpenSettings,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                999 -> {
                     if (currentTab == 1) {
                         PlaylistsView(onMediaSelected = onVideoSelected)
                     } else {
@@ -615,39 +598,7 @@ fun VideoLibraryScreen(
                 }
             }
 
-            // Floating Action Button (FAB: динамический градиент темы - оранжевый для оригинальной темы, циан/фиолетовый для темы со скриншота)
-            if (bottomNavIndex == 0 && currentTab == 0) {
-                val fabGradient = if (theme.id == "nexora_neon_screenshot" || theme.id == "nexora_screenshot") {
-                    listOf(Color(0xFF00E5FF), Color(0xFF9D00FF))
-                } else {
-                    listOf(theme.primary, theme.secondary)
-                }
-
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 18.dp, bottom = 12.dp)
-                        .size(58.dp)
-                        .shadow(12.dp, CircleShape, spotColor = theme.glow, ambientColor = theme.glow)
-                        .clip(CircleShape)
-                        .background(Brush.verticalGradient(fabGradient))
-                        .clickable {
-                            if (filteredVideos.isNotEmpty()) {
-                                onVideoSelected(filteredVideos.first().uri.toString())
-                            } else {
-                                onOpenCustomUrl()
-                            }
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.PlayArrow,
-                        contentDescription = "Воспроизвести",
-                        tint = Color.White,
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
-            }
+            // FAB встроен напрямую в ExactHtmlVideoLibraryView
         }
     }
 
@@ -785,13 +736,13 @@ fun BottomNavRoundedItem(
             Icon(
                 imageVector = icon,
                 contentDescription = label,
-                tint = if (isSelected) theme.secondary else GrayText,
+                tint = if (isSelected) theme.primary else GrayText,
                 modifier = Modifier.size(22.dp)
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = label,
-                color = if (isSelected) theme.secondary else GrayText,
+                color = if (isSelected) theme.primary else GrayText,
                 fontSize = 11.sp,
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
             )
