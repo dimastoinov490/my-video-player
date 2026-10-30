@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Player UI v3</title>
+<style>
+/* 1u = 1/1024 of screen width. Every size below is in u, so the UI scales identically on any phone.
+   Header/nav are anchored (top / bottom), so tall screens just get more list space. */
+:root{
+  --bg:#020306;--line:rgba(255,255,255,.13);--orange:#ff7a00;--orange-hot:#fe7100;
+  --text:#eceef2;--muted:#8a90a0;--dim:#6c7280;--red:#f48a92;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:#000;overflow:hidden;font-family:Roboto,"Segoe UI",system-ui,sans-serif;color:var(--text)}
+.app{container-type:inline-size;height:100%;max-width:520px;margin:0 auto;background:var(--bg)}
+.screen{--u:.09765625cqw;position:relative;height:100%;overflow:hidden;
+  background:radial-gradient(90% 25% at 25% 0%,#080a0d 0%,var(--bg) 100%)}
+svg.ic{width:1em;height:1em;display:block}
+.sprite{position:absolute;width:0;height:0;overflow:hidden}
+
+/* ---------- Top glow panel (shared by all tabs) ---------- */
+.bgtop{position:absolute;left:0;top:0;width:100%;height:calc(140*var(--u));pointer-events:none}
+.bgtop svg{position:absolute;inset:0;width:100%;height:100%}
+.bgtop::after{content:"";position:absolute;inset:0;background:radial-gradient(38% 75% at 58% 100%,rgba(255,100,0,.12),transparent 70%)}
+
+/* ---------- Pages ---------- */
+.page{position:absolute;inset:0;display:none}
+.page.active{display:block}
+.scroll{position:absolute;left:0;right:0;top:0;bottom:calc(158*var(--u));overflow-y:auto;padding:calc(24*var(--u)) calc(37*var(--u)) calc(30*var(--u));scrollbar-width:none}
+.scroll::-webkit-scrollbar{display:none}
+.page.active .item{animation:rise .5s cubic-bezier(.2,.8,.3,1) both;animation-delay:calc(var(--i,0)*60ms)}
+@keyframes rise{from{opacity:0;transform:translateY(calc(26*var(--u)))}}
+
+/* ---------- Search pill ---------- */
+.search{display:flex;align-items:center;gap:calc(22*var(--u));height:calc(92*var(--u));padding:0 calc(32*var(--u));
+  border-radius:calc(46*var(--u));background:linear-gradient(180deg,#0b0e13,#07090d);
+  border:calc(2*var(--u)) solid var(--line);border-left-color:rgba(255,122,0,.55);
+  box-shadow:inset calc(6*var(--u)) 0 calc(14*var(--u)) rgba(255,110,0,.14),0 0 calc(14*var(--u)) rgba(255,110,0,.06)}
+.search svg{font-size:calc(44*var(--u));color:var(--orange);flex:none;filter:drop-shadow(0 0 calc(6*var(--u)) rgba(255,110,0,.5))}
+.search input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--text);font:inherit;font-size:calc(29*var(--u))}
+.search input::placeholder{color:var(--muted)}
+.search:focus-within{border-color:rgba(255,122,0,.6);box-shadow:inset calc(6*var(--u)) 0 calc(14*var(--u)) rgba(255,110,0,.2),0 0 calc(22*var(--u)) rgba(255,110,0,.22)}
+.row{display:flex;justify-content:space-between;align-items:center;margin:calc(34*var(--u)) calc(8*var(--u)) calc(24*var(--u));font-size:calc(26*var(--u));color:var(--muted);letter-spacing:calc(.8*var(--u))}
+.row b{color:var(--orange);font-weight:700}
+.row .caps{letter-spacing:calc(3*var(--u));text-transform:uppercase}
+
+/* ---------- List cards ---------- */
+.card{display:flex;align-items:center;gap:calc(26*var(--u));padding:calc(20*var(--u)) calc(24*var(--u));margin-bottom:calc(18*var(--u));
+  border-radius:calc(30*var(--u));background:linear-gradient(180deg,#0d0f14,#080a0e);border:calc(2*var(--u)) solid var(--line);
+  cursor:pointer;transition:transform .15s,border-color .25s,box-shadow .25s}
+.card:active{transform:scale(.98);border-color:rgba(255,122,0,.5);box-shadow:0 0 calc(22*var(--u)) rgba(255,110,0,.18)}
+.tile{flex:none;width:calc(104*var(--u));height:calc(104*var(--u));border-radius:calc(28*var(--u));display:grid;place-items:center;
+  background:linear-gradient(145deg,#2c1708,#180c04);border:calc(2*var(--u)) solid rgba(255,122,0,.28);color:var(--orange);
+  box-shadow:inset 0 0 calc(16*var(--u)) rgba(255,110,0,.12)}
+.tile svg{font-size:calc(54*var(--u));filter:drop-shadow(0 0 calc(7*var(--u)) rgba(255,110,0,.45))}
+.body{flex:1;min-width:0}
+.t{font-size:calc(33*var(--u));font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.s{margin-top:calc(8*var(--u));font-size:calc(26*var(--u));color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.m{margin-top:calc(8*var(--u));font-size:calc(25*var(--u));color:var(--dim)}
+.m.or{color:var(--orange);opacity:.9}
+.chev{flex:none;font-size:calc(40*var(--u));color:var(--muted)}
+.addbtn{flex:none;font-size:calc(50*var(--u));color:var(--muted);padding:calc(8*var(--u));transition:color .2s,transform .15s}
+.addbtn:active{color:var(--orange);transform:scale(.85)}
+.playbtn{flex:none;width:calc(78*var(--u));height:calc(78*var(--u));border-radius:50%;display:grid;place-items:center;color:#fff3e6;
+  background:radial-gradient(circle at 30% 20%,#ff9410,var(--orange-hot) 50%,#f84a00);
+  box-shadow:0 0 0 calc(5*var(--u)) #2a0f04,0 0 0 calc(7*var(--u)) rgba(255,110,0,.45),0 0 calc(22*var(--u)) rgba(255,90,0,.4);transition:transform .12s}
+.playbtn:active{transform:scale(.9)}
+.playbtn svg{font-size:calc(38*var(--u));margin-left:calc(4*var(--u))}
+
+/* ---------- Playlists header ---------- */
+.phead{display:flex;justify-content:space-between;align-items:center;margin:calc(10*var(--u)) calc(8*var(--u)) calc(34*var(--u))}
+.phead h1{font-size:calc(46*var(--u));font-weight:700;color:#fff}
+.phead p{margin-top:calc(6*var(--u));font-size:calc(27*var(--u));color:var(--muted)}
+.create{display:flex;align-items:center;gap:calc(14*var(--u));height:calc(80*var(--u));padding:0 calc(38*var(--u));border:0;border-radius:calc(40*var(--u));
+  font:inherit;font-size:calc(29*var(--u));font-weight:700;color:#1a0a00;cursor:pointer;
+  background:linear-gradient(135deg,#ff9a1f,var(--orange-hot) 60%,#f84a00);box-shadow:0 0 calc(26*var(--u)) rgba(255,90,0,.45);transition:transform .12s}
+.create:active{transform:scale(.93)}
+.create svg{font-size:calc(36*var(--u))}
+
+/* ---------- Video page header ---------- */
+.hbtn{position:absolute;top:calc(14*var(--u));height:calc(84*var(--u));display:grid;place-items:center;
+  background:linear-gradient(180deg,#0c1014,#080b0e);border:calc(2*var(--u)) solid var(--line);color:#c6c9d0;cursor:pointer;transition:transform .12s}
+.hbtn:active{transform:scale(.92)}
+.hbtn.round{width:calc(84*var(--u));border-radius:50%}
+.hbtn svg{font-size:calc(46*var(--u))}
+.hbtn.hsearch{left:calc(699*var(--u))}
+.hbtn.history{left:calc(813*var(--u));color:var(--red);border-color:rgba(255,110,90,.4);box-shadow:0 0 calc(16*var(--u)) rgba(255,90,70,.2)}
+.hbtn.menu{left:calc(928*var(--u));width:calc(62*var(--u));border-radius:calc(30*var(--u))}
+.tabs{position:absolute;left:calc(37*var(--u));top:calc(143*var(--u));width:calc(950*var(--u));height:calc(84*var(--u));
+  border-radius:calc(42*var(--u));background:linear-gradient(180deg,#0b0e13,#07090d);border:calc(2*var(--u)) solid var(--line);
+  border-left-color:rgba(255,122,0,.55);box-shadow:inset calc(6*var(--u)) 0 calc(14*var(--u)) rgba(255,110,0,.14)}
+.tab{position:absolute;top:calc(3*var(--u));height:calc(76*var(--u));display:flex;align-items:center;justify-content:center;gap:calc(22*var(--u));
+  font-size:calc(30*var(--u));color:var(--muted);background:transparent;border:0;cursor:pointer;transition:color .25s;font-family:inherit}
+.tab svg{font-size:calc(46*var(--u))}
+.tab.t1{left:0;width:calc(468*var(--u))}.tab.t2{left:calc(468*var(--u));width:calc(478*var(--u))}
+.tab.active{color:var(--orange)}
+.pill{position:absolute;left:calc(1*var(--u));top:calc(2*var(--u));width:calc(466*var(--u));height:calc(76*var(--u));border-radius:calc(34*var(--u));
+  background:linear-gradient(180deg,#44180a 0%,#331203 60%,#2a0f02);border:calc(2*var(--u)) solid rgba(255,110,0,.55);
+  box-shadow:0 0 calc(22*var(--u)) rgba(255,110,0,.3),inset calc(4*var(--u)) 0 calc(10*var(--u)) rgba(255,110,0,.25);transition:transform .4s cubic-bezier(.34,1.3,.5,1)}
+.underline{position:absolute;left:calc(8*var(--u));top:calc(71*var(--u));width:calc(450*var(--u));height:calc(8*var(--u));border-radius:calc(6*var(--u));
+  background:linear-gradient(90deg,#ff9020,var(--orange-hot));box-shadow:0 0 calc(18*var(--u)) var(--orange),0 calc(6*var(--u)) calc(14*var(--u)) rgba(255,100,0,.5);
+  transition:transform .4s cubic-bezier(.34,1.3,.5,1)}
+.tabs.second .pill,.tabs.second .underline{transform:translateX(calc(478*var(--u)))}
+.vlist{position:absolute;left:calc(37*var(--u));right:calc(37*var(--u));top:calc(250*var(--u));bottom:calc(158*var(--u));overflow-y:auto}
+#video-list{display:grid;grid-template-columns:1fr 1fr;gap:calc(18*var(--u))}
+/* video card template (add via JS):
+<div class="vcard"><div class="thumb"><span class="badge">SD</span><span class="dur">0:14</span></div>
+<div class="t">name.mp4</div><div class="m">12.3 MB • 19.09.2026</div></div> */
+.vcard{background:linear-gradient(180deg,#0d0f14,#080a0e);border:calc(2*var(--u)) solid var(--line);border-radius:calc(30*var(--u));padding:calc(14*var(--u))}
+.thumb{position:relative;aspect-ratio:440/218;border-radius:calc(22*var(--u));background:#1a1c24;overflow:hidden}
+.badge,.dur{position:absolute;padding:calc(4*var(--u)) calc(14*var(--u));border-radius:calc(14*var(--u));background:rgba(0,0,0,.6);font-size:calc(22*var(--u))}
+.badge{left:calc(12*var(--u));top:calc(12*var(--u))}.dur{right:calc(14*var(--u));bottom:calc(12*var(--u))}
+
+/* ---------- Play FAB (video tab only) ---------- */
+.fab{position:absolute;right:calc(43*var(--u));bottom:calc(178*var(--u));width:calc(108*var(--u));height:calc(108*var(--u));border-radius:50%;border:0;
+  display:none;place-items:center;cursor:pointer;color:#fff3e6;background:radial-gradient(circle at 30% 20%,#ff9410,var(--orange-hot) 50%,#f84a00);
+  box-shadow:0 0 0 calc(8*var(--u)) #2a0f04,0 0 0 calc(10*var(--u)) rgba(255,110,0,.5),0 0 0 calc(14*var(--u)) rgba(255,90,0,.08),0 0 calc(40*var(--u)) rgba(255,90,0,.45);
+  animation:pulse 3s ease-in-out infinite;transition:transform .12s}
+.fab.show{display:grid}.fab:active{transform:scale(.92)}
+.fab svg{font-size:calc(52*var(--u));margin-left:calc(5*var(--u))}
+@keyframes pulse{50%{box-shadow:0 0 0 calc(8*var(--u)) #2a0f04,0 0 0 calc(10*var(--u)) rgba(255,110,0,.7),0 0 0 calc(14*var(--u)) rgba(255,90,0,.12),0 0 calc(56*var(--u)) rgba(255,90,0,.65)}}
+
+/* ---------- Bottom nav (identical on every tab, anchored to the bottom) ---------- */
+.nav{position:absolute;left:0;bottom:calc(10*var(--u));width:100%;height:calc(140*var(--u))}
+.nav svg.shape{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.ni{position:absolute;top:0;height:calc(140*var(--u));width:calc(204*var(--u));display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:calc(8*var(--u));padding-bottom:calc(18*var(--u));font:inherit;font-size:calc(24*var(--u));color:var(--muted);background:transparent;border:0;cursor:pointer;transition:color .2s}
+.ni svg{font-size:calc(46*var(--u));transition:transform .15s}
+.ni:active svg{transform:scale(.88)}
+.ni.active{color:var(--orange)}
+.ni.active svg{animation:pop .4s ease;filter:drop-shadow(0 0 calc(8*var(--u)) rgba(255,110,0,.6))}
+@keyframes pop{40%{transform:scale(1.2)}}
+.nav-active{position:absolute;left:0;top:calc(2*var(--u));width:calc(215*var(--u));height:calc(137*var(--u));
+  border-radius:calc(48*var(--u)) calc(48*var(--u)) calc(40*var(--u)) calc(52*var(--u));
+  background:linear-gradient(180deg,rgba(255,122,0,.07),rgba(255,255,255,.012));
+  border:calc(2*var(--u)) solid rgba(255,122,0,.55);border-bottom-color:transparent;border-right-color:rgba(255,122,0,.1);
+  transition:transform .42s cubic-bezier(.34,1.3,.5,1)}
+.nav-active::after{content:"";position:absolute;left:calc(14*var(--u));right:calc(-6*var(--u));bottom:calc(-1*var(--u));height:calc(4*var(--u));border-radius:calc(4*var(--u));
+  background:linear-gradient(90deg,#ff6a00,#ff9a30 50%,rgba(255,106,0,0));box-shadow:0 0 calc(16*var(--u)) rgba(255,100,0,.85)}
+</style>
+</head>
+<body>
+<!-- icon sprite -->
+<svg class="sprite" aria-hidden="true"><defs>
+ <symbol id="i-search" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></g></symbol>
+ <symbol id="i-hist" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.5"/><path d="M3.5 3.5v5h5"/><path d="M12 7.5V12l3 2"/></g></symbol>
+ <symbol id="i-dots" viewBox="0 0 24 24"><g fill="currentColor"><circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/></g></symbol>
+ <symbol id="i-hdots" viewBox="0 0 24 24"><g fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></g></symbol>
+ <symbol id="i-clap" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><rect x="3" y="8" width="18" height="12" rx="2.2"/><path d="M3 8l2.5-4M8 8l2.5-4M13 8l2.5-4M18 8l2.5-4M3 12h18"/></g></symbol>
+ <symbol id="i-clapf" viewBox="0 0 24 24"><g fill="currentColor"><path d="M3 11h18v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 5.4l3.4-.9 1 2.4L4 7.8zM8.4 4.1l3.4-.9 1 2.4-3.4.9zM13.8 2.7l3.4-.9 1 2.4-3.4.9zM19.2 1.4L21 5.5V9H3V8.4L19.2 1.4z" opacity=".95" transform="translate(0 2.5)"/></g></symbol>
+ <symbol id="i-note" viewBox="0 0 24 24"><path fill="currentColor" d="M9 3.5v11.2A3.4 3.4 0 1 0 11 17.8V8.2l8-1.7v6.7a3.4 3.4 0 1 0 2 3.1V2.2z"/></symbol>
+ <symbol id="i-note1" viewBox="0 0 24 24"><path fill="currentColor" d="M13 3v10.6A3.8 3.8 0 1 0 15.5 17V7h4V3z"/></symbol>
+ <symbol id="i-folder" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M3 6.5A2 2 0 0 1 5 4.5h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+ <symbol id="i-folderf" viewBox="0 0 24 24"><path fill="currentColor" d="M3 6.5A2 2 0 0 1 5 4.5h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+ <symbol id="i-list" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 6h11M3 11h11M3 16h6"/><path d="M19 7v9"/><circle cx="16.8" cy="17" r="2.4" fill="currentColor"/><path d="M19 7l2.5 1.5"/></g></symbol>
+ <symbol id="i-addlist" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 6h12M3 11h12M3 16h7M18 14v7M14.5 17.5h7"/></g></symbol>
+ <symbol id="i-play" viewBox="0 0 24 24"><path fill="currentColor" d="M7 4.6v14.8a1 1 0 0 0 1.5.86l12-7.4a1 1 0 0 0 0-1.72l-12-7.4A1 1 0 0 0 7 4.6z"/></symbol>
+ <symbol id="i-chev" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></symbol>
+ <symbol id="i-heart" viewBox="0 0 24 24"><path fill="currentColor" d="M12 21s-8.5-5.4-8.5-11.2A4.6 4.6 0 0 1 12 7.3a4.6 4.6 0 0 1 8.5 2.5C20.5 15.6 12 21 12 21z"/></symbol>
+ <symbol id="i-plus" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" d="M12 4.5v15M4.5 12h15"/></symbol>
+</defs></svg>
+
+<div class="app"><div class="screen">
+
+  <!-- shared glowing top panel -->
+  <div class="bgtop"><svg viewBox="0 60 1024 140" preserveAspectRatio="none">
+    <defs>
+      <linearGradient id="gl" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a00" stop-opacity=".9"/><stop offset="1" stop-color="#ff7a00" stop-opacity=".25"/></linearGradient>
+      <filter id="blur"><feGaussianBlur stdDeviation="8"/></filter>
+    </defs>
+    <path d="M0 0 H775 C700 35 668 62 646 112 C622 168 600 188 556 189 H0 Z" fill="#06080b" opacity=".95"/>
+    <path d="M556 189 C600 188 622 168 646 112 C668 62 700 35 775 0" fill="none" stroke="#ff5a00" stroke-width="26" opacity=".4" filter="url(#blur)"/>
+    <path d="M556 189 C600 188 622 168 646 112 C668 62 700 35 775 0" fill="none" stroke="url(#gl)" stroke-width="3"/>
+  </svg></div>
+
+  <!-- ============ VIDEO ============ -->
+  <section class="page active" id="p-video">
+    <button class="hbtn round hsearch" aria-label="Поиск"><svg class="ic"><use href="#i-search"/></svg></button>
+    <button class="hbtn round history" aria-label="История"><svg class="ic"><use href="#i-hist"/></svg></button>
+    <button class="hbtn menu" aria-label="Меню"><svg class="ic"><use href="#i-dots"/></svg></button>
+    <div class="tabs" id="tabs">
+      <div class="pill"></div><div class="underline"></div>
+      <button class="tab t1 active" data-i="0"><svg class="ic"><use href="#i-clap"/></svg>Видео</button>
+      <button class="tab t2" data-i="1"><svg class="ic"><use href="#i-note"/></svg>Плейлисты</button>
+    </div>
+    <div class="vlist"><div id="video-list"></div></div>
+  </section>
+
+  <!-- ============ AUDIO ============ -->
+  <section class="page" id="p-audio"><div class="scroll">
+    <label class="search item"><svg class="ic"><use href="#i-search"/></svg><input id="q-audio" placeholder="Поиск аудио треков..."></label>
+    <div class="row item" style="--i:1"><span>Всего треков: <span id="n-audio">2</span></span><b class="caps">Аудиотека</b></div>
+    <div id="l-audio"></div>
+  </div></section>
+
+  <!-- ============ BROWSE ============ -->
+  <section class="page" id="p-browse"><div class="scroll">
+    <label class="search item"><svg class="ic"><use href="#i-search"/></svg><input id="q-browse" placeholder="Поиск файлов и папок..."></label>
+    <div class="row item" style="--i:1"><b>Хранилище /</b><span>14 объектов</span></div>
+    <div id="l-browse"></div>
+  </div></section>
+
+  <!-- ============ PLAYLISTS ============ -->
+  <section class="page" id="p-playlists"><div class="scroll">
+    <div class="phead item"><div><h1>Мои плейлисты</h1><p>Всего: 4</p></div>
+      <button class="create"><svg class="ic"><use href="#i-plus"/></svg>Создать</button></div>
+    <div id="l-playlists"></div>
+  </div></section>
+
+  <!-- ============ MORE ============ -->
+  <section class="page" id="p-more"><div class="scroll"></div></section>
+
+  <button class="fab show" id="fab" aria-label="Воспроизвести"><svg class="ic"><use href="#i-play"/></svg></button>
+
+  <!-- ============ BOTTOM NAV (same on all tabs) ============ -->
+  <nav class="nav">
+    <svg class="shape" viewBox="0 0 1024 140" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="nb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0c0f14"/><stop offset="1" stop-color="#05070a"/></linearGradient>
+        <linearGradient id="ob" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ff7a00" stop-opacity=".3"/><stop offset=".5" stop-color="#ff7a00" stop-opacity=".18"/><stop offset=".85" stop-color="#ff7a00" stop-opacity=".25"/><stop offset="1" stop-color="#ff7a00" stop-opacity=".55"/></linearGradient>
+      </defs>
+      <path d="M0 86 C0 40 28 8 84 8 H940 C996 8 1024 40 1024 86 C1024 124 996 138 940 138 H84 C28 138 0 124 0 86Z" fill="url(#nb)" stroke="rgba(255,255,255,.07)" stroke-width="2"/>
+      <path d="M232 8 H940 C996 8 1024 40 1024 86" fill="none" stroke="url(#ob)" stroke-width="2"/>
+      <path d="M620 137 C780 140 900 139 996 122" fill="none" stroke="rgba(255,110,0,.4)" stroke-width="2"/>
+    </svg>
+    <div class="nav-active" id="navActive"></div>
+    <button class="ni active" data-p="video"     style="left:calc(16*var(--u))"><svg class="ic"><use href="#i-clap"/></svg>Видео</button>
+    <button class="ni"        data-p="audio"     style="left:calc(214*var(--u))"><svg class="ic"><use href="#i-note"/></svg>Аудио</button>
+    <button class="ni"        data-p="browse"    style="left:calc(410*var(--u))"><svg class="ic"><use href="#i-folder"/></svg>Обзор</button>
+    <button class="ni"        data-p="playlists" style="left:calc(608*var(--u))"><svg class="ic"><use href="#i-list"/></svg>Плейлисты</button>
+    <button class="ni"        data-p="more"      style="left:calc(805*var(--u))"><svg class="ic"><use href="#i-hdots"/></svg>Ещё</button>
+  </nav>
+
+</div></div>
+
+<script>
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const ic=n=>`<svg class="ic"><use href="#i-${n}"/></svg>`;
+
+/* ---- sample data (replace with real data) ---- */
+const audio=[["Fire Man (Sefon.me)","MiyaGi & Эндшпиль • Download","03:37 • 8,3 MB"],["viber_message","<unknown> • Notifications","00:01 • 0,0 MB"]];
+const folders=[["Android",3],["DCIM",3],["din",0],["Documents",0],["Download",15],["Movies",3],["Music",2]];
+const lists=[["heart","Избранное","Любимые видео и треки"],["hist","Недавние","Недавно просмотренные медиафайлы"],
+             ["clapf","Фильмы и Кино","Коллекция фильмов в HD"],["note1","Музыкальные клипы","Клипы и атмосферные саундтреки"]];
+
+const draw=(id,arr,fn,off=2)=>document.getElementById(id).innerHTML=arr.map((a,i)=>fn(a).replace('<div class="card','<div style="--i:'+(i+off)+'" class="item card')).join('');
+draw('l-audio',audio,a=>`<div class="card" data-s="${esc(a[0])}"><div class="tile">${ic('note1')}</div>
+  <div class="body"><div class="t">${esc(a[0])}</div><div class="s">${esc(a[1])}</div><div class="m">${esc(a[2])}</div></div>
+  <div class="addbtn">${ic('addlist')}</div><div class="playbtn">${ic('play')}</div></div>`);
+draw('l-browse',folders,a=>`<div class="card" data-s="${esc(a[0])}"><div class="tile">${ic('folderf')}</div>
+  <div class="body"><div class="t">${esc(a[0])}</div><div class="s">${a[1]} папок/файлов</div></div><div class="chev">${ic('chev')}</div></div>`);
+draw('l-playlists',lists,a=>`<div class="card" data-s="${esc(a[1])}"><div class="tile">${ic(a[0])}</div>
+  <div class="body"><div class="t">${esc(a[1])}</div><div class="s">${esc(a[2])}</div><div class="m or">0 медиафайлов</div></div><div class="chev">${ic('chev')}</div></div>`,1);
+
+/* ---- live search filter ---- */
+[['q-audio','l-audio','n-audio'],['q-browse','l-browse']].forEach(([i,l,n])=>document.getElementById(i).addEventListener('input',e=>{
+  const v=e.target.value.toLowerCase().trim(); let c=0;
+  document.querySelectorAll('#'+l+' .card').forEach(x=>{const ok=x.dataset.s.toLowerCase().includes(v);x.style.display=ok?'':'none';if(ok)c++});
+  if(n)document.getElementById(n).textContent=c;
+}));
+
+/* ---- video top tabs ---- */
+const tabs=document.getElementById('tabs');
+tabs.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{
+  tabs.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');tabs.classList.toggle('second',b.dataset.i==='1');
+}));
+
+/* ---- bottom nav: switches pages, bump slides to the tapped item ---- */
+const navX=[0,209,405,603,800],navActive=document.getElementById('navActive'),fab=document.getElementById('fab');
+document.querySelectorAll('.ni').forEach((b,i)=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.ni').forEach(x=>x.classList.remove('active'));b.classList.add('active');
+  navActive.style.transform='translateX(calc('+navX[i]+'*var(--u)))';
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById('p-'+b.dataset.p).classList.add('active');
+  fab.classList.toggle('show',b.dataset.p==='video');
+}));
+</script>
+</body>
+</html>
