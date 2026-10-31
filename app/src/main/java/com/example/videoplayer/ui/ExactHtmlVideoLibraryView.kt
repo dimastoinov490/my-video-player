@@ -36,8 +36,6 @@ import com.example.videoplayer.service.HttpBroadcastFolder
 import com.example.videoplayer.service.HttpServerConfig
 import com.example.videoplayer.service.LocalHttpShareServer
 import com.example.videoplayer.service.WifiDirectManager
-import com.example.videoplayer.ui.theme.ThemeManager
-import com.example.videoplayer.ui.theme.ThemePresets
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import com.google.zxing.common.BitMatrix
@@ -51,6 +49,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * 1-в-1 рендерер утверждённого HTML/CSS/SVG интерфейса видеоплеера v3 со всеми 5 вкладками.
@@ -68,12 +67,15 @@ fun ExactHtmlVideoLibraryView(
     onOpenSettings: () -> Unit,
     onOpenCustomUrl: () -> Unit,
     onOpenProtectedVault: () -> Unit,
-    onOpenTerminal: () -> Unit,
+    onRefreshVideos: () -> Unit,
     currentNavIndex: Int = 0,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    val latestRefresh by rememberUpdatedState(onRefreshVideos)
+    val latestVideos by rememberUpdatedState(videos)
+    val wifiStatusRef = remember { AtomicReference("") }
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
     var currentBrowsePath by remember {
         mutableStateOf(
@@ -318,9 +320,16 @@ fun ExactHtmlVideoLibraryView(
                         }
 
                         @JavascriptInterface
+                        fun refreshVideos() {
+                            Handler(Looper.getMainLooper()).post {
+                                latestRefresh()
+                            }
+                        }
+
+                        @JavascriptInterface
                         fun playLastVideo() {
                             Handler(Looper.getMainLooper()).post {
-                                val target = videos.firstOrNull()?.uri?.toString() ?: "sample://western_full"
+                                val target = latestVideos.firstOrNull()?.uri?.toString() ?: "sample://western_full"
                                 onVideoSelected(target)
                             }
                         }
@@ -398,11 +407,10 @@ fun ExactHtmlVideoLibraryView(
                         fun onMoreItemClick(id: String) {
                             Handler(Looper.getMainLooper()).post {
                                 when (id) {
-                                    "terminal" -> onOpenTerminal()
                                     "url" -> onOpenCustomUrl()
                                     "vault" -> onOpenProtectedVault()
-                                    "settings" -> { /* В v4 настройки открываются прямо в HTML */ }
-                                    "share" -> { /* В v4 раздача открывается прямо в HTML */ }
+                                    "settings" -> { /* В v5 настройки открываются прямо в HTML */ }
+                                    "share" -> { /* В v5 раздача открывается прямо в HTML */ }
                                     else -> Toast.makeText(context, "Выбран пункт: $id", Toast.LENGTH_SHORT).show()
                                 }
                             }
@@ -439,7 +447,15 @@ fun ExactHtmlVideoLibraryView(
                                 wifiJson.put("ssid", wifiSsid)
                                 wifiJson.put("pass", wifiPass)
                                 wifiJson.put("qrPayload", wifiQr)
-                                wifiJson.put("status", if (wifiEnabled) "Точка активна: $wifiSsid" else "Прямое подключение по QR с паролем от Wi‑Fi Direct")
+                                val currentWifiStatus = wifiStatusRef.get()
+                                val statusDisplay = if (!currentWifiStatus.isNullOrBlank()) {
+                                    currentWifiStatus
+                                } else if (wifiEnabled) {
+                                    "Точка активна: $wifiSsid"
+                                } else {
+                                    "Прямое подключение по QR с паролем от Wi‑Fi Direct"
+                                }
+                                wifiJson.put("status", statusDisplay)
                                 json.put("wifi", wifiJson)
 
                                 json.toString()
@@ -496,13 +512,21 @@ fun ExactHtmlVideoLibraryView(
                                 if (on) {
                                     WifiDirectManager.startHotspotOrDirect(
                                         context = context,
-                                        onStatus = { /* status */ },
+                                        onStatus = { st ->
+                                            wifiStatusRef.set(st)
+                                            Handler(Looper.getMainLooper()).post {
+                                                webViewRef?.evaluateJavascript("if (window.onShareState) { window.onShareState(); }", null)
+                                            }
+                                        },
                                         onComplete = {
-                                            webViewRef?.evaluateJavascript("if (window.onShareState) { window.onShareState(); }", null)
+                                            Handler(Looper.getMainLooper()).post {
+                                                webViewRef?.evaluateJavascript("if (window.onShareState) { window.onShareState(); }", null)
+                                            }
                                         }
                                     )
                                 } else {
                                     WifiDirectManager.stop(context)
+                                    wifiStatusRef.set("")
                                     webViewRef?.evaluateJavascript("if (window.onShareState) { window.onShareState(); }", null)
                                 }
                             }
@@ -563,14 +587,12 @@ fun ExactHtmlVideoLibraryView(
                                 val bg = prefs.getBoolean("bg_play", false)
                                 val buff = prefs.getBoolean("show_buffering_status", true)
                                 val rot = prefs.getBoolean("auto_rotate", true)
-                                val design = ThemeManager.activeTheme.id
 
                                 val json = JSONObject()
                                 json.put("hw_accel", hw)
                                 json.put("bg_play", bg)
                                 json.put("show_buffering_status", buff)
                                 json.put("auto_rotate", rot)
-                                json.put("design", design)
                                 json.toString()
                             } catch (e: Exception) {
                                 "{}"
@@ -580,18 +602,8 @@ fun ExactHtmlVideoLibraryView(
                         @JavascriptInterface
                         fun setSetting(key: String, value: String) {
                             Handler(Looper.getMainLooper()).post {
-                                if (key == "design") {
-                                    val preset = when (value) {
-                                        "nexora_orange_original" -> ThemePresets.NexoraOriginalOrange
-                                        "nexora_neon" -> ThemePresets.NexoraOriginalOrange
-                                        "nexora_neon_screenshot" -> ThemePresets.NexoraCyberScreenshot
-                                        "nexora_screenshot" -> ThemePresets.NexoraScreenshot
-                                        "cyberpunk" -> ThemePresets.Cyberpunk
-                                        "deep_oled" -> ThemePresets.DeepOled
-                                        else -> ThemePresets.NexoraOriginalOrange
-                                    }
-                                    ThemeManager.applyDefaultPreset(context, preset)
-                                } else {
+                                val validKeys = setOf("hw_accel", "bg_play", "show_buffering_status", "auto_rotate")
+                                if (key in validKeys) {
                                     val prefs = context.getSharedPreferences("video_prefs", Context.MODE_PRIVATE)
                                     prefs.edit().putBoolean(key, value.toBoolean()).apply()
                                 }

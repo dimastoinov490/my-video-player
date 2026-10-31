@@ -108,6 +108,13 @@ svg.ic{width:1em;height:1em;display:block}
 <div class="vcard"><div class="thumb"><span class="badge">SD</span><span class="dur">0:14</span></div>
 <div class="t">name.mp4</div><div class="m">12.3 MB • 19.09.2026</div></div> */
 .vcard{background:linear-gradient(180deg,#0d0f14,#080a0e);border:calc(2*var(--u)) solid var(--line);border-radius:calc(30*var(--u));padding:calc(14*var(--u))}
+#video-list{grid-template-columns:repeat(3,1fr);gap:calc(14*var(--u))}
+#video-list .vcard{border-radius:calc(22*var(--u));padding:calc(10*var(--u));min-width:0}
+#video-list .thumb{border-radius:calc(16*var(--u))}
+#video-list .badge,#video-list .dur{padding:calc(2*var(--u)) calc(9*var(--u));border-radius:calc(10*var(--u));font-size:calc(17*var(--u))}
+#video-list .badge{left:calc(8*var(--u));top:calc(8*var(--u))}#video-list .dur{right:calc(8*var(--u));bottom:calc(8*var(--u))}
+#video-list .vcard .t{font-size:calc(24*var(--u));margin-top:calc(8*var(--u))}
+#video-list .vcard .m{font-size:calc(18*var(--u));margin-top:calc(4*var(--u));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .thumb{position:relative;aspect-ratio:440/218;border-radius:calc(22*var(--u));background:#1a1c24;overflow:hidden}
 .badge,.dur{position:absolute;padding:calc(4*var(--u)) calc(14*var(--u));border-radius:calc(14*var(--u));background:rgba(0,0,0,.6);font-size:calc(22*var(--u))}
 .badge{left:calc(12*var(--u));top:calc(12*var(--u))}.dur{right:calc(14*var(--u));bottom:calc(12*var(--u))}
@@ -249,7 +256,7 @@ svg.ic{width:1em;height:1em;display:block}
   <!-- ============ VIDEO ============ -->
   <section class="page active" id="p-video">
     <button class="hbtn round hsearch" aria-label="Поиск"><svg class="ic"><use href="#i-search"/></svg></button>
-    <button class="hbtn round history" aria-label="История"><svg class="ic"><use href="#i-hist"/></svg></button>
+    <button class="hbtn round history" aria-label="Обновить список видео"><svg class="ic"><use href="#i-hist"/></svg></button>
     <button class="hbtn menu" aria-label="Меню"><svg class="ic"><use href="#i-dots"/></svg></button>
     <div class="tabs" id="tabs">
       <div class="pill"></div><div class="underline"></div>
@@ -336,7 +343,7 @@ svg.ic{width:1em;height:1em;display:block}
   <!-- ============ ЕЩЁ → Настройки плеера ============ -->
   <section class="sub" id="s-settings"><div class="scroll">
     <div class="subhead item"><button class="backbtn" data-back aria-label="Назад"><svg class="ic"><use href="#i-back"/></svg></button>
-      <div><h1>Настройки плеера</h1><p>Аудио, видео, декодеры и темы</p></div></div>
+      <div><h1>Настройки плеера</h1><p>Аудио, видео и декодеры</p></div></div>
 
     <div class="row item" style="--i:1"><b>Воспроизведение</b><span class="caps">Видео</span></div>
     <div class="card static item" style="--i:2"><div class="tile"><svg class="ic"><use href="#i-chip"/></svg></div>
@@ -351,9 +358,6 @@ svg.ic{width:1em;height:1em;display:block}
     <div class="card static item" style="--i:5"><div class="tile"><svg class="ic"><use href="#i-rot"/></svg></div>
       <div class="body"><div class="t">Автоповорот</div><div class="s" style="white-space:normal">Переворачивать экран при смене ориентации</div></div>
       <button class="sw" data-set="auto_rotate" role="switch" aria-checked="false"><i></i></button></div>
-
-    <div class="row item" style="--i:6"><b>Оформление</b><span class="caps">Стиль</span></div>
-    <div id="l-designs"></div>
 
     <div class="row item" style="--i:11"><b>О приложении</b></div>
     <div class="card static item" style="--i:12"><div class="tile"><svg class="ic"><use href="#i-info"/></svg></div>
@@ -395,8 +399,7 @@ let allAudios = [];
 let allFolders = [];
 let allPlaylists = [];
 let moreItems = [
-  { id: "settings", icon: "dots", title: "Настройки плеера", subtitle: "Аудио, видео, декодеры и темы", count: "Параметры" },
-  { id: "terminal", icon: "clap", title: "Консоль UI (>_)", subtitle: "JSON-пайплайн и кастомизация кнопок", count: "Терминал" },
+  { id: "settings", icon: "dots", title: "Настройки плеера", subtitle: "Аудио, видео и декодеры", count: "Параметры" },
   { id: "url", icon: "search", title: "Открыть ссылку потока", subtitle: "Воспроизведение HTTP, HLS, RTSP", count: "Сеть" },
   { id: "vault", icon: "folderf", title: "Защищённый сейф", subtitle: "Скрытые файлы и видео под паролем", count: "Сейф" },
   { id: "share", icon: "list", title: "Wi-Fi & HTTP Раздача", subtitle: "Локальный обмен файлами по сети", count: "Сервер" }
@@ -690,8 +693,8 @@ if (hsearch) {
 const historyBtn = document.querySelector('.history');
 if (historyBtn) {
   historyBtn.addEventListener('click', () => {
-    if (window.AndroidBridge && window.AndroidBridge.openHistory) {
-      window.AndroidBridge.openHistory();
+    if (window.AndroidBridge && window.AndroidBridge.refreshVideos) {
+      window.AndroidBridge.refreshVideos();
     } else {
       const items = (allVideos && allVideos.length > 0) ? allVideos : defaultSampleVideos;
       if (items.length > 0) playMedia(items[0].uri);
@@ -800,17 +803,11 @@ const $ = id => document.getElementById(id);
 const mock = {
   share: { running:false, url:'http://192.168.1.23:8080', port:8080, error:'', authRequired:false, username:'admin', password:'1234', folder:'all',
            wifi:{ enabled:false, ssid:'Nexora-Direct-Share', pass:'nexora8888', qrPayload:'WIFI:T:WPA;S:Nexora-Direct-Share;P:nexora8888;;', status:'' } },
-  settings: { hw_accel:true, bg_play:false, show_buffering_status:true, auto_rotate:true, design:'nexora_neon' }
+  settings: { hw_accel:true, bg_play:false, show_buffering_status:true, auto_rotate:true }
 };
 const FOLDERS = [
   ['all','Вся библиотека (Видео и Музыка)'], ['movies','Папка Movies (Фильмы)'], ['downloads','Папка Downloads (Загрузки)'],
   ['dcim','Папка DCIM (Камера и галерея)'], ['share_dir','Выделенная папка обмена Nexora']
-];
-const DESIGNS = [
-  ['nexora_orange_original','Оригинал Nexora','Фирменный оранжево-золотой стиль'],
-  ['nexora_neon','Неон','Тёмная неоновая тема'],
-  ['nexora_neon_screenshot','Неон по скриншотам','Оформление со скриншотов'],
-  ['nexora_screenshot','По макету','UI дизайн по скриншоту (макету)']
 ];
 
 function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2200); }
@@ -889,17 +886,11 @@ function setSetting(k, v){
   if (PREVIEW) mock.settings[k] = (v==='true') ? true : (v==='false') ? false : v; else callB('setSetting', k, String(v));
   renderSettings();
 }
-function buildDesigns(){
-  $('l-designs').innerHTML = DESIGNS.map((d,i)=>`<div class="card item" style="--i:${7+i}" data-d="${d[0]}"><div class="tile"><svg class="ic"><use href="#i-palette"/></svg></div><div class="body"><div class="t">${esc(d[1])}</div><div class="s">${esc(d[2])}</div></div><div class="rd">${ic('check')}</div></div>`).join('');
-  document.querySelectorAll('#l-designs .card').forEach(c=>c.addEventListener('click',()=>{ setSetting('design', c.dataset.d); toast('Стиль: ' + c.querySelector('.t').textContent); }));
-}
 function renderSettings(){
   const s = getSettings();
   document.querySelectorAll('[data-set]').forEach(b=>setSw(b, !!s[b.dataset.set]));
-  document.querySelectorAll('#l-designs .card').forEach(c=>c.classList.toggle('sel', c.dataset.d === s.design));
 }
 document.querySelectorAll('[data-set]').forEach(b=>b.addEventListener('click',()=>setSetting(b.dataset.set, String(!getSettings()[b.dataset.set]))));
-buildDesigns();
 
 /* ---------- open / close sub-pages (same slide + rise animation) ---------- */
 let activeSub = null, subTimer = null;
@@ -926,7 +917,7 @@ window.onShareState = () => { if (activeSub === 'share') renderShare(); };   // 
 function openMoreItem(id){
   if (id === 'share'    && (PREVIEW || hasB('shareGetState'))) return openSub('share');
   if (id === 'settings' && (PREVIEW || hasB('getSettings')))   return openSub('settings');
-  if (hasB('onMoreItemClick')) callB('onMoreItemClick', id);     // url / vault / terminal (and legacy fallback)
+  if (hasB('onMoreItemClick')) callB('onMoreItemClick', id);     // url / vault (and legacy fallback)
 }
 
 /* Initial render */

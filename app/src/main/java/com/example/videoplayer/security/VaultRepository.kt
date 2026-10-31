@@ -93,7 +93,6 @@ class SecureVaultRepository(private val context: Context) {
         }
 
         prefs.edit().putString("name_$id", displayName).apply()
-        recordHiddenItem(displayName)
         return id
     }
 
@@ -102,52 +101,21 @@ class SecureVaultRepository(private val context: Context) {
     }
 
     fun recordHiddenItem(identifier: String) {
-        val current = getHiddenItems().toMutableSet()
-        val clean = identifier.trim().lowercase()
-        current.add(clean)
-        val withoutExt = clean.substringBeforeLast('.')
-        if (withoutExt.isNotBlank()) current.add(withoutExt)
-        val lastSegment = clean.substringAfterLast('/')
-        if (lastSegment.isNotBlank()) current.add(lastSegment)
-        prefs.edit().putStringSet("vault_hidden_items", current).apply()
+        // No-op: files are physically moved into encrypted vault storage
     }
 
     fun getHiddenItems(): Set<String> {
-        return prefs.getStringSet("vault_hidden_items", emptySet()) ?: emptySet()
+        if (prefs.contains("vault_hidden_items")) {
+            prefs.edit().remove("vault_hidden_items").apply()
+        }
+        return emptySet()
     }
 
     fun removeHiddenItem(identifier: String) {
-        val current = getHiddenItems().toMutableSet()
-        val clean = identifier.trim().lowercase()
-        current.remove(clean)
-        current.remove(clean.substringBeforeLast('.'))
-        current.remove(clean.substringAfterLast('/'))
-        prefs.edit().putStringSet("vault_hidden_items", current).apply()
+        // No-op
     }
 
     fun isItemHidden(id: String? = null, uri: String? = null, path: String? = null, name: String? = null): Boolean {
-        val hidden = getHiddenItems()
-        val vaultNames = listItems().map { it.displayName.trim().lowercase() }.toSet()
-        if (hidden.isEmpty() && vaultNames.isEmpty()) return false
-
-        if (id != null && hidden.contains(id.trim().lowercase())) return true
-        if (uri != null) {
-            val uLower = uri.trim().lowercase()
-            if (hidden.contains(uLower) || hidden.contains(uLower.substringAfterLast('/'))) return true
-        }
-        if (name != null) {
-            val nameLower = name.trim().lowercase()
-            if (hidden.contains(nameLower) || vaultNames.contains(nameLower)) return true
-            val withoutExt = nameLower.substringBeforeLast('.')
-            if (withoutExt.isNotBlank() && (hidden.contains(withoutExt) || vaultNames.contains(withoutExt))) return true
-        }
-        if (path != null) {
-            val pathLower = path.trim().lowercase()
-            if (hidden.contains(pathLower)) return true
-            val fileName = pathLower.substringAfterLast('/')
-            if (hidden.contains(fileName) || vaultNames.contains(fileName)) return true
-            if (hidden.any { it.length > 3 && (pathLower.endsWith(it) || pathLower.contains(it)) }) return true
-        }
         return false
     }
 

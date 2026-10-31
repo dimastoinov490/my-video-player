@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.os.Build
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -48,7 +49,6 @@ import androidx.core.content.ContextCompat
 import com.example.videoplayer.R
 import com.example.videoplayer.model.MediaStoreHelper
 import com.example.videoplayer.model.VideoItem
-import com.example.videoplayer.ui.terminal.TerminalConsoleOverlay
 import com.example.videoplayer.ui.theme.*
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Path
@@ -82,7 +82,6 @@ fun VideoLibraryScreen(
     var searchQuery by remember { mutableStateOf("") }
     var isSearchActive by remember { mutableStateOf(false) }
     var showTopMenu by remember { mutableStateOf(false) }
-    var showTerminalConsole by remember { mutableStateOf(false) }
     var isRefreshing by remember { mutableStateOf(false) }
     var videos by remember { mutableStateOf<List<VideoItem>>(emptyList()) }
     var scanStatusText by remember { mutableStateOf("") }
@@ -156,7 +155,15 @@ fun VideoLibraryScreen(
                 onOpenSettings = onOpenSettings,
                 onOpenCustomUrl = onOpenCustomUrl,
                 onOpenProtectedVault = onOpenProtectedVault,
-                onOpenTerminal = { showTerminalConsole = true },
+                onRefreshVideos = {
+                    Toast.makeText(context, "Обновление списка видео…", Toast.LENGTH_SHORT).show()
+                    coroutineScope.launch {
+                        withContext(Dispatchers.IO) {
+                            MediaStoreHelper.requestMediaScan(context)
+                        }
+                        loadVideos()
+                    }
+                },
                 currentNavIndex = bottomNavIndex,
                 modifier = Modifier.fillMaxSize()
             )
@@ -164,18 +171,6 @@ fun VideoLibraryScreen(
                 // Fallback stub
             }
         }
-    }
-
-    // Внутренняя консоль терминала с плавной анимацией
-    AnimatedVisibility(
-        visible = showTerminalConsole,
-        enter = slideInHorizontally { it / 8 } + fadeIn(animationSpec = tween(420, easing = CubicBezierEasing(0.2f, 0.9f, 0.3f, 1f))),
-        exit = slideOutHorizontally { it / 8 } + fadeOut(animationSpec = tween(260))
-    ) {
-        TerminalConsoleOverlay(
-            isVisible = true,
-            onClose = { showTerminalConsole = false }
-        )
     }
 }
 

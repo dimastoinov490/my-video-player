@@ -3,6 +3,7 @@ package com.example.videoplayer.model
 import android.content.ContentUris
 import android.content.Context
 import android.graphics.Bitmap
+import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -25,8 +26,8 @@ object MediaStoreHelper {
         val seenPaths = mutableSetOf<String>()
 
         val secureRepo = com.example.videoplayer.security.SecureVaultRepository(context)
-        val hiddenItems = try { secureRepo.getHiddenItems() } catch (_: Exception) { emptySet() }
-        val vaultNames = try { secureRepo.listItems().map { it.displayName.lowercase().trim() }.toSet() } catch (_: Exception) { emptySet() }
+        val hiddenItems = emptySet<String>()
+        val vaultNames = emptySet<String>()
 
         // 1. MediaStore query
         onScanningPath?.invoke("Индексация MediaStore...")
@@ -215,8 +216,8 @@ object MediaStoreHelper {
     fun getAudios(context: Context): List<AudioItem> {
         val audioList = mutableListOf<AudioItem>()
         val secureRepo = com.example.videoplayer.security.SecureVaultRepository(context)
-        val hiddenItems = try { secureRepo.getHiddenItems() } catch (_: Exception) { emptySet() }
-        val vaultNames = try { secureRepo.listItems().map { it.displayName.lowercase().trim() }.toSet() } catch (_: Exception) { emptySet() }
+        val hiddenItems = emptySet<String>()
+        val vaultNames = emptySet<String>()
 
         val projection = arrayOf(
             MediaStore.Audio.Media._ID,
@@ -278,5 +279,50 @@ object MediaStoreHelper {
         } catch (_: Throwable) {}
 
         return audioList
+    }
+
+    fun requestMediaScan(context: Context) {
+        try {
+            val scanDirs = listOfNotNull(
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM),
+                File(Environment.getExternalStorageDirectory(), "Movies"),
+                File(Environment.getExternalStorageDirectory(), "Download"),
+                File(Environment.getExternalStorageDirectory(), "DCIM")
+            )
+            val filePaths = mutableListOf<String>()
+
+            fun collectFiles(dir: File, depth: Int) {
+                if (depth < 0 || !dir.exists() || !dir.isDirectory) return
+                val files = dir.listFiles() ?: return
+                for (f in files) {
+                    if (f.name.startsWith(".")) continue
+                    if (f.isDirectory) {
+                        collectFiles(f, depth - 1)
+                    } else if (f.isFile && f.length() > 0) {
+                        val ext = f.extension.lowercase()
+                        if (ext in VIDEO_EXTENSIONS) {
+                            filePaths.add(f.absolutePath)
+                        }
+                    }
+                }
+            }
+
+            for (d in scanDirs) {
+                collectFiles(d, 3)
+            }
+
+            if (filePaths.isNotEmpty()) {
+                MediaScannerConnection.scanFile(
+                    context,
+                    filePaths.toTypedArray(),
+                    null,
+                    null
+                )
+            }
+        } catch (e: Throwable) {
+            Log.e(TAG, "requestMediaScan error: ${e.message}")
+        }
     }
 }
