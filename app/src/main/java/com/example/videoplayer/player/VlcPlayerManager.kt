@@ -8,6 +8,7 @@ import android.view.SurfaceView
 import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
+import org.videolan.libvlc.interfaces.IVLCVout
 import com.example.videoplayer.ui.VideoScaleMode
 
 class VlcPlayerManager(private val context: Context) {
@@ -26,9 +27,20 @@ class VlcPlayerManager(private val context: Context) {
 
     var onStatusChanged: ((String) -> Unit)? = null
     var onTimeChanged: ((Long, Long) -> Unit)? = null
+    var onVideoAspectChanged: ((Float) -> Unit)? = null
 
     val isEngineReady: Boolean
         get() = libVLC != null && mediaPlayer != null && !isReleased
+
+    private val videoLayoutListener = IVLCVout.OnNewVideoLayoutListener { _, _, _, visibleWidth, visibleHeight, sarNum, sarDen ->
+        if (visibleHeight > 0 && visibleWidth > 0) {
+            val sar = if (sarNum > 0 && sarDen > 0) sarNum.toFloat() / sarDen.toFloat() else 1f
+            val ar = (visibleWidth.toFloat() / visibleHeight.toFloat()) * sar
+            if (ar > 0.1f && ar < 10f) {
+                onVideoAspectChanged?.invoke(ar)
+            }
+        }
+    }
 
     private val eventListener = MediaPlayer.EventListener { event ->
         if (isReleased) return@EventListener
@@ -36,6 +48,19 @@ class VlcPlayerManager(private val context: Context) {
             MediaPlayer.Event.Buffering -> onStatusChanged?.invoke("Buffering: ${event.buffering}%")
             MediaPlayer.Event.Playing -> {
                 setVideoScale(currentScaleMode)
+                val mp = mediaPlayer
+                if (mp != null) {
+                    try {
+                        val track = mp.currentVideoTrack
+                        if (track != null && track.height > 0 && track.width > 0) {
+                            val sar = if (track.sarNum > 0 && track.sarDen > 0) track.sarNum.toFloat() / track.sarDen.toFloat() else 1f
+                            val ar = (track.width.toFloat() / track.height.toFloat()) * sar
+                            if (ar > 0.1f && ar < 10f) {
+                                onVideoAspectChanged?.invoke(ar)
+                            }
+                        }
+                    } catch (_: Throwable) {}
+                }
                 onStatusChanged?.invoke("Playing")
             }
             MediaPlayer.Event.Paused -> onStatusChanged?.invoke("Paused")
@@ -73,7 +98,11 @@ class VlcPlayerManager(private val context: Context) {
         try {
             val vout = mediaPlayer?.vlcVout ?: return
             vout.setVideoView(surfaceView)
-            vout.attachViews()
+            try {
+                vout.attachViews(videoLayoutListener)
+            } catch (_: Throwable) {
+                vout.attachViews()
+            }
         } catch (e: Throwable) {
             Log.w("VlcPlayerManager", "attachSurface error", e)
         }
@@ -103,20 +132,12 @@ class VlcPlayerManager(private val context: Context) {
         val mp = mediaPlayer ?: return
         try {
             when (mode) {
-                VideoScaleMode.FIT -> {
+                VideoScaleMode.FIT,
+                VideoScaleMode.FILL -> {
                     try {
                         mp.videoScale = MediaPlayer.ScaleType.SURFACE_BEST_FIT
                     } catch (_: Throwable) {
                         mp.setVideoScale(MediaPlayer.ScaleType.SURFACE_BEST_FIT)
-                    }
-                    try { mp.aspectRatio = null } catch (_: Throwable) {}
-                    try { mp.scale = 0f } catch (_: Throwable) {}
-                }
-                VideoScaleMode.FILL -> {
-                    try {
-                        mp.videoScale = MediaPlayer.ScaleType.SURFACE_FIT_SCREEN
-                    } catch (_: Throwable) {
-                        mp.setVideoScale(MediaPlayer.ScaleType.SURFACE_FIT_SCREEN)
                     }
                     try { mp.aspectRatio = null } catch (_: Throwable) {}
                     try { mp.scale = 0f } catch (_: Throwable) {}

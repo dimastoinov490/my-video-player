@@ -42,6 +42,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -203,6 +204,7 @@ fun PlayerScreen(
 
     var showBrightnessGauge by remember { mutableStateOf(false) }
     var showVolumeGauge by remember { mutableStateOf(false) }
+    var videoAspect by remember { mutableFloatStateOf(16f / 9f) }
     val coroutineScope = rememberCoroutineScope()
     var gaugeDismissJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
 
@@ -249,6 +251,11 @@ fun PlayerScreen(
     }
 
     DisposableEffect(playerManager) {
+        playerManager.onVideoAspectChanged = { ar ->
+            if (ar > 0.1f && ar < 10f) {
+                videoAspect = ar
+            }
+        }
         playerManager.onStatusChanged = { status ->
             statusText = status
             if (status == "Playing") isPlaying = true
@@ -340,10 +347,25 @@ fun PlayerScreen(
         val uVal = (screenWidthDp.value / 1774f).coerceAtLeast(0.2f)
 
         // 1. VIDEO VIEWPORT: Pure & uncorrupted
-        Box(
-            modifier = Modifier.fillMaxSize(),
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxSize()
+                .clipToBounds(),
             contentAlignment = Alignment.Center
         ) {
+            val containerRatio = if (maxHeight.value > 0f) maxWidth.value / maxHeight.value else 16f / 9f
+            val surfaceModifier = when (scaleMode) {
+                VideoScaleMode.FILL -> {
+                    val (w, h) = if (videoAspect > containerRatio) {
+                        Pair(maxHeight * videoAspect, maxHeight)
+                    } else {
+                        Pair(maxWidth, maxWidth / videoAspect)
+                    }
+                    Modifier.requiredSize(w, h)
+                }
+                else -> Modifier.fillMaxSize()
+            }
+
             if (!useNativeFallback) {
                 AndroidView(
                     factory = { ctx ->
@@ -369,7 +391,7 @@ fun PlayerScreen(
                             })
                         }
                     },
-                    modifier = Modifier.fillMaxSize()
+                    modifier = surfaceModifier
                 )
             } else {
                 AndroidView(
@@ -1435,22 +1457,7 @@ private fun BrightnessGauge(
 
             Spacer(modifier = Modifier.height((44f * uVal).dp))
 
-            Box(
-                modifier = Modifier.size((19f * uVal).dp, (270f * uVal).dp),
-                contentAlignment = Alignment.Center
-            ) {
-                VerticalBarCanvas(uVal = uVal, fraction = brightness)
-
-                Text(
-                    text = "Яркость",
-                    color = Color(0xFFC4CBDB),
-                    fontSize = (28f * uVal).sp,
-                    softWrap = false,
-                    modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .offset(x = (44f * uVal).dp)
-                )
-            }
+            VerticalBarCanvas(uVal = uVal, fraction = brightness)
 
             Spacer(modifier = Modifier.height((56f * uVal).dp))
 
@@ -1488,22 +1495,7 @@ private fun VolumeGauge(
 
             Spacer(modifier = Modifier.height((44f * uVal).dp))
 
-            Box(
-                modifier = Modifier.size((19f * uVal).dp, (270f * uVal).dp),
-                contentAlignment = Alignment.Center
-            ) {
-                VerticalBarCanvas(uVal = uVal, fraction = volumeFraction)
-
-                Text(
-                    text = "Громкость",
-                    color = Color(0xFFC4CBDB),
-                    fontSize = (28f * uVal).sp,
-                    softWrap = false,
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .offset(x = -((44f * uVal).dp))
-                )
-            }
+            VerticalBarCanvas(uVal = uVal, fraction = volumeFraction)
 
             Spacer(modifier = Modifier.height((56f * uVal).dp))
 
