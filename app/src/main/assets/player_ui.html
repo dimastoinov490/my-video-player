@@ -395,13 +395,13 @@ const ic=n=>`<svg class="ic"><use href="#i-${n}"/></svg>`;
 
 /* ---- Dynamic state populated from Android Bridge ---- */
 let allVideos = [];
+const thumbCache = {};   // uri -> data:image/jpeg (кадры из видео, присылает Android)
 let allAudios = [];
 let allFolders = [];
 let allPlaylists = [];
 let moreItems = [
   { id: "settings", icon: "dots", title: "Настройки плеера", subtitle: "Аудио, видео и декодеры", count: "Параметры" },
   { id: "url", icon: "search", title: "Открыть ссылку потока", subtitle: "Воспроизведение HTTP, HLS, RTSP", count: "Сеть" },
-  { id: "vault", icon: "folderf", title: "Защищённый сейф", subtitle: "Скрытые файлы и видео под паролем", count: "Сейф" },
   { id: "share", icon: "list", title: "Wi-Fi & HTTP Раздача", subtitle: "Локальный обмен файлами по сети", count: "Сервер" }
 ];
 
@@ -441,8 +441,10 @@ function renderVideos() {
 
     const thumb = document.createElement('div');
     thumb.className = 'thumb';
-    if (v.thumb) {
-      thumb.style.backgroundImage = 'url(' + v.thumb + ')';
+    card.dataset.uri = v.uri || '';
+    const thumbSrc = (v.uri && thumbCache[v.uri]) || v.thumb;
+    if (thumbSrc) {
+      thumb.style.backgroundImage = 'url("' + thumbSrc + '")';
       thumb.style.backgroundSize = 'cover';
       thumb.style.backgroundPosition = 'center';
     }
@@ -755,6 +757,21 @@ window.setVideos = function(videosJson) {
   }
 };
 
+window.setVideoThumb = function(uri, dataUri) {
+  if (!uri || !dataUri) return;
+  thumbCache[uri] = dataUri;
+  document.querySelectorAll('#video-list .vcard').forEach(card => {
+    if (card.dataset.uri === uri) {
+      const t = card.querySelector('.thumb');
+      if (t) {
+        t.style.backgroundImage = 'url("' + dataUri + '")';
+        t.style.backgroundSize = 'cover';
+        t.style.backgroundPosition = 'center';
+      }
+    }
+  });
+};
+
 window.setAudios = function(audiosJson) {
   try {
     allAudios = typeof audiosJson === 'string' ? JSON.parse(audiosJson) : audiosJson;
@@ -917,7 +934,7 @@ window.onShareState = () => { if (activeSub === 'share') renderShare(); };   // 
 function openMoreItem(id){
   if (id === 'share'    && (PREVIEW || hasB('shareGetState'))) return openSub('share');
   if (id === 'settings' && (PREVIEW || hasB('getSettings')))   return openSub('settings');
-  if (hasB('onMoreItemClick')) callB('onMoreItemClick', id);     // url / vault (and legacy fallback)
+  if (hasB('onMoreItemClick')) callB('onMoreItemClick', id);     // url (and legacy fallback)
 }
 
 /* Initial render */

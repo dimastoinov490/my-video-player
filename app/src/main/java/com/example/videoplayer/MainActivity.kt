@@ -22,7 +22,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
-import com.example.videoplayer.security.SecureVaultScreen
 import com.example.videoplayer.ui.PlayerScreen
 import com.example.videoplayer.ui.VideoLibraryScreen
 import com.example.videoplayer.ui.theme.*
@@ -43,8 +42,6 @@ class MainActivity : FragmentActivity() {
                 ) {
                     var selectedVideoUri by remember { mutableStateOf<String?>(null) }
                     var showCustomUrlDialog by remember { mutableStateOf(false) }
-                    var showProtectedVault by remember { mutableStateOf(false) }
-                    var vaultClosedKey by remember { mutableIntStateOf(0) }
                     var urlInput by remember { mutableStateOf("") }
 
                     val subEnterTransition = remember {
@@ -67,27 +64,10 @@ class MainActivity : FragmentActivity() {
                                     urlInput = ""
                                     showCustomUrlDialog = true
                                 },
-                                onOpenSettings = { /* В v4 настройки открываются прямо в HTML */ },
-                                onOpenProtectedVault = { showProtectedVault = true },
-                                refreshKey = vaultClosedKey
+                                onOpenSettings = { /* В v4 настройки открываются прямо в HTML */ }
                             )
 
-                            // 1. Защищенное хранилище с плавной анимацией появления
-                            AnimatedVisibility(
-                                visible = showProtectedVault,
-                                enter = subEnterTransition,
-                                exit = subExitTransition
-                            ) {
-                                SecureVaultScreen(
-                                    onBack = {
-                                        showProtectedVault = false
-                                        vaultClosedKey++
-                                    },
-                                    onOpenVaultFile = { path -> selectedVideoUri = path }
-                                )
-                            }
-
-                            // 2. Воспроизведение по ссылке с плавной анимацией появления
+                            // Воспроизведение по ссылке с плавной анимацией появления
                             AnimatedVisibility(
                                 visible = showCustomUrlDialog,
                                 enter = subEnterTransition,

@@ -115,13 +115,6 @@ fun resolveVideoTitle(context: Context, uriString: String): String {
             }
         }
 
-        if (uriString.contains(".decrypted")) {
-            val id = uriString.substringAfterLast('/').substringBefore(".decrypted")
-            val secureRepo = com.example.videoplayer.security.SecureVaultRepository(context)
-            val vaultItem = secureRepo.listItems().find { it.id == id }
-            if (vaultItem != null) return vaultItem.displayName
-        }
-
         val clean = uriString.substringAfterLast('/').substringBefore('?')
         val decoded = try { URLDecoder.decode(clean, "UTF-8") } catch (_: Exception) { clean }
         if (decoded.isNotBlank() && !decoded.all { it.isDigit() }) {

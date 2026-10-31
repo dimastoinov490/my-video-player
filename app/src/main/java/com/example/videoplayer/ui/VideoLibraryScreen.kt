@@ -69,9 +69,7 @@ import java.util.Locale
 fun VideoLibraryScreen(
     onVideoSelected: (String) -> Unit,
     onOpenCustomUrl: () -> Unit,
-    onOpenSettings: () -> Unit,
-    onOpenProtectedVault: () -> Unit,
-    refreshKey: Any? = null
+    onOpenSettings: () -> Unit
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -108,7 +106,7 @@ fun VideoLibraryScreen(
         loadVideosInternal(context, coroutineScope, onVideosLoaded = { videos = it }, onStatus = { scanStatusText = it }, onRefreshing = { isRefreshing = it }, onBanner = { showScanBanner = it })
     }
 
-    LaunchedEffect(refreshKey) {
+    LaunchedEffect(Unit) {
         if (!hasStoragePermission) {
             requestMediaPermissions(permissionLauncher)
         }
@@ -154,7 +152,6 @@ fun VideoLibraryScreen(
                 onOpenMenu = onOpenSettings,
                 onOpenSettings = onOpenSettings,
                 onOpenCustomUrl = onOpenCustomUrl,
-                onOpenProtectedVault = onOpenProtectedVault,
                 onRefreshVideos = {
                     Toast.makeText(context, "Обновление списка видео…", Toast.LENGTH_SHORT).show()
                     coroutineScope.launch {

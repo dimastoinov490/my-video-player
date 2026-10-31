@@ -247,9 +247,6 @@ private fun formatBreadcrumbs(path: String, root: String): String {
 
 private fun getDirectoryItems(context: android.content.Context, path: String, root: String, query: String): List<ExplorerItem> {
     val results = mutableListOf<ExplorerItem>()
-    val secureRepo = com.example.videoplayer.security.SecureVaultRepository(context)
-    val hiddenItems = try { secureRepo.getHiddenItems() } catch (_: Exception) { emptySet() }
-    val vaultNames = try { secureRepo.listItems().map { it.displayName.lowercase(Locale.ROOT).trim() }.toSet() } catch (_: Exception) { emptySet() }
 
     try {
         val dir = File(path)
@@ -258,7 +255,6 @@ private fun getDirectoryItems(context: android.content.Context, path: String, ro
             if (files != null) {
                 for (f in files) {
                     if (f.name.startsWith(".") || f.name.endsWith(".enc") || f.name.contains("secure_vault")) continue
-                    if (secureRepo.isItemHidden(path = f.absolutePath, name = f.name)) continue
                     val isDir = f.isDirectory
                     val ext = f.extension.lowercase(Locale.ROOT)
                     val isVideo = ext in listOf("mp4", "mkv", "avi", "mov", "webm", "ts", "flv", "wmv", "3gp")

@@ -25,10 +25,6 @@ object MediaStoreHelper {
         val videoList = mutableListOf<VideoItem>()
         val seenPaths = mutableSetOf<String>()
 
-        val secureRepo = com.example.videoplayer.security.SecureVaultRepository(context)
-        val hiddenItems = emptySet<String>()
-        val vaultNames = emptySet<String>()
-
         // 1. MediaStore query
         onScanningPath?.invoke("Индексация MediaStore...")
         val projection = arrayOf(
@@ -77,19 +73,6 @@ object MediaStoreHelper {
                     val nameLower = displayName.lowercase().trim()
                     val titleLower = title.lowercase().trim()
                     val pathLower = dataPath?.lowercase()?.trim()
-                    val contentUriCandidate = if (id >= 0) {
-                        ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id).toString()
-                    } else null
-
-                    val isHidden = secureRepo.isItemHidden(
-                        id = if (id >= 0) id.toString() else null,
-                        uri = contentUriCandidate,
-                        path = dataPath,
-                        name = displayName
-                    ) || secureRepo.isItemHidden(name = title)
-                    if (isHidden) {
-                        continue // Hidden in secure vault
-                    }
 
                     if (!dataPath.isNullOrBlank()) {
                         seenPaths.add(dataPath.lowercase())
@@ -139,7 +122,7 @@ object MediaStoreHelper {
         for (dir in scanDirs) {
             if (dir.exists() && dir.isDirectory) {
                 onScanningPath?.invoke("Сканирование: ${dir.name}...")
-                scanDirectoryRecursive(dir, seenPaths, videoList, maxDepth = 2, hiddenItems = hiddenItems, vaultNames = vaultNames)
+                scanDirectoryRecursive(dir, seenPaths, videoList, maxDepth = 2)
             }
         }
 
@@ -150,24 +133,18 @@ object MediaStoreHelper {
         dir: File,
         seenPaths: MutableSet<String>,
         outList: MutableList<VideoItem>,
-        maxDepth: Int,
-        hiddenItems: Set<String>,
-        vaultNames: Set<String>
+        maxDepth: Int
     ) {
         if (maxDepth < 0) return
         try {
             val files = dir.listFiles() ?: return
             for (file in files) {
                 if (file.isDirectory && !file.name.startsWith(".") && !file.name.contains("secure_vault")) {
-                    scanDirectoryRecursive(file, seenPaths, outList, maxDepth - 1, hiddenItems, vaultNames)
+                    scanDirectoryRecursive(file, seenPaths, outList, maxDepth - 1)
                 } else if (file.isFile && file.length() > 0 && !file.name.endsWith(".enc")) {
                     val ext = file.extension.lowercase()
                     if (ext in VIDEO_EXTENSIONS) {
                         val pathLower = file.absolutePath.lowercase()
-                        val nameLower = file.name.lowercase().trim()
-                        if (hiddenItems.contains(nameLower) || vaultNames.contains(nameLower) || hiddenItems.contains(pathLower)) {
-                            continue
-                        }
                         if (seenPaths.add(pathLower)) {
                             outList.add(
                                 VideoItem(
@@ -215,9 +192,6 @@ object MediaStoreHelper {
 
     fun getAudios(context: Context): List<AudioItem> {
         val audioList = mutableListOf<AudioItem>()
-        val secureRepo = com.example.videoplayer.security.SecureVaultRepository(context)
-        val hiddenItems = emptySet<String>()
-        val vaultNames = emptySet<String>()
 
         val projection = arrayOf(
             MediaStore.Audio.Media._ID,
@@ -255,10 +229,6 @@ object MediaStoreHelper {
                     val duration = if (durCol >= 0) it.getLong(durCol) else 0L
                     val size = if (sizeCol >= 0) it.getLong(sizeCol) else 0L
                     val dateAdded = if (dateCol >= 0) it.getLong(dateCol) else 0L
-
-                    if (secureRepo.isItemHidden(id = if (id >= 0) id.toString() else null, name = title)) {
-                        continue
-                    }
 
                     if (id >= 0) {
                         audioList.add(

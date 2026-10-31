@@ -32,6 +32,7 @@ import com.example.videoplayer.model.MediaStoreHelper
 import com.example.videoplayer.model.Playlist
 import com.example.videoplayer.model.PlaylistManager
 import com.example.videoplayer.model.VideoItem
+import com.example.videoplayer.model.VideoThumbnailLoader
 import com.example.videoplayer.service.HttpBroadcastFolder
 import com.example.videoplayer.service.HttpServerConfig
 import com.example.videoplayer.service.LocalHttpShareServer
@@ -66,7 +67,6 @@ fun ExactHtmlVideoLibraryView(
     onOpenMenu: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenCustomUrl: () -> Unit,
-    onOpenProtectedVault: () -> Unit,
     onRefreshVideos: () -> Unit,
     currentNavIndex: Int = 0,
     modifier: Modifier = Modifier
@@ -75,6 +75,7 @@ fun ExactHtmlVideoLibraryView(
     val coroutineScope = rememberCoroutineScope()
     val latestRefresh by rememberUpdatedState(onRefreshVideos)
     val latestVideos by rememberUpdatedState(videos)
+    val sentThumbs = remember { java.util.Collections.synchronizedSet(HashSet<String>()) }
     val wifiStatusRef = remember { AtomicReference("") }
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
     var currentBrowsePath by remember {
@@ -85,6 +86,22 @@ fun ExactHtmlVideoLibraryView(
                 "/storage/emulated/0"
             }
         )
+    }
+
+    fun sendThumbsToWeb(webView: WebView, list: List<VideoItem>) {
+        coroutineScope.launch(Dispatchers.IO) {
+            for (v in list) {
+                val uriStr = v.uri.toString()
+                if (!sentThumbs.add(uriStr)) continue
+                val d = VideoThumbnailLoader.getDataUri(context, v) ?: continue
+                withContext(Dispatchers.Main) {
+                    webView.evaluateJavascript(
+                        "if (window.setVideoThumb) { window.setVideoThumb(${JSONObject.quote(uriStr)}, ${JSONObject.quote(d)}); }",
+                        null
+                    )
+                }
+            }
+        }
     }
 
     fun sendVideosToWeb(webView: WebView, vList: List<VideoItem>) {
@@ -109,19 +126,13 @@ fun ExactHtmlVideoLibraryView(
             val durStr = if (h > 0) String.format(Locale.US, "%d:%02d:%02d", h, m % 60, s) else String.format(Locale.US, "%d:%02d", m, s)
             obj.put("dur", durStr)
             obj.put("uri", v.uri.toString())
-            val thumb = when {
-                v.displayName.contains("cyber", ignoreCase = true) -> "thumb_cyberpunk.jpg"
-                v.displayName.contains("scifi", ignoreCase = true) || v.displayName.contains("star", ignoreCase = true) || v.displayName.contains("izgoi", ignoreCase = true) -> "thumb_scifi.jpg"
-                v.displayName.contains("nature", ignoreCase = true) || v.displayName.contains("природа", ignoreCase = true) -> "thumb_nature.jpg"
-                else -> "thumb_western.jpg"
-            }
-            obj.put("thumb", thumb)
             jsonArray.put(obj)
         }
         val js = "if (window.setVideos) { window.setVideos(${jsonArray.toString()}); }"
         Handler(Looper.getMainLooper()).post {
             webView.evaluateJavascript(js, null)
         }
+        sendThumbsToWeb(webView, vList)
     }
 
     fun sendAudiosToWeb(webView: WebView) {
@@ -300,6 +311,7 @@ fun ExactHtmlVideoLibraryView(
                         override fun onPageFinished(view: WebView?, url: String?) {
                             super.onPageFinished(view, url)
                             view?.let {
+                                sentThumbs.clear()
                                 syncAllData(it)
                                 if (currentNavIndex != 0) {
                                     it.evaluateJavascript(
@@ -408,7 +420,6 @@ fun ExactHtmlVideoLibraryView(
                             Handler(Looper.getMainLooper()).post {
                                 when (id) {
                                     "url" -> onOpenCustomUrl()
-                                    "vault" -> onOpenProtectedVault()
                                     "settings" -> { /* В v5 настройки открываются прямо в HTML */ }
                                     "share" -> { /* В v5 раздача открывается прямо в HTML */ }
                                     else -> Toast.makeText(context, "Выбран пункт: $id", Toast.LENGTH_SHORT).show()
