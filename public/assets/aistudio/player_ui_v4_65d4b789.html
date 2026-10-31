@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Nexora UI v4</title>
+<style>
+/* 1u = 1/1024 of screen width. Every size below is in u, so the UI scales identically on any phone.
+   Header/nav are anchored (top / bottom), so tall screens just get more list space. */
+:root{
+  --bg:#020306;--line:rgba(255,255,255,.13);--orange:#ff7a00;--orange-hot:#fe7100;
+  --text:#eceef2;--muted:#8a90a0;--dim:#6c7280;--red:#f48a92;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:#000;overflow:hidden;font-family:Roboto,"Segoe UI",system-ui,sans-serif;color:var(--text)}
+.app{container-type:inline-size;height:100%;max-width:520px;margin:0 auto;background:var(--bg)}
+.screen{--u:.09765625cqw;position:relative;height:100%;overflow:hidden;
+  background:radial-gradient(90% 25% at 25% 0%,#080a0d 0%,var(--bg) 100%)}
+svg.ic{width:1em;height:1em;display:block}
+.sprite{position:absolute;width:0;height:0;overflow:hidden}
+
+/* ---------- Top glow panel (shared by all tabs) ---------- */
+.bgtop{position:absolute;left:0;top:0;width:100%;height:calc(140*var(--u));pointer-events:none}
+.bgtop svg{position:absolute;inset:0;width:100%;height:100%}
+.bgtop::after{content:"";position:absolute;inset:0;background:radial-gradient(38% 75% at 58% 100%,rgba(255,100,0,.12),transparent 70%)}
+
+/* ---------- Pages ---------- */
+.page{position:absolute;inset:0;display:none}
+.page.active{display:block}
+.scroll{position:absolute;left:0;right:0;top:0;bottom:calc(158*var(--u));overflow-y:auto;padding:calc(24*var(--u)) calc(37*var(--u)) calc(30*var(--u));scrollbar-width:none}
+.scroll::-webkit-scrollbar{display:none}
+.page.active .item{animation:rise .5s cubic-bezier(.2,.8,.3,1) both;animation-delay:calc(var(--i,0)*60ms)}
+@keyframes rise{from{opacity:0;transform:translateY(calc(26*var(--u)))}}
+
+/* ---------- Search pill ---------- */
+.search{display:flex;align-items:center;gap:calc(22*var(--u));height:calc(92*var(--u));padding:0 calc(32*var(--u));
+  border-radius:calc(46*var(--u));background:linear-gradient(180deg,#0b0e13,#07090d);
+  border:calc(2*var(--u)) solid var(--line);border-left-color:rgba(255,122,0,.55);
+  box-shadow:inset calc(6*var(--u)) 0 calc(14*var(--u)) rgba(255,110,0,.14),0 0 calc(14*var(--u)) rgba(255,110,0,.06)}
+.search svg{font-size:calc(44*var(--u));color:var(--orange);flex:none;filter:drop-shadow(0 0 calc(6*var(--u)) rgba(255,110,0,.5))}
+.search input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--text);font:inherit;font-size:calc(29*var(--u))}
+.search input::placeholder{color:var(--muted)}
+.search:focus-within{border-color:rgba(255,122,0,.6);box-shadow:inset calc(6*var(--u)) 0 calc(14*var(--u)) rgba(255,110,0,.2),0 0 calc(22*var(--u)) rgba(255,110,0,.22)}
+.row{display:flex;justify-content:space-between;align-items:center;margin:calc(34*var(--u)) calc(8*var(--u)) calc(24*var(--u));font-size:calc(26*var(--u));color:var(--muted);letter-spacing:calc(.8*var(--u))}
+.row b{color:var(--orange);font-weight:700}
+.row .caps{letter-spacing:calc(3*var(--u));text-transform:uppercase}
+
+/* ---------- List cards ---------- */
+.card{display:flex;align-items:center;gap:calc(26*var(--u));padding:calc(20*var(--u)) calc(24*var(--u));margin-bottom:calc(18*var(--u));
+  border-radius:calc(30*var(--u));background:linear-gradient(180deg,#0d0f14,#080a0e);border:calc(2*var(--u)) solid var(--line);
+  cursor:pointer;transition:transform .15s,border-color .25s,box-shadow .25s}
+.card:active{transform:scale(.98);border-color:rgba(255,122,0,.5);box-shadow:0 0 calc(22*var(--u)) rgba(255,110,0,.18)}
+.tile{flex:none;width:calc(104*var(--u));height:calc(104*var(--u));border-radius:calc(28*var(--u));display:grid;place-items:center;
+  background:linear-gradient(145deg,#2c1708,#180c04);border:calc(2*var(--u)) solid rgba(255,122,0,.28);color:var(--orange);
+  box-shadow:inset 0 0 calc(16*var(--u)) rgba(255,110,0,.12)}
+.tile svg{font-size:calc(54*var(--u));filter:drop-shadow(0 0 calc(7*var(--u)) rgba(255,110,0,.45))}
+.body{flex:1;min-width:0}
+.t{font-size:calc(33*var(--u));font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.s{margin-top:calc(8*var(--u));font-size:calc(26*var(--u));color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.m{margin-top:calc(8*var(--u));font-size:calc(25*var(--u));color:var(--dim)}
+.m.or{color:var(--orange);opacity:.9}
+.chev{flex:none;font-size:calc(40*var(--u));color:var(--muted)}
+.addbtn{flex:none;font-size:calc(50*var(--u));color:var(--muted);padding:calc(8*var(--u));transition:color .2s,transform .15s}
+.addbtn:active{color:var(--orange);transform:scale(.85)}
+.playbtn{flex:none;width:calc(78*var(--u));height:calc(78*var(--u));border-radius:50%;display:grid;place-items:center;color:#fff3e6;
+  background:radial-gradient(circle at 30% 20%,#ff9410,var(--orange-hot) 50%,#f84a00);
+  box-shadow:0 0 0 calc(5*var(--u)) #2a0f04,0 0 0 calc(7*var(--u)) rgba(255,110,0,.45),0 0 calc(22*var(--u)) rgba(255,90,0,.4);transition:transform .12s}
+.playbtn:active{transform:scale(.9)}
+.playbtn svg{font-size:calc(38*var(--u));margin-left:calc(4*var(--u))}
+
+/* ---------- Playlists header ---------- */
+.phead{display:flex;justify-content:space-between;align-items:center;margin:calc(10*var(--u)) calc(8*var(--u)) calc(34*var(--u))}
+.phead h1{font-size:calc(46*var(--u));font-weight:700;color:#fff}
+.phead p{margin-top:calc(6*var(--u));font-size:calc(27*var(--u));color:var(--muted)}
+.create{display:flex;align-items:center;gap:calc(14*var(--u));height:calc(80*var(--u));padding:0 calc(38*var(--u));border:0;border-radius:calc(40*var(--u));
+  font:inherit;font-size:calc(29*var(--u));font-weight:700;color:#1a0a00;cursor:pointer;
+  background:linear-gradient(135deg,#ff9a1f,var(--orange-hot) 60%,#f84a00);box-shadow:0 0 calc(26*var(--u)) rgba(255,90,0,.45);transition:transform .12s}
+.create:active{transform:scale(.93)}
+.create svg{font-size:calc(36*var(--u))}
+
+/* ---------- Video page header ---------- */
+.hbtn{position:absolute;top:calc(14*var(--u));height:calc(84*var(--u));display:grid;place-items:center;
+  background:linear-gradient(180deg,#0c1014,#080b0e);border:calc(2*var(--u)) solid var(--line);color:#c6c9d0;cursor:pointer;transition:transform .12s}
+.hbtn:active{transform:scale(.92)}
+.hbtn.round{width:calc(84*var(--u));border-radius:50%}
+.hbtn svg{font-size:calc(46*var(--u))}
+.hbtn.hsearch{left:calc(699*var(--u))}
+.hbtn.history{left:calc(813*var(--u));color:var(--red);border-color:rgba(255,110,90,.4);box-shadow:0 0 calc(16*var(--u)) rgba(255,90,70,.2)}
+.hbtn.menu{left:calc(928*var(--u));width:calc(62*var(--u));border-radius:calc(30*var(--u))}
+.tabs{position:absolute;left:calc(37*var(--u));top:calc(143*var(--u));width:calc(950*var(--u));height:calc(84*var(--u));
+  border-radius:calc(42*var(--u));background:linear-gradient(180deg,#0b0e13,#07090d);border:calc(2*var(--u)) solid var(--line);
+  border-left-color:rgba(255,122,0,.55);box-shadow:inset calc(6*var(--u)) 0 calc(14*var(--u)) rgba(255,110,0,.14)}
+.tab{position:absolute;top:calc(3*var(--u));height:calc(76*var(--u));display:flex;align-items:center;justify-content:center;gap:calc(22*var(--u));
+  font-size:calc(30*var(--u));color:var(--muted);background:transparent;border:0;cursor:pointer;transition:color .25s;font-family:inherit}
+.tab svg{font-size:calc(46*var(--u))}
+.tab.t1{left:0;width:calc(468*var(--u))}.tab.t2{left:calc(468*var(--u));width:calc(478*var(--u))}
+.tab.active{color:var(--orange)}
+.pill{position:absolute;left:calc(1*var(--u));top:calc(2*var(--u));width:calc(466*var(--u));height:calc(76*var(--u));border-radius:calc(34*var(--u));
+  background:linear-gradient(180deg,#44180a 0%,#331203 60%,#2a0f02);border:calc(2*var(--u)) solid rgba(255,110,0,.55);
+  box-shadow:0 0 calc(22*var(--u)) rgba(255,110,0,.3),inset calc(4*var(--u)) 0 calc(10*var(--u)) rgba(255,110,0,.25);transition:transform .4s cubic-bezier(.34,1.3,.5,1)}
+.underline{position:absolute;left:calc(8*var(--u));top:calc(71*var(--u));width:calc(450*var(--u));height:calc(8*var(--u));border-radius:calc(6*var(--u));
+  background:linear-gradient(90deg,#ff9020,var(--orange-hot));box-shadow:0 0 calc(18*var(--u)) var(--orange),0 calc(6*var(--u)) calc(14*var(--u)) rgba(255,100,0,.5);
+  transition:transform .4s cubic-bezier(.34,1.3,.5,1)}
+.tabs.second .pill,.tabs.second .underline{transform:translateX(calc(478*var(--u)))}
+.vlist{position:absolute;left:calc(37*var(--u));right:calc(37*var(--u));top:calc(250*var(--u));bottom:calc(158*var(--u));overflow-y:auto}
+#video-list{display:grid;grid-template-columns:1fr 1fr;gap:calc(18*var(--u))}
+/* video card template (add via JS):
+<div class="vcard"><div class="thumb"><span class="badge">SD</span><span class="dur">0:14</span></div>
+<div class="t">name.mp4</div><div class="m">12.3 MB • 19.09.2026</div></div> */
+.vcard{background:linear-gradient(180deg,#0d0f14,#080a0e);border:calc(2*var(--u)) solid var(--line);border-radius:calc(30*var(--u));padding:calc(14*var(--u))}
+.thumb{position:relative;aspect-ratio:440/218;border-radius:calc(22*var(--u));background:#1a1c24;overflow:hidden}
+.badge,.dur{position:absolute;padding:calc(4*var(--u)) calc(14*var(--u));border-radius:calc(14*var(--u));background:rgba(0,0,0,.6);font-size:calc(22*var(--u))}
+.badge{left:calc(12*var(--u));top:calc(12*var(--u))}.dur{right:calc(14*var(--u));bottom:calc(12*var(--u))}
+
+/* ---------- Play FAB (video tab only) ---------- */
+.fab{position:absolute;right:calc(43*var(--u));bottom:calc(178*var(--u));width:calc(108*var(--u));height:calc(108*var(--u));border-radius:50%;border:0;
+  display:none;place-items:center;cursor:pointer;color:#fff3e6;background:radial-gradient(circle at 30% 20%,#ff9410,var(--orange-hot) 50%,#f84a00);
+  box-shadow:0 0 0 calc(8*var(--u)) #2a0f04,0 0 0 calc(10*var(--u)) rgba(255,110,0,.5),0 0 0 calc(14*var(--u)) rgba(255,90,0,.08),0 0 calc(40*var(--u)) rgba(255,90,0,.45);
+  animation:pulse 3s ease-in-out infinite;transition:transform .12s}
+.fab.show{display:grid}.fab:active{transform:scale(.92)}
+.fab svg{font-size:calc(52*var(--u));margin-left:calc(5*var(--u))}
+@keyframes pulse{50%{box-shadow:0 0 0 calc(8*var(--u)) #2a0f04,0 0 0 calc(10*var(--u)) rgba(255,110,0,.7),0 0 0 calc(14*var(--u)) rgba(255,90,0,.12),0 0 calc(56*var(--u)) rgba(255,90,0,.65)}}
+
+/* ---------- Bottom nav (identical on every tab, anchored to the bottom) ---------- */
+.nav{position:absolute;left:0;bottom:calc(10*var(--u));width:100%;height:calc(140*var(--u))}
+.nav svg.shape{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.ni{position:absolute;top:0;height:calc(140*var(--u));width:calc(204*var(--u));display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:calc(8*var(--u));padding-bottom:calc(18*var(--u));font:inherit;font-size:calc(24*var(--u));color:var(--muted);background:transparent;border:0;cursor:pointer;transition:color .2s}
+.ni svg{font-size:calc(46*var(--u));transition:transform .15s}
+.ni:active svg{transform:scale(.88)}
+.ni.active{color:var(--orange)}
+.ni.active svg{animation:pop .4s ease;filter:drop-shadow(0 0 calc(8*var(--u)) rgba(255,110,0,.6))}
+@keyframes pop{40%{transform:scale(1.2)}}
+.nav-active{position:absolute;left:0;top:calc(2*var(--u));width:calc(215*var(--u));height:calc(137*var(--u));
+  border-radius:calc(48*var(--u)) calc(48*var(--u)) calc(40*var(--u)) calc(52*var(--u));
+  background:linear-gradient(180deg,rgba(255,122,0,.07),rgba(255,255,255,.012));
+  border:calc(2*var(--u)) solid rgba(255,122,0,.55);border-bottom-color:transparent;border-right-color:rgba(255,122,0,.1);
+  transition:transform .42s cubic-bezier(.34,1.3,.5,1)}
+.nav-active::after{content:"";position:absolute;left:calc(14*var(--u));right:calc(-6*var(--u));bottom:calc(-1*var(--u));height:calc(4*var(--u));border-radius:calc(4*var(--u));
+  background:linear-gradient(90deg,#ff6a00,#ff9a30 50%,rgba(255,106,0,0));box-shadow:0 0 calc(16*var(--u)) rgba(255,100,0,.85)}
+
+/* ======================= ЕЩЁ: sub-pages (v4) ======================= */
+.sub{position:absolute;inset:0;display:none;z-index:6;background:radial-gradient(90% 25% at 25% 0%,#080a0d 0%,var(--bg) 100%)}
+.sub.active{display:block;animation:subin .45s cubic-bezier(.2,.9,.3,1) both}
+.sub.leaving{display:block;animation:subout .26s ease both}
+@keyframes subin{from{opacity:0;transform:translateX(calc(70*var(--u)))}}
+@keyframes subout{to{opacity:0;transform:translateX(calc(70*var(--u)))}}
+.sub .bgtop{z-index:0}.sub .scroll{z-index:1}
+.sub.active .item{animation:rise .5s cubic-bezier(.2,.8,.3,1) both;animation-delay:calc(var(--i,0)*60ms + 120ms)}
+.subhead{display:flex;align-items:center;gap:calc(26*var(--u));margin:calc(6*var(--u)) calc(4*var(--u)) calc(30*var(--u))}
+.backbtn{flex:none;width:calc(84*var(--u));height:calc(84*var(--u));border-radius:50%;display:grid;place-items:center;cursor:pointer;
+  background:linear-gradient(180deg,#0c1014,#080b0e);border:calc(2*var(--u)) solid var(--line);color:#c6c9d0;transition:transform .12s,border-color .2s}
+.backbtn:active{transform:scale(.9);border-color:rgba(255,122,0,.6)}
+.backbtn svg{font-size:calc(46*var(--u))}
+.subhead h1{font-size:calc(40*var(--u));font-weight:700;color:#fff;line-height:1.15}
+.subhead p{margin-top:calc(4*var(--u));font-size:calc(25*var(--u));color:var(--muted)}
+.card.static{cursor:default}.card.static:active{transform:none;border-color:var(--line);box-shadow:none}
+.card.col{flex-direction:column;align-items:stretch;gap:calc(20*var(--u))}
+.card.hide{display:none}
+.lbl{font-size:calc(25*var(--u));color:var(--muted);letter-spacing:calc(.6*var(--u))}
+.url{font-size:calc(34*var(--u));font-weight:700;color:var(--orange);word-break:break-all;text-shadow:0 0 calc(18*var(--u)) rgba(255,110,0,.35)}
+.note{font-size:calc(23*var(--u));line-height:1.45;color:var(--dim)}
+.btns{display:flex;gap:calc(16*var(--u))}
+.pbtn{flex:1;display:flex;align-items:center;justify-content:center;gap:calc(12*var(--u));height:calc(76*var(--u));border-radius:calc(38*var(--u));
+  font:inherit;font-size:calc(26*var(--u));font-weight:600;color:var(--orange);cursor:pointer;
+  background:linear-gradient(180deg,#2a1204,#190b03);border:calc(2*var(--u)) solid rgba(255,122,0,.45);box-shadow:0 0 calc(16*var(--u)) rgba(255,110,0,.15);transition:transform .12s}
+.pbtn:active{transform:scale(.94)}.pbtn svg{font-size:calc(34*var(--u))}
+.pbtn.fill{color:#1a0a00;border:0;background:linear-gradient(135deg,#ff9a1f,var(--orange-hot) 60%,#f84a00);box-shadow:0 0 calc(22*var(--u)) rgba(255,90,0,.4)}
+/* switch */
+.sw{flex:none;position:relative;width:calc(104*var(--u));height:calc(58*var(--u));border-radius:calc(29*var(--u));border:calc(2*var(--u)) solid var(--line);cursor:pointer;
+  background:linear-gradient(180deg,#0b0e13,#07090d);transition:background .3s,border-color .3s,box-shadow .3s}
+.sw i{position:absolute;left:calc(5*var(--u));top:calc(5*var(--u));width:calc(44*var(--u));height:calc(44*var(--u));border-radius:50%;background:#6c7280;
+  transition:transform .35s cubic-bezier(.34,1.4,.5,1),background .3s,box-shadow .3s}
+.sw.on{border-color:rgba(255,122,0,.7);background:linear-gradient(180deg,#44180a,#2a0f02);box-shadow:0 0 calc(22*var(--u)) rgba(255,110,0,.35)}
+.sw.on i{transform:translateX(calc(46*var(--u)));background:radial-gradient(circle at 30% 20%,#ffb040,var(--orange-hot));box-shadow:0 0 calc(14*var(--u)) rgba(255,110,0,.8)}
+/* radio card */
+.rd{flex:none;width:calc(48*var(--u));height:calc(48*var(--u));border-radius:50%;border:calc(3*var(--u)) solid #3a3f4a;display:grid;place-items:center;color:transparent;transition:all .25s}
+.rd svg{font-size:calc(28*var(--u))}
+.card.sel{border-color:rgba(255,122,0,.6);box-shadow:0 0 calc(22*var(--u)) rgba(255,110,0,.18),inset calc(6*var(--u)) 0 calc(14*var(--u)) rgba(255,110,0,.12)}
+.card.sel .rd{border-color:var(--orange);background:radial-gradient(circle at 30% 20%,#ff9410,var(--orange-hot));color:#1a0a00;box-shadow:0 0 calc(14*var(--u)) rgba(255,110,0,.6)}
+/* inputs */
+.field{display:flex;align-items:center;gap:calc(18*var(--u));height:calc(84*var(--u));padding:0 calc(28*var(--u));border-radius:calc(42*var(--u));
+  background:linear-gradient(180deg,#0b0e13,#07090d);border:calc(2*var(--u)) solid var(--line);border-left-color:rgba(255,122,0,.5)}
+.field span{flex:none;font-size:calc(24*var(--u));color:var(--muted);width:calc(130*var(--u))}
+.field input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--text);font:inherit;font-size:calc(28*var(--u))}
+.field:focus-within{border-color:rgba(255,122,0,.6);box-shadow:0 0 calc(20*var(--u)) rgba(255,110,0,.2)}
+.kv{display:flex;justify-content:space-between;align-items:center;gap:calc(16*var(--u));font-size:calc(27*var(--u))}
+.kv b{color:#fff;font-weight:600;word-break:break-all;text-align:right}
+.qr{align-self:center;width:calc(360*var(--u));height:calc(360*var(--u));border-radius:calc(28*var(--u));background:#fff;display:grid;place-items:center;padding:calc(18*var(--u));
+  box-shadow:0 0 calc(30*var(--u)) rgba(255,110,0,.35)}
+.qr img{width:100%;height:100%;image-rendering:pixelated}
+.qr.txt{background:#0b0e13;color:var(--muted);font-size:calc(22*var(--u));word-break:break-all;text-align:center}
+.toast{position:absolute;left:50%;bottom:calc(190*var(--u));transform:translate(-50%,calc(30*var(--u)));z-index:20;opacity:0;pointer-events:none;max-width:86%;
+  padding:calc(20*var(--u)) calc(38*var(--u));border-radius:calc(40*var(--u));font-size:calc(27*var(--u));color:#fff;text-align:center;
+  background:linear-gradient(180deg,#2a1204,#160a03);border:calc(2*var(--u)) solid rgba(255,122,0,.55);box-shadow:0 0 calc(26*var(--u)) rgba(255,110,0,.3);
+  transition:opacity .3s,transform .35s cubic-bezier(.34,1.4,.5,1)}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+#l-more .card.flash{animation:flash .45s ease}
+@keyframes flash{40%{border-color:rgba(255,122,0,.8);box-shadow:0 0 calc(30*var(--u)) rgba(255,110,0,.4)}}
+
+.hide-block{display:none}
+</style>
+</head>
+<body>
+<!-- icon sprite -->
+<svg class="sprite" aria-hidden="true"><defs>
+ <symbol id="i-search" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></g></symbol>
+ <symbol id="i-hist" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.5"/><path d="M3.5 3.5v5h5"/><path d="M12 7.5V12l3 2"/></g></symbol>
+ <symbol id="i-dots" viewBox="0 0 24 24"><g fill="currentColor"><circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/></g></symbol>
+ <symbol id="i-hdots" viewBox="0 0 24 24"><g fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></g></symbol>
+ <symbol id="i-clap" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><rect x="3" y="8" width="18" height="12" rx="2.2"/><path d="M3 8l2.5-4M8 8l2.5-4M13 8l2.5-4M18 8l2.5-4M3 12h18"/></g></symbol>
+ <symbol id="i-clapf" viewBox="0 0 24 24"><g fill="currentColor"><path d="M3 11h18v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 5.4l3.4-.9 1 2.4L4 7.8zM8.4 4.1l3.4-.9 1 2.4-3.4.9zM13.8 2.7l3.4-.9 1 2.4-3.4.9zM19.2 1.4L21 5.5V9H3V8.4L19.2 1.4z" opacity=".95" transform="translate(0 2.5)"/></g></symbol>
+ <symbol id="i-note" viewBox="0 0 24 24"><path fill="currentColor" d="M9 3.5v11.2A3.4 3.4 0 1 0 11 17.8V8.2l8-1.7v6.7a3.4 3.4 0 1 0 2 3.1V2.2z"/></symbol>
+ <symbol id="i-note1" viewBox="0 0 24 24"><path fill="currentColor" d="M13 3v10.6A3.8 3.8 0 1 0 15.5 17V7h4V3z"/></symbol>
+ <symbol id="i-folder" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M3 6.5A2 2 0 0 1 5 4.5h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+ <symbol id="i-folderf" viewBox="0 0 24 24"><path fill="currentColor" d="M3 6.5A2 2 0 0 1 5 4.5h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+ <symbol id="i-list" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 6h11M3 11h11M3 16h6"/><path d="M19 7v9"/><circle cx="16.8" cy="17" r="2.4" fill="currentColor"/><path d="M19 7l2.5 1.5"/></g></symbol>
+ <symbol id="i-addlist" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 6h12M3 11h12M3 16h7M18 14v7M14.5 17.5h7"/></g></symbol>
+ <symbol id="i-play" viewBox="0 0 24 24"><path fill="currentColor" d="M7 4.6v14.8a1 1 0 0 0 1.5.86l12-7.4a1 1 0 0 0 0-1.72l-12-7.4A1 1 0 0 0 7 4.6z"/></symbol>
+ <symbol id="i-chev" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></symbol>
+ <symbol id="i-heart" viewBox="0 0 24 24"><path fill="currentColor" d="M12 21s-8.5-5.4-8.5-11.2A4.6 4.6 0 0 1 12 7.3a4.6 4.6 0 0 1 8.5 2.5C20.5 15.6 12 21 12 21z"/></symbol>
+ <symbol id="i-back" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M15 5l-7 7 7 7"/></symbol>
+ <symbol id="i-copy" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.1" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></g></symbol>
+ <symbol id="i-globe" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></g></symbol>
+ <symbol id="i-wifi" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 9.5a14 14 0 0 1 18 0M6 13a9.5 9.5 0 0 1 12 0M9 16.4a5 5 0 0 1 6 0"/><circle cx="12" cy="19.5" r="1.2" fill="currentColor"/></g></symbol>
+ <symbol id="i-lock" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.1" stroke-linejoin="round" stroke-linecap="round"><rect x="5" y="11" width="14" height="9" rx="2.2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></g></symbol>
+ <symbol id="i-check" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+ <symbol id="i-ext" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-9 9M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/></g></symbol>
+ <symbol id="i-rot" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.4-5.7L20 8.5"/><path d="M20 3.5v5h-5"/></g></symbol>
+ <symbol id="i-chip" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3"/></g></symbol>
+ <symbol id="i-palette" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 0 18c1.4 0 2-.9 2-1.8 0-1.2-1-1.6-1-2.6 0-.9.7-1.6 1.7-1.6H17a4 4 0 0 0 4-4C21 6.5 17 3 12 3z"/><circle cx="7.5" cy="11" r="1.1" fill="currentColor"/><circle cx="10.5" cy="7.2" r="1.1" fill="currentColor"/><circle cx="15" cy="7.8" r="1.1" fill="currentColor"/></g></symbol>
+ <symbol id="i-info" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.8v.2"/></g></symbol>
+ <symbol id="i-plus" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" d="M12 4.5v15M4.5 12h15"/></symbol>
+</defs></svg>
+
+<div class="app"><div class="screen">
+
+  <!-- shared glowing top panel -->
+  <div class="bgtop"><svg viewBox="0 60 1024 140" preserveAspectRatio="none">
+    <defs>
+      <linearGradient id="gl" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a00" stop-opacity=".9"/><stop offset="1" stop-color="#ff7a00" stop-opacity=".25"/></linearGradient>
+      <filter id="blur"><feGaussianBlur stdDeviation="8"/></filter>
+    </defs>
+    <path d="M0 0 H775 C700 35 668 62 646 112 C622 168 600 188 556 189 H0 Z" fill="#06080b" opacity=".95"/>
+    <path d="M556 189 C600 188 622 168 646 112 C668 62 700 35 775 0" fill="none" stroke="#ff5a00" stroke-width="26" opacity=".4" filter="url(#blur)"/>
+    <path d="M556 189 C600 188 622 168 646 112 C668 62 700 35 775 0" fill="none" stroke="url(#gl)" stroke-width="3"/>
+  </svg></div>
+
+  <!-- ============ VIDEO ============ -->
+  <section class="page active" id="p-video">
+    <button class="hbtn round hsearch" aria-label="Поиск"><svg class="ic"><use href="#i-search"/></svg></button>
+    <button class="hbtn round history" aria-label="История"><svg class="ic"><use href="#i-hist"/></svg></button>
+    <button class="hbtn menu" aria-label="Меню"><svg class="ic"><use href="#i-dots"/></svg></button>
+    <div class="tabs" id="tabs">
+      <div class="pill"></div><div class="underline"></div>
+      <button class="tab t1 active" data-i="0"><svg class="ic"><use href="#i-clap"/></svg>Видео</button>
+      <button class="tab t2" data-i="1"><svg class="ic"><use href="#i-note"/></svg>Плейлисты</button>
+    </div>
+    <div class="vlist"><div id="video-list"></div></div>
+  </section>
+
+  <!-- ============ AUDIO ============ -->
+  <section class="page" id="p-audio"><div class="scroll">
+    <label class="search item"><svg class="ic"><use href="#i-search"/></svg><input id="q-audio" placeholder="Поиск аудио треков..."></label>
+    <div class="row item" style="--i:1"><span>Всего треков: <span id="n-audio">0</span></span><b class="caps">Аудиотека</b></div>
+    <div id="l-audio"></div>
+  </div></section>
+
+  <!-- ============ BROWSE ============ -->
+  <section class="page" id="p-browse"><div class="scroll">
+    <label class="search item"><svg class="ic"><use href="#i-search"/></svg><input id="q-browse" placeholder="Поиск файлов и папок..."></label>
+    <div class="row item" style="--i:1"><b id="browse-path-title">Хранилище /</b><span id="n-browse">0 объектов</span></div>
+    <div id="l-browse"></div>
+  </div></section>
+
+  <!-- ============ PLAYLISTS ============ -->
+  <section class="page" id="p-playlists"><div class="scroll">
+    <div class="phead item"><div><h1>Мои плейлисты</h1><p id="n-playlists-count">Всего: 0</p></div>
+      <button class="create" id="btn-create-playlist"><svg class="ic"><use href="#i-plus"/></svg>Создать</button></div>
+    <div id="l-playlists"></div>
+  </div></section>
+
+  <!-- ============ MORE ============ -->
+  <section class="page" id="p-more"><div class="scroll">
+    <div class="row item" style="--i:1"><b>Возможности /</b><span class="caps">Сервисы Nexora</span></div>
+    <div id="l-more"></div>
+  </div></section>
+
+  <!-- ============ ЕЩЁ → Wi-Fi & HTTP Раздача ============ -->
+  <section class="sub" id="s-share"><div class="scroll">
+    <div class="subhead item"><button class="backbtn" data-back aria-label="Назад"><svg class="ic"><use href="#i-back"/></svg></button>
+      <div><h1>Wi-Fi &amp; HTTP Раздача</h1><p>Локальный обмен файлами по сети</p></div></div>
+
+    <div class="card static item" style="--i:1"><div class="tile"><svg class="ic"><use href="#i-globe"/></svg></div>
+      <div class="body"><div class="t">Локальный HTTP-сервер</div><div class="s" id="sv-status">Сервер остановлен</div><div class="m" id="sv-sub">Обмен файлами по Wi‑Fi через HTTP</div></div>
+      <button class="sw" id="sw-server" role="switch" aria-checked="false"><i></i></button></div>
+
+    <div class="card static col item hide" id="addr-card" style="--i:2">
+      <div class="lbl">Адрес для браузера (ПК / Телефон):</div>
+      <div class="url" id="sv-url">—</div>
+      <div class="btns"><button class="pbtn fill" id="btn-open"><svg class="ic"><use href="#i-ext"/></svg>Открыть</button>
+        <button class="pbtn" id="btn-copy"><svg class="ic"><use href="#i-copy"/></svg>Копировать</button></div>
+      <div class="note" id="sv-auth-note"></div>
+      <div class="note">Браузерный плеер поддерживает перемотку (Range 206) и прямое воспроизведение MP4, MKV, WebM, MP3 без загрузки на диск.</div>
+    </div>
+
+    <div class="row item" style="--i:3"><b>Настройки веб-вещания</b><span class="caps">HTTP</span></div>
+
+    <div class="card static item" style="--i:4"><div class="tile"><svg class="ic"><use href="#i-lock"/></svg></div>
+      <div class="body"><div class="t">Вход по логину и паролю</div><div class="s" style="white-space:normal">Запрашивать HTTP Basic Auth при входе в браузере</div></div>
+      <button class="sw" id="sw-auth" role="switch" aria-checked="false"><i></i></button></div>
+    <div class="card static col item hide" id="auth-card" style="--i:5">
+      <label class="field"><span>Логин</span><input id="in-user" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+      <label class="field"><span>Пароль</span><input id="in-pass" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+    </div>
+
+    <div class="lbl item" style="--i:6;margin:calc(10*var(--u)) calc(8*var(--u)) calc(18*var(--u))">Папка вещания файлов:</div>
+    <div id="l-folders"></div>
+
+    <div class="row item" style="--i:12"><b>Передача по QR и Wi‑Fi Direct</b><span class="caps">Wi‑Fi</span></div>
+    <div class="card static item" style="--i:13"><div class="tile"><svg class="ic"><use href="#i-wifi"/></svg></div>
+      <div class="body"><div class="t">Wi‑Fi Direct &amp; QR передача</div><div class="s" id="wf-status" style="white-space:normal">Прямое подключение по QR с паролем от Wi‑Fi Direct</div></div>
+      <button class="sw" id="sw-wifi" role="switch" aria-checked="false"><i></i></button></div>
+    <div class="card static col item hide" id="wifi-card" style="--i:14">
+      <div class="kv"><span class="lbl">Имя сети (SSID):</span><b id="wf-ssid">—</b></div>
+      <div class="kv"><span class="lbl">Пароль Wi‑Fi:</span><b id="wf-pass">—</b></div>
+      <div class="lbl" style="text-align:center">1. Wi‑Fi QR Code — наведите камеру любого телефона для автоподключения:</div>
+      <div class="qr txt" id="qr-wifi"></div>
+      <div id="dl-block" class="hide-block">
+        <div class="lbl" style="text-align:center;margin:calc(8*var(--u)) 0 calc(18*var(--u))">2. File Download QR — после подключения к Wi‑Fi откройте ссылку или QR:</div>
+        <div class="qr txt" id="qr-dl" style="margin:0 auto"></div>
+      </div>
+    </div>
+  </div></section>
+
+  <!-- ============ ЕЩЁ → Настройки плеера ============ -->
+  <section class="sub" id="s-settings"><div class="scroll">
+    <div class="subhead item"><button class="backbtn" data-back aria-label="Назад"><svg class="ic"><use href="#i-back"/></svg></button>
+      <div><h1>Настройки плеера</h1><p>Аудио, видео, декодеры и темы</p></div></div>
+
+    <div class="row item" style="--i:1"><b>Воспроизведение</b><span class="caps">Видео</span></div>
+    <div class="card static item" style="--i:2"><div class="tile"><svg class="ic"><use href="#i-chip"/></svg></div>
+      <div class="body"><div class="t">Аппаратное декодирование</div><div class="s" style="white-space:normal">Использовать аппаратный декодер LibVLC</div></div>
+      <button class="sw" data-set="hw_accel" role="switch" aria-checked="false"><i></i></button></div>
+    <div class="card static item" style="--i:3"><div class="tile"><svg class="ic"><use href="#i-note1"/></svg></div>
+      <div class="body"><div class="t">Фоновое воспроизведение</div><div class="s" style="white-space:normal">Продолжать звук при блокировке экрана</div></div>
+      <button class="sw" data-set="bg_play" role="switch" aria-checked="false"><i></i></button></div>
+    <div class="card static item" style="--i:4"><div class="tile"><svg class="ic"><use href="#i-hist"/></svg></div>
+      <div class="body"><div class="t">Отображать буферизацию</div><div class="s" style="white-space:normal">Показывать состояние буферизации во время воспроизведения</div></div>
+      <button class="sw" data-set="show_buffering_status" role="switch" aria-checked="false"><i></i></button></div>
+    <div class="card static item" style="--i:5"><div class="tile"><svg class="ic"><use href="#i-rot"/></svg></div>
+      <div class="body"><div class="t">Автоповорот</div><div class="s" style="white-space:normal">Переворачивать экран при смене ориентации</div></div>
+      <button class="sw" data-set="auto_rotate" role="switch" aria-checked="false"><i></i></button></div>
+
+    <div class="row item" style="--i:6"><b>Оформление</b><span class="caps">Стиль</span></div>
+    <div id="l-designs"></div>
+
+    <div class="row item" style="--i:11"><b>О приложении</b></div>
+    <div class="card static item" style="--i:12"><div class="tile"><svg class="ic"><use href="#i-info"/></svg></div>
+      <div class="body"><div class="t">Nexora</div><div class="s" style="white-space:normal">Современный мультимедийный проигрыватель</div><div class="m">Версия 1.1.0 (LibVLC 3.6.0 + AI Theme Engine)</div></div></div>
+  </div></section>
+
+  <div class="toast" id="toast"></div>
+
+  <button class="fab show" id="fab" aria-label="Воспроизвести"><svg class="ic"><use href="#i-play"/></svg></button>
+
+  <!-- ============ BOTTOM NAV (same on all tabs) ============ -->
+  <nav class="nav">
+    <svg class="shape" viewBox="0 0 1024 140" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="nb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0c0f14"/><stop offset="1" stop-color="#05070a"/></linearGradient>
+        <linearGradient id="ob" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ff7a00" stop-opacity=".3"/><stop offset=".5" stop-color="#ff7a00" stop-opacity=".18"/><stop offset=".85" stop-color="#ff7a00" stop-opacity=".25"/><stop offset="1" stop-color="#ff7a00" stop-opacity=".55"/></linearGradient>
+      </defs>
+      <path d="M0 86 C0 40 28 8 84 8 H940 C996 8 1024 40 1024 86 C1024 124 996 138 940 138 H84 C28 138 0 124 0 86Z" fill="url(#nb)" stroke="rgba(255,255,255,.07)" stroke-width="2"/>
+      <path d="M232 8 H940 C996 8 1024 40 1024 86" fill="none" stroke="url(#ob)" stroke-width="2"/>
+      <path d="M620 137 C780 140 900 139 996 122" fill="none" stroke="rgba(255,110,0,.4)" stroke-width="2"/>
+    </svg>
+    <div class="nav-active" id="navActive"></div>
+    <button class="ni active" data-p="video"     style="left:calc(16*var(--u))"><svg class="ic"><use href="#i-clap"/></svg>Видео</button>
+    <button class="ni"        data-p="audio"     style="left:calc(214*var(--u))"><svg class="ic"><use href="#i-note"/></svg>Аудио</button>
+    <button class="ni"        data-p="browse"    style="left:calc(410*var(--u))"><svg class="ic"><use href="#i-folder"/></svg>Обзор</button>
+    <button class="ni"        data-p="playlists" style="left:calc(608*var(--u))"><svg class="ic"><use href="#i-list"/></svg>Плейлисты</button>
+    <button class="ni"        data-p="more"      style="left:calc(805*var(--u))"><svg class="ic"><use href="#i-hdots"/></svg>Ещё</button>
+  </nav>
+
+</div></div>
+
+<script>
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const ic=n=>`<svg class="ic"><use href="#i-${n}"/></svg>`;
+
+/* ---- Dynamic state populated from Android Bridge ---- */
+let allVideos = [];
+let allAudios = [];
+let allFolders = [];
+let allPlaylists = [];
+let moreItems = [
+  { id: "settings", icon: "dots", title: "Настройки плеера", subtitle: "Аудио, видео, декодеры и темы", count: "Параметры" },
+  { id: "terminal", icon: "clap", title: "Консоль UI (>_)", subtitle: "JSON-пайплайн и кастомизация кнопок", count: "Терминал" },
+  { id: "url", icon: "search", title: "Открыть ссылку потока", subtitle: "Воспроизведение HTTP, HLS, RTSP", count: "Сеть" },
+  { id: "vault", icon: "folderf", title: "Защищённый сейф", subtitle: "Скрытые файлы и видео под паролем", count: "Сейф" },
+  { id: "share", icon: "list", title: "Wi-Fi & HTTP Раздача", subtitle: "Локальный обмен файлами по сети", count: "Сервер" }
+];
+
+/* Sample fallback data */
+const defaultSampleVideos = [
+  { title: "2026 09 19 172839.mp4", meta: "12.3 MB • 19.09.2026", badge: "SD", dur: "0:14", uri: "sample://western_clip", thumb: "thumb_western.jpg" },
+  { title: "Django_osvobojdenn.mp4", meta: "1.4 GB • 18.09.2026", badge: "SD", dur: "2:45:22", uri: "sample://western_full", thumb: "thumb_western.jpg" },
+  { title: "Izgoi_Odin_Zvyozdnyy.mp4", meta: "976 MB • 16.09.2026", badge: "SD", dur: "2:13:57", uri: "sample://scifi_clip", thumb: "thumb_scifi.jpg" },
+  { title: "Solo A Star Wars Story.mp4", meta: "1.2 GB • 14.09.2026", badge: "SD", dur: "2:14:46", uri: "sample://scifi_full", thumb: "thumb_scifi.jpg" },
+  { title: "Природа_4K.mp4", meta: "2.8 GB • 12.09.2026", badge: "HD", dur: "1:32:10", uri: "sample://nature", thumb: "thumb_nature.jpg" },
+  { title: "Киберпанк.mp4", meta: "742 MB • 10.09.2026", badge: "SD", dur: "0:48:32", uri: "sample://cyberpunk", thumb: "thumb_cyberpunk.jpg" }
+];
+
+const defaultPlaylists = [
+  { id: "fav", icon: "heart", title: "Избранное", desc: "Любимые видео и треки", count: "4 медиафайла", uri: "playlist://fav" },
+  { id: "hist", icon: "hist", title: "Недавние", desc: "Недавно просмотренные медиафайлы", count: "2 медиафайла", uri: "playlist://hist" },
+  { id: "movies", icon: "clapf", title: "Фильмы и Кино", desc: "Коллекция фильмов в HD", count: "6 медиафайлов", uri: "playlist://movies" },
+  { id: "clips", icon: "note1", title: "Музыкальные клипы", desc: "Клипы и атмосферные саундтреки", count: "3 медиафайла", uri: "playlist://clips" }
+];
+
+const draw=(id,arr,fn,off=2)=>{
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML=arr.map((a,i)=>fn(a, i).replace('<div class="card','<div style="--i:'+(i+off)+'" class="item card')).join('');
+};
+
+/* ---- Render Functions ---- */
+function renderVideos() {
+  const listEl = document.getElementById('video-list');
+  if (!listEl) return;
+  const items = (allVideos && allVideos.length > 0) ? allVideos : defaultSampleVideos;
+  listEl.innerHTML = '';
+  items.forEach(v => {
+    const card = document.createElement('div');
+    card.className = 'vcard';
+    card.style.cursor = 'pointer';
+
+    const thumb = document.createElement('div');
+    thumb.className = 'thumb';
+    if (v.thumb) {
+      thumb.style.backgroundImage = 'url(' + v.thumb + ')';
+      thumb.style.backgroundSize = 'cover';
+      thumb.style.backgroundPosition = 'center';
+    }
+
+    const badge = document.createElement('span');
+    badge.className = 'badge';
+    badge.textContent = v.badge || 'SD';
+
+    const dur = document.createElement('span');
+    dur.className = 'dur';
+    dur.textContent = v.dur || '0:00';
+
+    thumb.appendChild(badge);
+    thumb.appendChild(dur);
+
+    const title = document.createElement('div');
+    title.className = 't';
+    title.textContent = v.title;
+
+    const meta = document.createElement('div');
+    meta.className = 'm';
+    meta.textContent = v.meta || '';
+
+    card.appendChild(thumb);
+    card.appendChild(title);
+    card.appendChild(meta);
+
+    card.addEventListener('click', () => {
+      playMedia(v.uri || v.title);
+    });
+
+    listEl.appendChild(card);
+  });
+}
+
+function renderAudio() {
+  const items = allAudios.length > 0 ? allAudios : [
+    { title: "Fire Man (Sefon.me)", artist: "MiyaGi & Эндшпиль • Download", meta: "03:37 • 8,3 MB", uri: "sample://audio1" },
+    { title: "viber_message", artist: "<unknown> • Notifications", meta: "00:01 • 0,0 MB", uri: "sample://audio2" }
+  ];
+  const countEl = document.getElementById('n-audio');
+  if (countEl) countEl.textContent = items.length;
+
+  draw('l-audio', items, (a, i) => `
+    <div class="card" data-s="${esc(a.title + ' ' + (a.artist||''))}" data-uri="${esc(a.uri||'')}">
+      <div class="tile">${ic('note1')}</div>
+      <div class="body">
+        <div class="t">${esc(a.title)}</div>
+        <div class="s">${esc(a.artist||'')}</div>
+        <div class="m">${esc(a.meta||'')}</div>
+      </div>
+      <div class="addbtn" data-act="add" data-title="${esc(a.title)}" data-uri="${esc(a.uri||'')}">${ic('addlist')}</div>
+      <div class="playbtn" data-act="play" data-uri="${esc(a.uri||'')}">${ic('play')}</div>
+    </div>
+  `);
+
+  // Attach card click handlers
+  document.querySelectorAll('#l-audio .card').forEach(card => {
+    card.addEventListener('click', (e) => {
+      const addBtn = e.target.closest('.addbtn');
+      const playBtn = e.target.closest('.playbtn');
+      if (addBtn) {
+        e.stopPropagation();
+        const uri = addBtn.getAttribute('data-uri');
+        const title = addBtn.getAttribute('data-title');
+        if (window.AndroidBridge && window.AndroidBridge.addToPlaylist) {
+          window.AndroidBridge.addToPlaylist(uri, title);
+        } else {
+          prompt("Добавить трек '" + title + "' в плейлист (введите название):", "Избранное");
+        }
+        return;
+      }
+      const uri = (playBtn ? playBtn.getAttribute('data-uri') : card.getAttribute('data-uri'));
+      if (uri) playMedia(uri);
+    });
+  });
+}
+
+function renderBrowse() {
+  const items = allFolders.length > 0 ? allFolders : [
+    { name: "DCIM", path: "/storage/emulated/0/DCIM", count: 3, isDir: true },
+    { name: "Download", path: "/storage/emulated/0/Download", count: 15, isDir: true },
+    { name: "Movies", path: "/storage/emulated/0/Movies", count: 3, isDir: true },
+    { name: "Music", path: "/storage/emulated/0/Music", count: 2, isDir: true },
+    { name: "Documents", path: "/storage/emulated/0/Documents", count: 0, isDir: true }
+  ];
+  const countEl = document.getElementById('n-browse');
+  if (countEl) countEl.textContent = items.length + " объектов";
+
+  draw('l-browse', items, (a, i) => `
+    <div class="card" data-s="${esc(a.name)}" data-path="${esc(a.path||'')}" data-isdir="${a.isDir ? '1':'0'}">
+      <div class="tile">${ic(a.isDir ? 'folderf' : 'clap')}</div>
+      <div class="body">
+        <div class="t">${esc(a.name)}</div>
+        <div class="s">${a.isDir ? (a.count + ' папок/файлов') : (a.sizeStr || 'Файл')}</div>
+      </div>
+      <div class="chev">${ic('chev')}</div>
+    </div>
+  `);
+
+  document.querySelectorAll('#l-browse .card').forEach(card => {
+    card.addEventListener('click', () => {
+      const path = card.getAttribute('data-path');
+      const isDir = card.getAttribute('data-isdir') === '1';
+      if (isDir) {
+        if (window.AndroidBridge && window.AndroidBridge.openFolder) {
+          window.AndroidBridge.openFolder(path);
+        }
+      } else {
+        if (path) playMedia(path);
+      }
+    });
+  });
+}
+
+function renderPlaylists() {
+  const items = allPlaylists.length > 0 ? allPlaylists : defaultPlaylists;
+  const countEl = document.getElementById('n-playlists-count');
+  if (countEl) countEl.textContent = "Всего: " + items.length;
+
+  draw('l-playlists', items, (a, i) => `
+    <div class="card" data-s="${esc(a.title)}" data-id="${esc(a.id||'')}" data-uri="${esc(a.uri||'')}">
+      <div class="tile">${ic(a.icon || 'list')}</div>
+      <div class="body">
+        <div class="t">${esc(a.title)}</div>
+        <div class="s">${esc(a.desc || '')}</div>
+        <div class="m or">${esc(a.count || '0 медиафайлов')}</div>
+      </div>
+      <div class="chev">${ic('chev')}</div>
+    </div>
+  `, 1);
+
+  document.querySelectorAll('#l-playlists .card').forEach(card => {
+    card.addEventListener('click', () => {
+      const uri = card.getAttribute('data-uri');
+      const id = card.getAttribute('data-id');
+      if (window.AndroidBridge && window.AndroidBridge.openPlaylist) {
+        window.AndroidBridge.openPlaylist(id);
+      } else if (uri) {
+        playMedia(uri);
+      }
+    });
+  });
+}
+
+function renderMore() {
+  draw('l-more', moreItems, (a, i) => `
+    <div class="card" data-s="${esc(a.title)}" data-id="${esc(a.id)}">
+      <div class="tile">${ic(a.icon)}</div>
+      <div class="body">
+        <div class="t">${esc(a.title)}</div>
+        <div class="s">${esc(a.subtitle)}</div>
+      </div>
+      <div class="chev">${ic('chev')}</div>
+    </div>
+  `);
+
+  document.querySelectorAll('#l-more .card').forEach(card => {
+    card.addEventListener('click', () => {
+      const id = card.getAttribute('data-id');
+      card.classList.remove('flash'); void card.offsetWidth; card.classList.add('flash');
+      openMoreItem(id);
+    });
+  });
+}
+
+/* ---- Media playback helper ---- */
+function playMedia(uri) {
+  if (window.AndroidBridge && window.AndroidBridge.playVideo) {
+    window.AndroidBridge.playVideo(uri);
+  } else {
+    console.log("Play media:", uri);
+  }
+}
+
+/* ---- Live search filter ---- */
+[['q-audio','l-audio','n-audio'],['q-browse','l-browse']].forEach(([i,l,n])=>document.getElementById(i).addEventListener('input',e=>{
+  const v=e.target.value.toLowerCase().trim(); let c=0;
+  document.querySelectorAll('#'+l+' .card').forEach(x=>{const ok=x.dataset.s.toLowerCase().includes(v);x.style.display=ok?'':'none';if(ok)c++});
+  if(n)document.getElementById(n).textContent=c;
+}));
+
+/* ---- Video top tabs ---- */
+const tabs=document.getElementById('tabs');
+tabs.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{
+  tabs.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');tabs.classList.toggle('second',b.dataset.i==='1');
+  if (b.dataset.i === '1') {
+    // Show playlists inside video page
+    const listEl = document.getElementById('video-list');
+    if (listEl) {
+      listEl.innerHTML = '';
+      defaultPlaylists.forEach(pl => {
+        const c = document.createElement('div');
+        c.className = 'vcard';
+        c.style.cursor = 'pointer';
+        c.innerHTML = `<div class="thumb" style="display:grid;place-items:center;background:#2c1708">${ic(pl.icon)}</div>
+                       <div class="t">${esc(pl.title)}</div><div class="m">${esc(pl.count)}</div>`;
+        c.onclick = () => playMedia(pl.uri);
+        listEl.appendChild(c);
+      });
+    }
+  } else {
+    renderVideos();
+  }
+}));
+
+/* ---- Bottom nav: switches pages, bump slides to the tapped item ---- */
+const navX=[0,209,405,603,800],navActive=document.getElementById('navActive'),fab=document.getElementById('fab');
+function switchNavTab(tabName, i) {
+  if (typeof closeSubs === "function") closeSubs(true);
+  document.querySelectorAll('.ni').forEach((x, idx)=>{
+    if (idx === i) x.classList.add('active');
+    else x.classList.remove('active');
+  });
+  if (navActive && navX[i] !== undefined) {
+    navActive.style.transform='translateX(calc('+navX[i]+'*var(--u)))';
+  }
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  const targetPage = document.getElementById('p-'+tabName);
+  if (targetPage) targetPage.classList.add('active');
+  if (fab) fab.classList.toggle('show',tabName==='video');
+
+  if (window.AndroidBridge && window.AndroidBridge.onNavTab) {
+    window.AndroidBridge.onNavTab(tabName, i);
+  }
+}
+
+document.querySelectorAll('.ni').forEach((b,i)=>b.addEventListener('click',()=>{
+  switchNavTab(b.dataset.p, i);
+}));
+
+/* ---- Header buttons ---- */
+const hsearch = document.querySelector('.hsearch');
+if (hsearch) {
+  hsearch.addEventListener('click', () => {
+    const q = prompt("Поиск видео:", "");
+    if (q !== null) {
+      const query = q.trim().toLowerCase();
+      document.querySelectorAll('#video-list .vcard').forEach(card => {
+        const text = card.textContent.toLowerCase();
+        card.style.display = text.includes(query) ? '' : 'none';
+      });
+    }
+  });
+}
+
+const historyBtn = document.querySelector('.history');
+if (historyBtn) {
+  historyBtn.addEventListener('click', () => {
+    if (window.AndroidBridge && window.AndroidBridge.openHistory) {
+      window.AndroidBridge.openHistory();
+    } else {
+      const items = (allVideos && allVideos.length > 0) ? allVideos : defaultSampleVideos;
+      if (items.length > 0) playMedia(items[0].uri);
+    }
+  });
+}
+
+const menuBtn = document.querySelector('.hbtn.menu');
+if (menuBtn) {
+  menuBtn.addEventListener('click', () => {
+    if (window.AndroidBridge && window.AndroidBridge.openMenu) {
+      window.AndroidBridge.openMenu();
+    }
+  });
+}
+
+/* ---- FAB button ---- */
+if (fab) {
+  fab.addEventListener('click', () => {
+    if (window.AndroidBridge && window.AndroidBridge.playLastVideo) {
+      window.AndroidBridge.playLastVideo();
+    } else {
+      const items = (allVideos && allVideos.length > 0) ? allVideos : defaultSampleVideos;
+      if (items.length > 0) playMedia(items[0].uri);
+    }
+  });
+}
+
+/* ---- Create playlist button ---- */
+const btnCreatePl = document.getElementById('btn-create-playlist');
+if (btnCreatePl) {
+  btnCreatePl.addEventListener('click', () => {
+    const name = prompt("Название нового плейлиста:", "Мой плейлист");
+    if (name && name.trim()) {
+      if (window.AndroidBridge && window.AndroidBridge.createPlaylist) {
+        window.AndroidBridge.createPlaylist(name.trim());
+      } else {
+        allPlaylists.push({
+          id: "pl_" + Date.now(),
+          icon: "list",
+          title: name.trim(),
+          desc: "Пользовательский плейлист",
+          count: "0 медиафайлов"
+        });
+        renderPlaylists();
+      }
+    }
+  });
+}
+
+/* ---- Android Bridge Incoming API ---- */
+window.setVideos = function(videosJson) {
+  try {
+    allVideos = typeof videosJson === 'string' ? JSON.parse(videosJson) : videosJson;
+    renderVideos();
+  } catch (e) {
+    console.error("setVideos error", e);
+  }
+};
+
+window.setAudios = function(audiosJson) {
+  try {
+    allAudios = typeof audiosJson === 'string' ? JSON.parse(audiosJson) : audiosJson;
+    renderAudio();
+  } catch (e) {
+    console.error("setAudios error", e);
+  }
+};
+
+window.setFolders = function(foldersJson, pathTitle) {
+  try {
+    allFolders = typeof foldersJson === 'string' ? JSON.parse(foldersJson) : foldersJson;
+    if (pathTitle) {
+      const titleEl = document.getElementById('browse-path-title');
+      if (titleEl) titleEl.textContent = pathTitle + " /";
+    }
+    renderBrowse();
+  } catch (e) {
+    console.error("setFolders error", e);
+  }
+};
+
+window.setPlaylists = function(playlistsJson) {
+  try {
+    allPlaylists = typeof playlistsJson === 'string' ? JSON.parse(playlistsJson) : playlistsJson;
+    renderPlaylists();
+  } catch (e) {
+    console.error("setPlaylists error", e);
+  }
+};
+
+window.setActiveNavTab = function(index) {
+  const tabs = ['video', 'audio', 'browse', 'playlists', 'more'];
+  if (tabs[index]) {
+    switchNavTab(tabs[index], index);
+  }
+};
+
+
+/* ======================= ЕЩЁ: sub-pages logic (v4) ======================= */
+const PREVIEW = !window.AndroidBridge;            // in a normal browser we use a demo state
+const hasB = f => !!(window.AndroidBridge && typeof window.AndroidBridge[f] === 'function');
+const callB = (f, ...a) => { try { return window.AndroidBridge[f](...a); } catch (e) { console.error(f, e); } };
+const $ = id => document.getElementById(id);
+
+const mock = {
+  share: { running:false, url:'http://192.168.1.23:8080', port:8080, error:'', authRequired:false, username:'admin', password:'1234', folder:'all',
+           wifi:{ enabled:false, ssid:'Nexora-Direct-Share', pass:'nexora8888', qrPayload:'WIFI:T:WPA;S:Nexora-Direct-Share;P:nexora8888;;', status:'' } },
+  settings: { hw_accel:true, bg_play:false, show_buffering_status:true, auto_rotate:true, design:'nexora_neon' }
+};
+const FOLDERS = [
+  ['all','Вся библиотека (Видео и Музыка)'], ['movies','Папка Movies (Фильмы)'], ['downloads','Папка Downloads (Загрузки)'],
+  ['dcim','Папка DCIM (Камера и галерея)'], ['share_dir','Выделенная папка обмена Nexora']
+];
+const DESIGNS = [
+  ['nexora_orange_original','Оригинал Nexora','Фирменный оранжево-золотой стиль'],
+  ['nexora_neon','Неон','Тёмная неоновая тема'],
+  ['nexora_neon_screenshot','Неон по скриншотам','Оформление со скриншотов'],
+  ['nexora_screenshot','По макету','UI дизайн по скриншоту (макету)']
+];
+
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2200); }
+function setSw(el,on){ el.classList.toggle('on',!!on); el.setAttribute('aria-checked',on?'true':'false'); }
+function copyText(t){
+  if (hasB('copyText')) callB('copyText', t);
+  else if (navigator.clipboard) navigator.clipboard.writeText(t).catch(()=>{});
+  toast('Адрес скопирован в буфер');
+}
+function openExternal(u){ if (hasB('openExternal')) callB('openExternal', u); else window.open(u,'_blank'); }
+const qrCache = {};
+function qrInto(el, text){
+  if (!text){ el.textContent='—'; return; }
+  if (el.dataset.t === text) return;
+  el.dataset.t = text;
+  let uri = qrCache[text];
+  if (uri === undefined){ uri = hasB('getQrDataUri') ? (callB('getQrDataUri', text, 512) || '') : ''; qrCache[text]=uri; }
+  if (uri){ el.className = el.className.replace(' txt',''); el.innerHTML = '<img alt="QR" src="'+uri+'">'; }
+  else { if (!/ txt/.test(el.className)) el.className += ' txt'; el.textContent = text; }
+}
+
+/* ---------- Wi-Fi & HTTP ---------- */
+function getShare(){
+  if (PREVIEW) return mock.share;
+  try { return JSON.parse(callB('shareGetState') || '{}'); } catch(e){ return {}; }
+}
+function shareAct(fn, ...args){
+  if (PREVIEW){
+    const s = mock.share;
+    if (fn==='shareSetServer') s.running = args[0];
+    else if (fn==='shareSetConfig'){ const [k,v]=args; if(k==='auth_required') s.authRequired = (v==='true'); else if(k==='username') s.username=v; else if(k==='password') s.password=v; else if(k==='folder') s.folder=v; }
+    else if (fn==='shareWifi') s.wifi.enabled = args[0];
+  } else callB(fn, ...args);
+  renderShare(); setTimeout(renderShare,350); setTimeout(renderShare,1200);
+}
+function buildFolders(){
+  $('l-folders').innerHTML = FOLDERS.map((f,i)=>`<div class="card item" style="--i:${7+i}" data-f="${f[0]}"><div class="body"><div class="t" style="white-space:normal;font-size:calc(29*var(--u))">${esc(f[1])}</div></div><div class="rd">${ic('check')}</div></div>`).join('');
+  document.querySelectorAll('#l-folders .card').forEach(c=>c.addEventListener('click',()=>shareAct('shareSetConfig','folder',c.dataset.f)));
+}
+function renderShare(){
+  const s = getShare(), w = s.wifi || {};
+  setSw($('sw-server'), s.running);
+  $('sv-status').textContent = s.running ? ('Сервер активен на порту ' + (s.port||'')) : (s.error ? ('Ошибка: ' + s.error) : 'Сервер остановлен');
+  $('sv-status').style.color = s.running ? 'var(--orange)' : '';
+  $('addr-card').classList.toggle('hide', !s.running);
+  $('sv-url').textContent = s.url || '—';
+  $('sv-auth-note').textContent = s.authRequired ? ('Вход в браузере: ' + (s.username||'') + ' / ' + (s.password||'')) : 'Свободный доступ • без пароля';
+  setSw($('sw-auth'), s.authRequired);
+  $('auth-card').classList.toggle('hide', !s.authRequired);
+  if (document.activeElement !== $('in-user')) $('in-user').value = s.username || '';
+  if (document.activeElement !== $('in-pass')) $('in-pass').value = s.password || '';
+  document.querySelectorAll('#l-folders .card').forEach(c=>c.classList.toggle('sel', c.dataset.f === s.folder));
+  setSw($('sw-wifi'), w.enabled);
+  $('wf-status').textContent = w.status || 'Прямое подключение по QR с паролем от Wi‑Fi Direct';
+  $('wifi-card').classList.toggle('hide', !w.enabled);
+  $('wf-ssid').textContent = w.ssid || '—'; $('wf-pass').textContent = w.pass || '—';
+  qrInto($('qr-wifi'), w.qrPayload || '');
+  $('dl-block').classList.toggle('hide-block', !s.running);
+  if (s.running && s.url) qrInto($('qr-dl'), s.url);
+}
+$('sw-server').addEventListener('click', ()=> shareAct('shareSetServer', !getShare().running));
+$('sw-auth').addEventListener('click',   ()=> shareAct('shareSetConfig','auth_required', String(!getShare().authRequired)));
+$('sw-wifi').addEventListener('click',   ()=> shareAct('shareWifi', !(getShare().wifi||{}).enabled));
+$('in-user').addEventListener('change', e=> shareAct('shareSetConfig','username', e.target.value.trim()));
+$('in-pass').addEventListener('change', e=> shareAct('shareSetConfig','password', e.target.value.trim()));
+$('btn-copy').addEventListener('click', ()=> copyText(getShare().url || ''));
+$('btn-open').addEventListener('click', ()=> openExternal(getShare().url || ''));
+buildFolders();
+
+/* ---------- Настройки плеера ---------- */
+function getSettings(){
+  if (PREVIEW) return mock.settings;
+  try { return JSON.parse(callB('getSettings') || '{}'); } catch(e){ return {}; }
+}
+function setSetting(k, v){
+  if (PREVIEW) mock.settings[k] = (v==='true') ? true : (v==='false') ? false : v; else callB('setSetting', k, String(v));
+  renderSettings();
+}
+function buildDesigns(){
+  $('l-designs').innerHTML = DESIGNS.map((d,i)=>`<div class="card item" style="--i:${7+i}" data-d="${d[0]}"><div class="tile"><svg class="ic"><use href="#i-palette"/></svg></div><div class="body"><div class="t">${esc(d[1])}</div><div class="s">${esc(d[2])}</div></div><div class="rd">${ic('check')}</div></div>`).join('');
+  document.querySelectorAll('#l-designs .card').forEach(c=>c.addEventListener('click',()=>{ setSetting('design', c.dataset.d); toast('Стиль: ' + c.querySelector('.t').textContent); }));
+}
+function renderSettings(){
+  const s = getSettings();
+  document.querySelectorAll('[data-set]').forEach(b=>setSw(b, !!s[b.dataset.set]));
+  document.querySelectorAll('#l-designs .card').forEach(c=>c.classList.toggle('sel', c.dataset.d === s.design));
+}
+document.querySelectorAll('[data-set]').forEach(b=>b.addEventListener('click',()=>setSetting(b.dataset.set, String(!getSettings()[b.dataset.set]))));
+buildDesigns();
+
+/* ---------- open / close sub-pages (same slide + rise animation) ---------- */
+let activeSub = null, subTimer = null;
+document.querySelectorAll('.sub').forEach(p => p.insertBefore(document.querySelector('.bgtop').cloneNode(true), p.firstChild));
+function openSub(name){
+  const el = $('s-' + name); if (!el) return;
+  activeSub = name; el.classList.remove('leaving'); el.classList.add('active');
+  if (name === 'share'){ renderShare(); clearInterval(subTimer); subTimer = setInterval(renderShare, 1500); }
+  if (name === 'settings') renderSettings();
+  fab && fab.classList.remove('show');
+}
+function closeSubs(instant){
+  if (!activeSub) return false;
+  const el = $('s-' + activeSub); activeSub = null; clearInterval(subTimer);
+  if (instant){ el.classList.remove('active','leaving'); return true; }
+  el.classList.add('leaving'); setTimeout(()=>el.classList.remove('active','leaving'), 260);
+  return true;
+}
+document.querySelectorAll('[data-back]').forEach(b=>b.addEventListener('click',()=>closeSubs()));
+window.nexoraBack = () => closeSubs();             // Android back button: window.nexoraBack() returns true if it closed a sub-page
+window.onShareState = () => { if (activeSub === 'share') renderShare(); };   // optional push from native
+
+/* ---------- Ещё: item click router ---------- */
+function openMoreItem(id){
+  if (id === 'share'    && (PREVIEW || hasB('shareGetState'))) return openSub('share');
+  if (id === 'settings' && (PREVIEW || hasB('getSettings')))   return openSub('settings');
+  if (hasB('onMoreItemClick')) callB('onMoreItemClick', id);     // url / vault / terminal (and legacy fallback)
+}
+
+/* Initial render */
+renderVideos();
+renderAudio();
+renderBrowse();
+renderPlaylists();
+renderMore();
+
+if (window.AndroidBridge && window.AndroidBridge.requestInitialData) {
+  window.AndroidBridge.requestInitialData();
+}
+</script>
+</body>
+</html>

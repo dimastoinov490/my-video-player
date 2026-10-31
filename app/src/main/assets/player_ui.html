@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Player UI v3</title>
+<title>Nexora UI v4</title>
 <style>
 /* 1u = 1/1024 of screen width. Every size below is in u, so the UI scales identically on any phone.
    Header/nav are anchored (top / bottom), so tall screens just get more list space. */
@@ -138,6 +138,67 @@ svg.ic{width:1em;height:1em;display:block}
   transition:transform .42s cubic-bezier(.34,1.3,.5,1)}
 .nav-active::after{content:"";position:absolute;left:calc(14*var(--u));right:calc(-6*var(--u));bottom:calc(-1*var(--u));height:calc(4*var(--u));border-radius:calc(4*var(--u));
   background:linear-gradient(90deg,#ff6a00,#ff9a30 50%,rgba(255,106,0,0));box-shadow:0 0 calc(16*var(--u)) rgba(255,100,0,.85)}
+
+/* ======================= ЕЩЁ: sub-pages (v4) ======================= */
+.sub{position:absolute;inset:0;display:none;z-index:6;background:radial-gradient(90% 25% at 25% 0%,#080a0d 0%,var(--bg) 100%)}
+.sub.active{display:block;animation:subin .45s cubic-bezier(.2,.9,.3,1) both}
+.sub.leaving{display:block;animation:subout .26s ease both}
+@keyframes subin{from{opacity:0;transform:translateX(calc(70*var(--u)))}}
+@keyframes subout{to{opacity:0;transform:translateX(calc(70*var(--u)))}}
+.sub .bgtop{z-index:0}.sub .scroll{z-index:1}
+.sub.active .item{animation:rise .5s cubic-bezier(.2,.8,.3,1) both;animation-delay:calc(var(--i,0)*60ms + 120ms)}
+.subhead{display:flex;align-items:center;gap:calc(26*var(--u));margin:calc(6*var(--u)) calc(4*var(--u)) calc(30*var(--u))}
+.backbtn{flex:none;width:calc(84*var(--u));height:calc(84*var(--u));border-radius:50%;display:grid;place-items:center;cursor:pointer;
+  background:linear-gradient(180deg,#0c1014,#080b0e);border:calc(2*var(--u)) solid var(--line);color:#c6c9d0;transition:transform .12s,border-color .2s}
+.backbtn:active{transform:scale(.9);border-color:rgba(255,122,0,.6)}
+.backbtn svg{font-size:calc(46*var(--u))}
+.subhead h1{font-size:calc(40*var(--u));font-weight:700;color:#fff;line-height:1.15}
+.subhead p{margin-top:calc(4*var(--u));font-size:calc(25*var(--u));color:var(--muted)}
+.card.static{cursor:default}.card.static:active{transform:none;border-color:var(--line);box-shadow:none}
+.card.col{flex-direction:column;align-items:stretch;gap:calc(20*var(--u))}
+.card.hide{display:none}
+.lbl{font-size:calc(25*var(--u));color:var(--muted);letter-spacing:calc(.6*var(--u))}
+.url{font-size:calc(34*var(--u));font-weight:700;color:var(--orange);word-break:break-all;text-shadow:0 0 calc(18*var(--u)) rgba(255,110,0,.35)}
+.note{font-size:calc(23*var(--u));line-height:1.45;color:var(--dim)}
+.btns{display:flex;gap:calc(16*var(--u))}
+.pbtn{flex:1;display:flex;align-items:center;justify-content:center;gap:calc(12*var(--u));height:calc(76*var(--u));border-radius:calc(38*var(--u));
+  font:inherit;font-size:calc(26*var(--u));font-weight:600;color:var(--orange);cursor:pointer;
+  background:linear-gradient(180deg,#2a1204,#190b03);border:calc(2*var(--u)) solid rgba(255,122,0,.45);box-shadow:0 0 calc(16*var(--u)) rgba(255,110,0,.15);transition:transform .12s}
+.pbtn:active{transform:scale(.94)}.pbtn svg{font-size:calc(34*var(--u))}
+.pbtn.fill{color:#1a0a00;border:0;background:linear-gradient(135deg,#ff9a1f,var(--orange-hot) 60%,#f84a00);box-shadow:0 0 calc(22*var(--u)) rgba(255,90,0,.4)}
+/* switch */
+.sw{flex:none;position:relative;width:calc(104*var(--u));height:calc(58*var(--u));border-radius:calc(29*var(--u));border:calc(2*var(--u)) solid var(--line);cursor:pointer;
+  background:linear-gradient(180deg,#0b0e13,#07090d);transition:background .3s,border-color .3s,box-shadow .3s}
+.sw i{position:absolute;left:calc(5*var(--u));top:calc(5*var(--u));width:calc(44*var(--u));height:calc(44*var(--u));border-radius:50%;background:#6c7280;
+  transition:transform .35s cubic-bezier(.34,1.4,.5,1),background .3s,box-shadow .3s}
+.sw.on{border-color:rgba(255,122,0,.7);background:linear-gradient(180deg,#44180a,#2a0f02);box-shadow:0 0 calc(22*var(--u)) rgba(255,110,0,.35)}
+.sw.on i{transform:translateX(calc(46*var(--u)));background:radial-gradient(circle at 30% 20%,#ffb040,var(--orange-hot));box-shadow:0 0 calc(14*var(--u)) rgba(255,110,0,.8)}
+/* radio card */
+.rd{flex:none;width:calc(48*var(--u));height:calc(48*var(--u));border-radius:50%;border:calc(3*var(--u)) solid #3a3f4a;display:grid;place-items:center;color:transparent;transition:all .25s}
+.rd svg{font-size:calc(28*var(--u))}
+.card.sel{border-color:rgba(255,122,0,.6);box-shadow:0 0 calc(22*var(--u)) rgba(255,110,0,.18),inset calc(6*var(--u)) 0 calc(14*var(--u)) rgba(255,110,0,.12)}
+.card.sel .rd{border-color:var(--orange);background:radial-gradient(circle at 30% 20%,#ff9410,var(--orange-hot));color:#1a0a00;box-shadow:0 0 calc(14*var(--u)) rgba(255,110,0,.6)}
+/* inputs */
+.field{display:flex;align-items:center;gap:calc(18*var(--u));height:calc(84*var(--u));padding:0 calc(28*var(--u));border-radius:calc(42*var(--u));
+  background:linear-gradient(180deg,#0b0e13,#07090d);border:calc(2*var(--u)) solid var(--line);border-left-color:rgba(255,122,0,.5)}
+.field span{flex:none;font-size:calc(24*var(--u));color:var(--muted);width:calc(130*var(--u))}
+.field input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--text);font:inherit;font-size:calc(28*var(--u))}
+.field:focus-within{border-color:rgba(255,122,0,.6);box-shadow:0 0 calc(20*var(--u)) rgba(255,110,0,.2)}
+.kv{display:flex;justify-content:space-between;align-items:center;gap:calc(16*var(--u));font-size:calc(27*var(--u))}
+.kv b{color:#fff;font-weight:600;word-break:break-all;text-align:right}
+.qr{align-self:center;width:calc(360*var(--u));height:calc(360*var(--u));border-radius:calc(28*var(--u));background:#fff;display:grid;place-items:center;padding:calc(18*var(--u));
+  box-shadow:0 0 calc(30*var(--u)) rgba(255,110,0,.35)}
+.qr img{width:100%;height:100%;image-rendering:pixelated}
+.qr.txt{background:#0b0e13;color:var(--muted);font-size:calc(22*var(--u));word-break:break-all;text-align:center}
+.toast{position:absolute;left:50%;bottom:calc(190*var(--u));transform:translate(-50%,calc(30*var(--u)));z-index:20;opacity:0;pointer-events:none;max-width:86%;
+  padding:calc(20*var(--u)) calc(38*var(--u));border-radius:calc(40*var(--u));font-size:calc(27*var(--u));color:#fff;text-align:center;
+  background:linear-gradient(180deg,#2a1204,#160a03);border:calc(2*var(--u)) solid rgba(255,122,0,.55);box-shadow:0 0 calc(26*var(--u)) rgba(255,110,0,.3);
+  transition:opacity .3s,transform .35s cubic-bezier(.34,1.4,.5,1)}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+#l-more .card.flash{animation:flash .45s ease}
+@keyframes flash{40%{border-color:rgba(255,122,0,.8);box-shadow:0 0 calc(30*var(--u)) rgba(255,110,0,.4)}}
+
+.hide-block{display:none}
 </style>
 </head>
 <body>
@@ -158,6 +219,17 @@ svg.ic{width:1em;height:1em;display:block}
  <symbol id="i-play" viewBox="0 0 24 24"><path fill="currentColor" d="M7 4.6v14.8a1 1 0 0 0 1.5.86l12-7.4a1 1 0 0 0 0-1.72l-12-7.4A1 1 0 0 0 7 4.6z"/></symbol>
  <symbol id="i-chev" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></symbol>
  <symbol id="i-heart" viewBox="0 0 24 24"><path fill="currentColor" d="M12 21s-8.5-5.4-8.5-11.2A4.6 4.6 0 0 1 12 7.3a4.6 4.6 0 0 1 8.5 2.5C20.5 15.6 12 21 12 21z"/></symbol>
+ <symbol id="i-back" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M15 5l-7 7 7 7"/></symbol>
+ <symbol id="i-copy" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.1" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></g></symbol>
+ <symbol id="i-globe" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></g></symbol>
+ <symbol id="i-wifi" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 9.5a14 14 0 0 1 18 0M6 13a9.5 9.5 0 0 1 12 0M9 16.4a5 5 0 0 1 6 0"/><circle cx="12" cy="19.5" r="1.2" fill="currentColor"/></g></symbol>
+ <symbol id="i-lock" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.1" stroke-linejoin="round" stroke-linecap="round"><rect x="5" y="11" width="14" height="9" rx="2.2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></g></symbol>
+ <symbol id="i-check" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+ <symbol id="i-ext" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-9 9M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/></g></symbol>
+ <symbol id="i-rot" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.4-5.7L20 8.5"/><path d="M20 3.5v5h-5"/></g></symbol>
+ <symbol id="i-chip" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3"/></g></symbol>
+ <symbol id="i-palette" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 0 18c1.4 0 2-.9 2-1.8 0-1.2-1-1.6-1-2.6 0-.9.7-1.6 1.7-1.6H17a4 4 0 0 0 4-4C21 6.5 17 3 12 3z"/><circle cx="7.5" cy="11" r="1.1" fill="currentColor"/><circle cx="10.5" cy="7.2" r="1.1" fill="currentColor"/><circle cx="15" cy="7.8" r="1.1" fill="currentColor"/></g></symbol>
+ <symbol id="i-info" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.8v.2"/></g></symbol>
  <symbol id="i-plus" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" d="M12 4.5v15M4.5 12h15"/></symbol>
 </defs></svg>
 
@@ -213,6 +285,82 @@ svg.ic{width:1em;height:1em;display:block}
     <div class="row item" style="--i:1"><b>Возможности /</b><span class="caps">Сервисы Nexora</span></div>
     <div id="l-more"></div>
   </div></section>
+
+  <!-- ============ ЕЩЁ → Wi-Fi & HTTP Раздача ============ -->
+  <section class="sub" id="s-share"><div class="scroll">
+    <div class="subhead item"><button class="backbtn" data-back aria-label="Назад"><svg class="ic"><use href="#i-back"/></svg></button>
+      <div><h1>Wi-Fi &amp; HTTP Раздача</h1><p>Локальный обмен файлами по сети</p></div></div>
+
+    <div class="card static item" style="--i:1"><div class="tile"><svg class="ic"><use href="#i-globe"/></svg></div>
+      <div class="body"><div class="t">Локальный HTTP-сервер</div><div class="s" id="sv-status">Сервер остановлен</div><div class="m" id="sv-sub">Обмен файлами по Wi‑Fi через HTTP</div></div>
+      <button class="sw" id="sw-server" role="switch" aria-checked="false"><i></i></button></div>
+
+    <div class="card static col item hide" id="addr-card" style="--i:2">
+      <div class="lbl">Адрес для браузера (ПК / Телефон):</div>
+      <div class="url" id="sv-url">—</div>
+      <div class="btns"><button class="pbtn fill" id="btn-open"><svg class="ic"><use href="#i-ext"/></svg>Открыть</button>
+        <button class="pbtn" id="btn-copy"><svg class="ic"><use href="#i-copy"/></svg>Копировать</button></div>
+      <div class="note" id="sv-auth-note"></div>
+      <div class="note">Браузерный плеер поддерживает перемотку (Range 206) и прямое воспроизведение MP4, MKV, WebM, MP3 без загрузки на диск.</div>
+    </div>
+
+    <div class="row item" style="--i:3"><b>Настройки веб-вещания</b><span class="caps">HTTP</span></div>
+
+    <div class="card static item" style="--i:4"><div class="tile"><svg class="ic"><use href="#i-lock"/></svg></div>
+      <div class="body"><div class="t">Вход по логину и паролю</div><div class="s" style="white-space:normal">Запрашивать HTTP Basic Auth при входе в браузере</div></div>
+      <button class="sw" id="sw-auth" role="switch" aria-checked="false"><i></i></button></div>
+    <div class="card static col item hide" id="auth-card" style="--i:5">
+      <label class="field"><span>Логин</span><input id="in-user" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+      <label class="field"><span>Пароль</span><input id="in-pass" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+    </div>
+
+    <div class="lbl item" style="--i:6;margin:calc(10*var(--u)) calc(8*var(--u)) calc(18*var(--u))">Папка вещания файлов:</div>
+    <div id="l-folders"></div>
+
+    <div class="row item" style="--i:12"><b>Передача по QR и Wi‑Fi Direct</b><span class="caps">Wi‑Fi</span></div>
+    <div class="card static item" style="--i:13"><div class="tile"><svg class="ic"><use href="#i-wifi"/></svg></div>
+      <div class="body"><div class="t">Wi‑Fi Direct &amp; QR передача</div><div class="s" id="wf-status" style="white-space:normal">Прямое подключение по QR с паролем от Wi‑Fi Direct</div></div>
+      <button class="sw" id="sw-wifi" role="switch" aria-checked="false"><i></i></button></div>
+    <div class="card static col item hide" id="wifi-card" style="--i:14">
+      <div class="kv"><span class="lbl">Имя сети (SSID):</span><b id="wf-ssid">—</b></div>
+      <div class="kv"><span class="lbl">Пароль Wi‑Fi:</span><b id="wf-pass">—</b></div>
+      <div class="lbl" style="text-align:center">1. Wi‑Fi QR Code — наведите камеру любого телефона для автоподключения:</div>
+      <div class="qr txt" id="qr-wifi"></div>
+      <div id="dl-block" class="hide-block">
+        <div class="lbl" style="text-align:center;margin:calc(8*var(--u)) 0 calc(18*var(--u))">2. File Download QR — после подключения к Wi‑Fi откройте ссылку или QR:</div>
+        <div class="qr txt" id="qr-dl" style="margin:0 auto"></div>
+      </div>
+    </div>
+  </div></section>
+
+  <!-- ============ ЕЩЁ → Настройки плеера ============ -->
+  <section class="sub" id="s-settings"><div class="scroll">
+    <div class="subhead item"><button class="backbtn" data-back aria-label="Назад"><svg class="ic"><use href="#i-back"/></svg></button>
+      <div><h1>Настройки плеера</h1><p>Аудио, видео, декодеры и темы</p></div></div>
+
+    <div class="row item" style="--i:1"><b>Воспроизведение</b><span class="caps">Видео</span></div>
+    <div class="card static item" style="--i:2"><div class="tile"><svg class="ic"><use href="#i-chip"/></svg></div>
+      <div class="body"><div class="t">Аппаратное декодирование</div><div class="s" style="white-space:normal">Использовать аппаратный декодер LibVLC</div></div>
+      <button class="sw" data-set="hw_accel" role="switch" aria-checked="false"><i></i></button></div>
+    <div class="card static item" style="--i:3"><div class="tile"><svg class="ic"><use href="#i-note1"/></svg></div>
+      <div class="body"><div class="t">Фоновое воспроизведение</div><div class="s" style="white-space:normal">Продолжать звук при блокировке экрана</div></div>
+      <button class="sw" data-set="bg_play" role="switch" aria-checked="false"><i></i></button></div>
+    <div class="card static item" style="--i:4"><div class="tile"><svg class="ic"><use href="#i-hist"/></svg></div>
+      <div class="body"><div class="t">Отображать буферизацию</div><div class="s" style="white-space:normal">Показывать состояние буферизации во время воспроизведения</div></div>
+      <button class="sw" data-set="show_buffering_status" role="switch" aria-checked="false"><i></i></button></div>
+    <div class="card static item" style="--i:5"><div class="tile"><svg class="ic"><use href="#i-rot"/></svg></div>
+      <div class="body"><div class="t">Автоповорот</div><div class="s" style="white-space:normal">Переворачивать экран при смене ориентации</div></div>
+      <button class="sw" data-set="auto_rotate" role="switch" aria-checked="false"><i></i></button></div>
+
+    <div class="row item" style="--i:6"><b>Оформление</b><span class="caps">Стиль</span></div>
+    <div id="l-designs"></div>
+
+    <div class="row item" style="--i:11"><b>О приложении</b></div>
+    <div class="card static item" style="--i:12"><div class="tile"><svg class="ic"><use href="#i-info"/></svg></div>
+      <div class="body"><div class="t">Nexora</div><div class="s" style="white-space:normal">Современный мультимедийный проигрыватель</div><div class="m">Версия 1.1.0 (LibVLC 3.6.0 + AI Theme Engine)</div></div></div>
+  </div></section>
+
+  <div class="toast" id="toast"></div>
 
   <button class="fab show" id="fab" aria-label="Воспроизвести"><svg class="ic"><use href="#i-play"/></svg></button>
 
@@ -452,9 +600,8 @@ function renderMore() {
   document.querySelectorAll('#l-more .card').forEach(card => {
     card.addEventListener('click', () => {
       const id = card.getAttribute('data-id');
-      if (window.AndroidBridge && window.AndroidBridge.onMoreItemClick) {
-        window.AndroidBridge.onMoreItemClick(id);
-      }
+      card.classList.remove('flash'); void card.offsetWidth; card.classList.add('flash');
+      openMoreItem(id);
     });
   });
 }
@@ -503,6 +650,7 @@ tabs.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{
 /* ---- Bottom nav: switches pages, bump slides to the tapped item ---- */
 const navX=[0,209,405,603,800],navActive=document.getElementById('navActive'),fab=document.getElementById('fab');
 function switchNavTab(tabName, i) {
+  if (typeof closeSubs === "function") closeSubs(true);
   document.querySelectorAll('.ni').forEach((x, idx)=>{
     if (idx === i) x.classList.add('active');
     else x.classList.remove('active');
@@ -641,6 +789,145 @@ window.setActiveNavTab = function(index) {
     switchNavTab(tabs[index], index);
   }
 };
+
+
+/* ======================= ЕЩЁ: sub-pages logic (v4) ======================= */
+const PREVIEW = !window.AndroidBridge;            // in a normal browser we use a demo state
+const hasB = f => !!(window.AndroidBridge && typeof window.AndroidBridge[f] === 'function');
+const callB = (f, ...a) => { try { return window.AndroidBridge[f](...a); } catch (e) { console.error(f, e); } };
+const $ = id => document.getElementById(id);
+
+const mock = {
+  share: { running:false, url:'http://192.168.1.23:8080', port:8080, error:'', authRequired:false, username:'admin', password:'1234', folder:'all',
+           wifi:{ enabled:false, ssid:'Nexora-Direct-Share', pass:'nexora8888', qrPayload:'WIFI:T:WPA;S:Nexora-Direct-Share;P:nexora8888;;', status:'' } },
+  settings: { hw_accel:true, bg_play:false, show_buffering_status:true, auto_rotate:true, design:'nexora_neon' }
+};
+const FOLDERS = [
+  ['all','Вся библиотека (Видео и Музыка)'], ['movies','Папка Movies (Фильмы)'], ['downloads','Папка Downloads (Загрузки)'],
+  ['dcim','Папка DCIM (Камера и галерея)'], ['share_dir','Выделенная папка обмена Nexora']
+];
+const DESIGNS = [
+  ['nexora_orange_original','Оригинал Nexora','Фирменный оранжево-золотой стиль'],
+  ['nexora_neon','Неон','Тёмная неоновая тема'],
+  ['nexora_neon_screenshot','Неон по скриншотам','Оформление со скриншотов'],
+  ['nexora_screenshot','По макету','UI дизайн по скриншоту (макету)']
+];
+
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2200); }
+function setSw(el,on){ el.classList.toggle('on',!!on); el.setAttribute('aria-checked',on?'true':'false'); }
+function copyText(t){
+  if (hasB('copyText')) callB('copyText', t);
+  else if (navigator.clipboard) navigator.clipboard.writeText(t).catch(()=>{});
+  toast('Адрес скопирован в буфер');
+}
+function openExternal(u){ if (hasB('openExternal')) callB('openExternal', u); else window.open(u,'_blank'); }
+const qrCache = {};
+function qrInto(el, text){
+  if (!text){ el.textContent='—'; return; }
+  if (el.dataset.t === text) return;
+  el.dataset.t = text;
+  let uri = qrCache[text];
+  if (uri === undefined){ uri = hasB('getQrDataUri') ? (callB('getQrDataUri', text, 512) || '') : ''; qrCache[text]=uri; }
+  if (uri){ el.className = el.className.replace(' txt',''); el.innerHTML = '<img alt="QR" src="'+uri+'">'; }
+  else { if (!/ txt/.test(el.className)) el.className += ' txt'; el.textContent = text; }
+}
+
+/* ---------- Wi-Fi & HTTP ---------- */
+function getShare(){
+  if (PREVIEW) return mock.share;
+  try { return JSON.parse(callB('shareGetState') || '{}'); } catch(e){ return {}; }
+}
+function shareAct(fn, ...args){
+  if (PREVIEW){
+    const s = mock.share;
+    if (fn==='shareSetServer') s.running = args[0];
+    else if (fn==='shareSetConfig'){ const [k,v]=args; if(k==='auth_required') s.authRequired = (v==='true'); else if(k==='username') s.username=v; else if(k==='password') s.password=v; else if(k==='folder') s.folder=v; }
+    else if (fn==='shareWifi') s.wifi.enabled = args[0];
+  } else callB(fn, ...args);
+  renderShare(); setTimeout(renderShare,350); setTimeout(renderShare,1200);
+}
+function buildFolders(){
+  $('l-folders').innerHTML = FOLDERS.map((f,i)=>`<div class="card item" style="--i:${7+i}" data-f="${f[0]}"><div class="body"><div class="t" style="white-space:normal;font-size:calc(29*var(--u))">${esc(f[1])}</div></div><div class="rd">${ic('check')}</div></div>`).join('');
+  document.querySelectorAll('#l-folders .card').forEach(c=>c.addEventListener('click',()=>shareAct('shareSetConfig','folder',c.dataset.f)));
+}
+function renderShare(){
+  const s = getShare(), w = s.wifi || {};
+  setSw($('sw-server'), s.running);
+  $('sv-status').textContent = s.running ? ('Сервер активен на порту ' + (s.port||'')) : (s.error ? ('Ошибка: ' + s.error) : 'Сервер остановлен');
+  $('sv-status').style.color = s.running ? 'var(--orange)' : '';
+  $('addr-card').classList.toggle('hide', !s.running);
+  $('sv-url').textContent = s.url || '—';
+  $('sv-auth-note').textContent = s.authRequired ? ('Вход в браузере: ' + (s.username||'') + ' / ' + (s.password||'')) : 'Свободный доступ • без пароля';
+  setSw($('sw-auth'), s.authRequired);
+  $('auth-card').classList.toggle('hide', !s.authRequired);
+  if (document.activeElement !== $('in-user')) $('in-user').value = s.username || '';
+  if (document.activeElement !== $('in-pass')) $('in-pass').value = s.password || '';
+  document.querySelectorAll('#l-folders .card').forEach(c=>c.classList.toggle('sel', c.dataset.f === s.folder));
+  setSw($('sw-wifi'), w.enabled);
+  $('wf-status').textContent = w.status || 'Прямое подключение по QR с паролем от Wi‑Fi Direct';
+  $('wifi-card').classList.toggle('hide', !w.enabled);
+  $('wf-ssid').textContent = w.ssid || '—'; $('wf-pass').textContent = w.pass || '—';
+  qrInto($('qr-wifi'), w.qrPayload || '');
+  $('dl-block').classList.toggle('hide-block', !s.running);
+  if (s.running && s.url) qrInto($('qr-dl'), s.url);
+}
+$('sw-server').addEventListener('click', ()=> shareAct('shareSetServer', !getShare().running));
+$('sw-auth').addEventListener('click',   ()=> shareAct('shareSetConfig','auth_required', String(!getShare().authRequired)));
+$('sw-wifi').addEventListener('click',   ()=> shareAct('shareWifi', !(getShare().wifi||{}).enabled));
+$('in-user').addEventListener('change', e=> shareAct('shareSetConfig','username', e.target.value.trim()));
+$('in-pass').addEventListener('change', e=> shareAct('shareSetConfig','password', e.target.value.trim()));
+$('btn-copy').addEventListener('click', ()=> copyText(getShare().url || ''));
+$('btn-open').addEventListener('click', ()=> openExternal(getShare().url || ''));
+buildFolders();
+
+/* ---------- Настройки плеера ---------- */
+function getSettings(){
+  if (PREVIEW) return mock.settings;
+  try { return JSON.parse(callB('getSettings') || '{}'); } catch(e){ return {}; }
+}
+function setSetting(k, v){
+  if (PREVIEW) mock.settings[k] = (v==='true') ? true : (v==='false') ? false : v; else callB('setSetting', k, String(v));
+  renderSettings();
+}
+function buildDesigns(){
+  $('l-designs').innerHTML = DESIGNS.map((d,i)=>`<div class="card item" style="--i:${7+i}" data-d="${d[0]}"><div class="tile"><svg class="ic"><use href="#i-palette"/></svg></div><div class="body"><div class="t">${esc(d[1])}</div><div class="s">${esc(d[2])}</div></div><div class="rd">${ic('check')}</div></div>`).join('');
+  document.querySelectorAll('#l-designs .card').forEach(c=>c.addEventListener('click',()=>{ setSetting('design', c.dataset.d); toast('Стиль: ' + c.querySelector('.t').textContent); }));
+}
+function renderSettings(){
+  const s = getSettings();
+  document.querySelectorAll('[data-set]').forEach(b=>setSw(b, !!s[b.dataset.set]));
+  document.querySelectorAll('#l-designs .card').forEach(c=>c.classList.toggle('sel', c.dataset.d === s.design));
+}
+document.querySelectorAll('[data-set]').forEach(b=>b.addEventListener('click',()=>setSetting(b.dataset.set, String(!getSettings()[b.dataset.set]))));
+buildDesigns();
+
+/* ---------- open / close sub-pages (same slide + rise animation) ---------- */
+let activeSub = null, subTimer = null;
+document.querySelectorAll('.sub').forEach(p => p.insertBefore(document.querySelector('.bgtop').cloneNode(true), p.firstChild));
+function openSub(name){
+  const el = $('s-' + name); if (!el) return;
+  activeSub = name; el.classList.remove('leaving'); el.classList.add('active');
+  if (name === 'share'){ renderShare(); clearInterval(subTimer); subTimer = setInterval(renderShare, 1500); }
+  if (name === 'settings') renderSettings();
+  fab && fab.classList.remove('show');
+}
+function closeSubs(instant){
+  if (!activeSub) return false;
+  const el = $('s-' + activeSub); activeSub = null; clearInterval(subTimer);
+  if (instant){ el.classList.remove('active','leaving'); return true; }
+  el.classList.add('leaving'); setTimeout(()=>el.classList.remove('active','leaving'), 260);
+  return true;
+}
+document.querySelectorAll('[data-back]').forEach(b=>b.addEventListener('click',()=>closeSubs()));
+window.nexoraBack = () => closeSubs();             // Android back button: window.nexoraBack() returns true if it closed a sub-page
+window.onShareState = () => { if (activeSub === 'share') renderShare(); };   // optional push from native
+
+/* ---------- Ещё: item click router ---------- */
+function openMoreItem(id){
+  if (id === 'share'    && (PREVIEW || hasB('shareGetState'))) return openSub('share');
+  if (id === 'settings' && (PREVIEW || hasB('getSettings')))   return openSub('settings');
+  if (hasB('onMoreItemClick')) callB('onMoreItemClick', id);     // url / vault / terminal (and legacy fallback)
+}
 
 /* Initial render */
 renderVideos();

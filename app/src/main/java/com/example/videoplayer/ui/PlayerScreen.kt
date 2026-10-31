@@ -56,7 +56,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.example.videoplayer.R
 import com.example.videoplayer.model.MediaStoreHelper
 import com.example.videoplayer.player.VlcPlayerManager
-import com.example.videoplayer.ui.terminal.TerminalConsoleOverlay
 import com.example.videoplayer.ui.theme.ButtonConfig
 import com.example.videoplayer.ui.theme.ThemeConfigManager
 import kotlinx.coroutines.delay
@@ -168,8 +167,6 @@ fun PlayerScreen(
     var showMoreBottomSheet by remember { mutableStateOf(false) }
     var showSubtitlesDialog by remember { mutableStateOf(false) }
     var showCastDialog by remember { mutableStateOf(false) }
-    var showTerminalConsole by remember { mutableStateOf(false) }
-
     var scaleMode by remember { mutableStateOf(VideoScaleMode.FIT) }
     var repeatMode by remember { mutableStateOf(VideoRepeatMode.OFF) }
     var infoFeedbackText by remember { mutableStateOf<String?>(null) }
@@ -177,11 +174,7 @@ fun PlayerScreen(
     var nativeVideoView by remember { mutableStateOf<VideoView?>(null) }
 
     BackHandler {
-        if (showTerminalConsole) {
-            showTerminalConsole = false
-        } else {
-            onBack()
-        }
+        onBack()
     }
 
     DisposableEffect(Unit) {
@@ -196,7 +189,7 @@ fun PlayerScreen(
     }
 
     LaunchedEffect(showControls, isPlaying) {
-        if (showControls && isPlaying && !isControlsLocked && !showTerminalConsole) {
+        if (showControls && isPlaying && !isControlsLocked) {
             delay(4200)
             showControls = false
         }
@@ -255,9 +248,7 @@ fun PlayerScreen(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null
             ) {
-                if (!showTerminalConsole) {
-                    showControls = !showControls
-                }
+                showControls = !showControls
             }
     ) {
         // 1. VIDEO VIEWPORT: Pure & uncorrupted
@@ -455,25 +446,6 @@ fun PlayerScreen(
                         Spacer(modifier = Modifier.weight(1f))
                     }
 
-                    // Terminal Console Toggle Button [>_]
-                    IconButton(
-                        onClick = { showTerminalConsole = true },
-                        modifier = Modifier
-                            .size(36.dp)
-                            .background(config.primaryAccentColor.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
-                            .border(1.dp, config.secondaryAccentColor, RoundedCornerShape(8.dp))
-                    ) {
-                        Text(
-                            ">_",
-                            color = config.secondaryAccentColor,
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(6.dp))
-
                     // Cast Button (JSON configured)
                     if (config.castButton.visible) {
                         IconButton(
@@ -507,14 +479,6 @@ fun PlayerScreen(
                                 onDismissRequest = { showTopOverflowMenu = false },
                                 modifier = Modifier.background(config.controlPanelBgColor)
                             ) {
-                                DropdownMenuItem(
-                                    text = { Text("Терминал и JSON пайплайн", color = config.secondaryAccentColor) },
-                                    leadingIcon = { Icon(Icons.Default.Terminal, null, tint = config.secondaryAccentColor) },
-                                    onClick = {
-                                        showTopOverflowMenu = false
-                                        showTerminalConsole = true
-                                    }
-                                )
                                 DropdownMenuItem(
                                     text = { Text("Информация о видео", color = Color.White) },
                                     leadingIcon = { Icon(Icons.Default.Info, null, tint = Color.White) },
@@ -988,31 +952,10 @@ fun PlayerScreen(
                         }
                     }
 
-                    // Terminal Console entry
-                    Button(
-                        onClick = {
-                            showMoreBottomSheet = false
-                            showTerminalConsole = true
-                        },
-                        modifier = Modifier.fillMaxWidth().height(46.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = config.primaryAccentColor),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Icon(Icons.Default.Terminal, null, tint = Color.Black)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("ОТКРЫТЬ ТЕРМИНАЛ И JSON КОНСОЛЬ", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
-                    }
-
                     Spacer(modifier = Modifier.height(16.dp))
                 }
             }
         }
-
-        // 3. INTERNAL TERMINAL CONSOLE OVERLAY
-        TerminalConsoleOverlay(
-            isVisible = showTerminalConsole,
-            onClose = { showTerminalConsole = false }
-        )
     }
 }
 

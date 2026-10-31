@@ -6,6 +6,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -63,6 +64,8 @@ fun TerminalConsoleOverlay(
     modifier: Modifier = Modifier
 ) {
     if (!isVisible) return
+
+    BackHandler { onClose() }
 
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()

@@ -1,12 +1,21 @@
 package com.example.videoplayer
 
 import android.os.Bundle
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.*
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -15,7 +24,6 @@ import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
 import com.example.videoplayer.security.SecureVaultScreen
 import com.example.videoplayer.ui.PlayerScreen
-import com.example.videoplayer.ui.SettingsScreen
 import com.example.videoplayer.ui.VideoLibraryScreen
 import com.example.videoplayer.ui.theme.*
 
@@ -35,94 +43,139 @@ class MainActivity : FragmentActivity() {
                 ) {
                     var selectedVideoUri by remember { mutableStateOf<String?>(null) }
                     var showCustomUrlDialog by remember { mutableStateOf(false) }
-                    var showSettingsScreen by remember { mutableStateOf(false) }
                     var showProtectedVault by remember { mutableStateOf(false) }
                     var vaultClosedKey by remember { mutableIntStateOf(0) }
+                    var urlInput by remember { mutableStateOf("") }
+
+                    val subEnterTransition = remember {
+                        slideInHorizontally { it / 8 } + fadeIn(animationSpec = tween(420, easing = CubicBezierEasing(0.2f, 0.9f, 0.3f, 1f)))
+                    }
+                    val subExitTransition = remember {
+                        slideOutHorizontally { it / 8 } + fadeOut(animationSpec = tween(260))
+                    }
 
                     if (selectedVideoUri != null) {
                         PlayerScreen(
                             videoUri = selectedVideoUri!!,
                             onBack = { selectedVideoUri = null }
                         )
-                    } else if (showSettingsScreen) {
-                        SettingsScreen(
-                            onBack = { showSettingsScreen = false }
-                        )
-                    } else if (showProtectedVault) {
-                        SecureVaultScreen(
-                            onBack = {
-                                showProtectedVault = false
-                                vaultClosedKey++
-                            },
-                            onOpenVaultFile = { path -> selectedVideoUri = path }
-                        )
                     } else {
-                        VideoLibraryScreen(
-                            onVideoSelected = { uri -> selectedVideoUri = uri },
-                            onOpenCustomUrl = { showCustomUrlDialog = true },
-                            onOpenSettings = { showSettingsScreen = true },
-                            onOpenProtectedVault = { showProtectedVault = true },
-                            refreshKey = vaultClosedKey
-                        )
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            VideoLibraryScreen(
+                                onVideoSelected = { uri -> selectedVideoUri = uri },
+                                onOpenCustomUrl = {
+                                    urlInput = ""
+                                    showCustomUrlDialog = true
+                                },
+                                onOpenSettings = { /* В v4 настройки открываются прямо в HTML */ },
+                                onOpenProtectedVault = { showProtectedVault = true },
+                                refreshKey = vaultClosedKey
+                            )
 
-                        if (showCustomUrlDialog) {
-                            var urlInput by remember {
-                                mutableStateOf("")
+                            // 1. Защищенное хранилище с плавной анимацией появления
+                            AnimatedVisibility(
+                                visible = showProtectedVault,
+                                enter = subEnterTransition,
+                                exit = subExitTransition
+                            ) {
+                                SecureVaultScreen(
+                                    onBack = {
+                                        showProtectedVault = false
+                                        vaultClosedKey++
+                                    },
+                                    onOpenVaultFile = { path -> selectedVideoUri = path }
+                                )
                             }
 
-                            AlertDialog(
-                                onDismissRequest = { showCustomUrlDialog = false },
-                                title = {
-                                    Text(
-                                        "Воспроизведение по ссылке",
-                                        color = Color.White,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 17.sp
-                                    )
-                                },
-                                text = {
-                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Text(
-                                            "Введите HTTP(S), HLS или RTSP URL:",
-                                            color = GrayText,
-                                            fontSize = 13.sp
-                                        )
-                                        OutlinedTextField(
-                                            value = urlInput,
-                                            onValueChange = { urlInput = it },
-                                            placeholder = { Text("https://example.com/video.mp4", color = GrayText) },
-                                            singleLine = true,
-                                            modifier = Modifier.fillMaxWidth(),
-                                            colors = OutlinedTextFieldDefaults.colors(
-                                                focusedBorderColor = theme.primary,
-                                                unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
-                                                focusedTextColor = Color.White,
-                                                unfocusedTextColor = Color.White
-                                            )
-                                        )
-                                    }
-                                },
-                                confirmButton = {
-                                    Button(
-                                        onClick = {
-                                            if (urlInput.isNotBlank()) {
-                                                showCustomUrlDialog = false
-                                                selectedVideoUri = urlInput.trim()
-                                            }
-                                        },
-                                        colors = ButtonDefaults.buttonColors(containerColor = theme.primary)
+                            // 2. Воспроизведение по ссылке с плавной анимацией появления
+                            AnimatedVisibility(
+                                visible = showCustomUrlDialog,
+                                enter = subEnterTransition,
+                                exit = subExitTransition
+                            ) {
+                                BackHandler {
+                                    showCustomUrlDialog = false
+                                }
+
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(Color.Black.copy(alpha = 0.72f))
+                                        .clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null
+                                        ) { showCustomUrlDialog = false },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Surface(
+                                        modifier = Modifier
+                                            .fillMaxWidth(0.92f)
+                                            .clickable(
+                                                interactionSource = remember { MutableInteractionSource() },
+                                                indication = null
+                                            ) { /* consume clicks inside dialog */ },
+                                        shape = RoundedCornerShape(22.dp),
+                                        color = theme.surface,
+                                        border = BorderStroke(1.5.dp, theme.primary.copy(alpha = 0.35f)),
+                                        shadowElevation = 24.dp
                                     ) {
-                                        Text("Играть", color = Color.Black, fontWeight = FontWeight.Bold)
+                                        Column(
+                                            modifier = Modifier.padding(22.dp),
+                                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                                        ) {
+                                            Text(
+                                                "Воспроизведение по ссылке",
+                                                color = Color.White,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 18.sp
+                                            )
+
+                                            Text(
+                                                "Введите HTTP(S), HLS или RTSP URL потока:",
+                                                color = GrayText,
+                                                fontSize = 13.sp
+                                            )
+
+                                            OutlinedTextField(
+                                                value = urlInput,
+                                                onValueChange = { urlInput = it },
+                                                placeholder = { Text("https://example.com/stream.m3u8", color = GrayText) },
+                                                singleLine = true,
+                                                modifier = Modifier.fillMaxWidth(),
+                                                colors = OutlinedTextFieldDefaults.colors(
+                                                    focusedBorderColor = theme.primary,
+                                                    unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
+                                                    focusedTextColor = Color.White,
+                                                    unfocusedTextColor = Color.White
+                                                )
+                                            )
+
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.End,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                TextButton(onClick = { showCustomUrlDialog = false }) {
+                                                    Text("Отмена", color = GrayText)
+                                                }
+                                                Spacer(modifier = Modifier.width(10.dp))
+                                                Button(
+                                                    onClick = {
+                                                        if (urlInput.isNotBlank()) {
+                                                            showCustomUrlDialog = false
+                                                            selectedVideoUri = urlInput.trim()
+                                                        }
+                                                    },
+                                                    colors = ButtonDefaults.buttonColors(containerColor = theme.primary),
+                                                    shape = RoundedCornerShape(12.dp)
+                                                ) {
+                                                    Text("Играть", color = Color.Black, fontWeight = FontWeight.Bold)
+                                                }
+                                            }
+                                        }
                                     }
-                                },
-                                dismissButton = {
-                                    TextButton(onClick = { showCustomUrlDialog = false }) {
-                                        Text("Отмена", color = GrayText)
-                                    }
-                                },
-                                containerColor = theme.surface,
-                                shape = RoundedCornerShape(18.dp)
-                            )
+                                }
+                            }
                         }
                     }
                 }

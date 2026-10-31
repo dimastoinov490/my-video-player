@@ -1,16 +1,24 @@
 package com.example.videoplayer.ui
 
 import android.annotation.SuppressLint
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.graphics.Bitmap
+import android.net.Uri
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.util.Base64
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,11 +32,21 @@ import com.example.videoplayer.model.MediaStoreHelper
 import com.example.videoplayer.model.Playlist
 import com.example.videoplayer.model.PlaylistManager
 import com.example.videoplayer.model.VideoItem
+import com.example.videoplayer.service.HttpBroadcastFolder
+import com.example.videoplayer.service.HttpServerConfig
+import com.example.videoplayer.service.LocalHttpShareServer
+import com.example.videoplayer.service.WifiDirectManager
+import com.example.videoplayer.ui.theme.ThemeManager
+import com.example.videoplayer.ui.theme.ThemePresets
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.MultiFormatWriter
+import com.google.zxing.common.BitMatrix
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -228,6 +246,33 @@ fun ExactHtmlVideoLibraryView(
         )
     }
 
+    val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
+    DisposableEffect(backDispatcher, webViewRef) {
+        val callback = object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                val wv = webViewRef
+                if (wv != null) {
+                    wv.evaluateJavascript("window.nexoraBack ? window.nexoraBack() : false") { result ->
+                        val handled = result?.trim()?.removeSurrounding("\"")?.toBoolean() == true
+                        if (!handled) {
+                            isEnabled = false
+                            backDispatcher?.onBackPressed()
+                            isEnabled = true
+                        }
+                    }
+                } else {
+                    isEnabled = false
+                    backDispatcher?.onBackPressed()
+                    isEnabled = true
+                }
+            }
+        }
+        backDispatcher?.addCallback(callback)
+        onDispose {
+            callback.remove()
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -353,12 +398,202 @@ fun ExactHtmlVideoLibraryView(
                         fun onMoreItemClick(id: String) {
                             Handler(Looper.getMainLooper()).post {
                                 when (id) {
-                                    "settings" -> onOpenSettings()
                                     "terminal" -> onOpenTerminal()
                                     "url" -> onOpenCustomUrl()
                                     "vault" -> onOpenProtectedVault()
-                                    "share" -> onNavTab("more", 4)
+                                    "settings" -> { /* В v4 настройки открываются прямо в HTML */ }
+                                    "share" -> { /* В v4 раздача открывается прямо в HTML */ }
                                     else -> Toast.makeText(context, "Выбран пункт: $id", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun shareGetState(): String {
+                            return try {
+                                val isRunning = LocalHttpShareServer.isRunning
+                                val url = if (isRunning) (LocalHttpShareServer.getServerUrl(context) ?: "") else ""
+                                val port = LocalHttpShareServer.currentPort
+                                val err = LocalHttpShareServer.lastErrorMessage ?: ""
+                                val authReq = HttpServerConfig.isAuthRequired(context)
+                                val user = HttpServerConfig.getUsername(context)
+                                val pass = HttpServerConfig.getPassword(context)
+                                val folder = HttpServerConfig.getBroadcastFolder(context).id
+                                val wifiEnabled = WifiDirectManager.isEnabled
+                                val wifiSsid = WifiDirectManager.currentSsid
+                                val wifiPass = WifiDirectManager.currentPass
+                                val wifiQr = WifiDirectManager.getWifiQrPayload(wifiSsid, wifiPass)
+
+                                val json = JSONObject()
+                                json.put("running", isRunning)
+                                json.put("url", url)
+                                json.put("port", port)
+                                json.put("error", err)
+                                json.put("authRequired", authReq)
+                                json.put("username", user)
+                                json.put("password", pass)
+                                json.put("folder", folder)
+
+                                val wifiJson = JSONObject()
+                                wifiJson.put("enabled", wifiEnabled)
+                                wifiJson.put("ssid", wifiSsid)
+                                wifiJson.put("pass", wifiPass)
+                                wifiJson.put("qrPayload", wifiQr)
+                                wifiJson.put("status", if (wifiEnabled) "Точка активна: $wifiSsid" else "Прямое подключение по QR с паролем от Wi‑Fi Direct")
+                                json.put("wifi", wifiJson)
+
+                                json.toString()
+                            } catch (e: Exception) {
+                                "{}"
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun shareSetServer(on: Boolean) {
+                            Handler(Looper.getMainLooper()).post {
+                                coroutineScope.launch {
+                                    if (on) {
+                                        val port = HttpServerConfig.getPort(context)
+                                        val started = withContext(Dispatchers.IO) {
+                                            LocalHttpShareServer.start(context, port)
+                                        }
+                                        if (started) {
+                                            val serverUrl = LocalHttpShareServer.getServerUrl(context)
+                                            Toast.makeText(context, "Сервер запущен: $serverUrl", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            val err = LocalHttpShareServer.lastErrorMessage ?: "Не удалось занять порт"
+                                            Toast.makeText(context, "Ошибка запуска сервера: $err", Toast.LENGTH_LONG).show()
+                                        }
+                                    } else {
+                                        withContext(Dispatchers.IO) {
+                                            LocalHttpShareServer.stop()
+                                        }
+                                        Toast.makeText(context, "Сервер остановлен", Toast.LENGTH_SHORT).show()
+                                    }
+                                    webViewRef?.evaluateJavascript("if (window.onShareState) { window.onShareState(); }", null)
+                                }
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun shareSetConfig(key: String, value: String) {
+                            Handler(Looper.getMainLooper()).post {
+                                when (key) {
+                                    "auth_required" -> HttpServerConfig.setAuthRequired(context, value.toBoolean())
+                                    "username" -> HttpServerConfig.setUsername(context, value)
+                                    "password" -> HttpServerConfig.setPassword(context, value)
+                                    "folder" -> {
+                                        val folder = HttpBroadcastFolder.values().find { it.id == value } ?: HttpBroadcastFolder.ALL
+                                        HttpServerConfig.setBroadcastFolder(context, folder)
+                                    }
+                                }
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun shareWifi(on: Boolean) {
+                            Handler(Looper.getMainLooper()).post {
+                                if (on) {
+                                    WifiDirectManager.startHotspotOrDirect(
+                                        context = context,
+                                        onStatus = { /* status */ },
+                                        onComplete = {
+                                            webViewRef?.evaluateJavascript("if (window.onShareState) { window.onShareState(); }", null)
+                                        }
+                                    )
+                                } else {
+                                    WifiDirectManager.stop(context)
+                                    webViewRef?.evaluateJavascript("if (window.onShareState) { window.onShareState(); }", null)
+                                }
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun getQrDataUri(text: String, size: Int): String {
+                            return try {
+                                val qrSize = if (size <= 0) 512 else size
+                                val matrix: BitMatrix = MultiFormatWriter().encode(text, BarcodeFormat.QR_CODE, qrSize, qrSize)
+                                val pixels = IntArray(qrSize * qrSize)
+                                for (y in 0 until qrSize) {
+                                    val offset = y * qrSize
+                                    for (x in 0 until qrSize) {
+                                        pixels[offset + x] = if (matrix[x, y]) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
+                                    }
+                                }
+                                val bitmap = Bitmap.createBitmap(qrSize, qrSize, Bitmap.Config.ARGB_8888)
+                                bitmap.setPixels(pixels, 0, qrSize, 0, 0, qrSize, qrSize)
+                                val baos = ByteArrayOutputStream()
+                                bitmap.compress(Bitmap.CompressFormat.PNG, 100, baos)
+                                val b64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
+                                "data:image/png;base64,$b64"
+                            } catch (e: Exception) {
+                                ""
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun copyText(text: String) {
+                            Handler(Looper.getMainLooper()).post {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                val clip = ClipData.newPlainText("Nexora", text)
+                                clipboard?.setPrimaryClip(clip)
+                                Toast.makeText(context, "Скопировано в буфер", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun openExternal(url: String) {
+                            Handler(Looper.getMainLooper()).post {
+                                try {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Не удалось открыть браузер: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun getSettings(): String {
+                            return try {
+                                val prefs = context.getSharedPreferences("video_prefs", Context.MODE_PRIVATE)
+                                val hw = prefs.getBoolean("hw_accel", true)
+                                val bg = prefs.getBoolean("bg_play", false)
+                                val buff = prefs.getBoolean("show_buffering_status", true)
+                                val rot = prefs.getBoolean("auto_rotate", true)
+                                val design = ThemeManager.activeTheme.id
+
+                                val json = JSONObject()
+                                json.put("hw_accel", hw)
+                                json.put("bg_play", bg)
+                                json.put("show_buffering_status", buff)
+                                json.put("auto_rotate", rot)
+                                json.put("design", design)
+                                json.toString()
+                            } catch (e: Exception) {
+                                "{}"
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun setSetting(key: String, value: String) {
+                            Handler(Looper.getMainLooper()).post {
+                                if (key == "design") {
+                                    val preset = when (value) {
+                                        "nexora_orange_original" -> ThemePresets.NexoraOriginalOrange
+                                        "nexora_neon" -> ThemePresets.NexoraOriginalOrange
+                                        "nexora_neon_screenshot" -> ThemePresets.NexoraCyberScreenshot
+                                        "nexora_screenshot" -> ThemePresets.NexoraScreenshot
+                                        "cyberpunk" -> ThemePresets.Cyberpunk
+                                        "deep_oled" -> ThemePresets.DeepOled
+                                        else -> ThemePresets.NexoraOriginalOrange
+                                    }
+                                    ThemeManager.applyDefaultPreset(context, preset)
+                                } else {
+                                    val prefs = context.getSharedPreferences("video_prefs", Context.MODE_PRIVATE)
+                                    prefs.edit().putBoolean(key, value.toBoolean()).apply()
                                 }
                             }
                         }

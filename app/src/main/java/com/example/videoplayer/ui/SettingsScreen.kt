@@ -25,7 +25,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.videoplayer.ui.ai.AiDesignStudioDialog
 import com.example.videoplayer.ui.ai.UiTemplateFromScreenshotDialog
-import com.example.videoplayer.ui.terminal.TerminalConsoleOverlay
 import com.example.videoplayer.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -43,7 +42,6 @@ fun SettingsScreen(
     var autoRotate by remember { mutableStateOf(prefs.getBoolean("auto_rotate", true)) }
     var showAiStudio by remember { mutableStateOf(false) }
     var showScreenshotDialog by remember { mutableStateOf(false) }
-    var showTerminalConsole by remember { mutableStateOf(false) }
 
     BackHandler { onBack() }
 
@@ -317,21 +315,6 @@ fun SettingsScreen(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // Прямая кнопка вызова терминала UI прямо из настроек
-                        Button(
-                            onClick = { showTerminalConsole = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = theme.surface),
-                            border = BorderStroke(1.dp, theme.secondary),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(Icons.Default.Terminal, contentDescription = null, tint = theme.secondary, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(">_ Открыть консоль терминала UI", color = theme.secondary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
                         Button(
                             onClick = { showScreenshotDialog = true },
                             colors = ButtonDefaults.buttonColors(containerColor = theme.primary),
@@ -419,11 +402,6 @@ fun SettingsScreen(
             onDismiss = { showAiStudio = false }
         )
     }
-
-    TerminalConsoleOverlay(
-        isVisible = showTerminalConsole,
-        onClose = { showTerminalConsole = false }
-    )
 }
 
 @Composable

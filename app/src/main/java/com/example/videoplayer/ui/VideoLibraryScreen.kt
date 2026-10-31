@@ -10,6 +10,8 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -164,11 +166,17 @@ fun VideoLibraryScreen(
         }
     }
 
-    // Внутренняя консоль терминала
-    TerminalConsoleOverlay(
-        isVisible = showTerminalConsole,
-        onClose = { showTerminalConsole = false }
-    )
+    // Внутренняя консоль терминала с плавной анимацией
+    AnimatedVisibility(
+        visible = showTerminalConsole,
+        enter = slideInHorizontally { it / 8 } + fadeIn(animationSpec = tween(420, easing = CubicBezierEasing(0.2f, 0.9f, 0.3f, 1f))),
+        exit = slideOutHorizontally { it / 8 } + fadeOut(animationSpec = tween(260))
+    ) {
+        TerminalConsoleOverlay(
+            isVisible = true,
+            onClose = { showTerminalConsole = false }
+        )
+    }
 }
 
 private fun loadVideosInternal(
