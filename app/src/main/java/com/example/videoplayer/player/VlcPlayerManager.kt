@@ -8,6 +8,7 @@ import android.view.SurfaceView
 import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
+import com.example.videoplayer.ui.VideoScaleMode
 
 class VlcPlayerManager(private val context: Context) {
     private val options = arrayListOf(
@@ -21,6 +22,7 @@ class VlcPlayerManager(private val context: Context) {
     private var mediaPlayer: MediaPlayer? = null
     private var isReleased = false
     private var currentPfd: ParcelFileDescriptor? = null
+    private var currentScaleMode: VideoScaleMode = VideoScaleMode.FIT
 
     var onStatusChanged: ((String) -> Unit)? = null
     var onTimeChanged: ((Long, Long) -> Unit)? = null
@@ -32,7 +34,10 @@ class VlcPlayerManager(private val context: Context) {
         if (isReleased) return@EventListener
         when (event.type) {
             MediaPlayer.Event.Buffering -> onStatusChanged?.invoke("Buffering: ${event.buffering}%")
-            MediaPlayer.Event.Playing -> onStatusChanged?.invoke("Playing")
+            MediaPlayer.Event.Playing -> {
+                setVideoScale(currentScaleMode)
+                onStatusChanged?.invoke("Playing")
+            }
             MediaPlayer.Event.Paused -> onStatusChanged?.invoke("Paused")
             MediaPlayer.Event.Stopped -> onStatusChanged?.invoke("Stopped")
             MediaPlayer.Event.EndReached -> onStatusChanged?.invoke("EndReached")
@@ -92,6 +97,52 @@ class VlcPlayerManager(private val context: Context) {
         }
     }
 
+    fun setVideoScale(mode: VideoScaleMode) {
+        currentScaleMode = mode
+        if (isReleased) return
+        val mp = mediaPlayer ?: return
+        try {
+            when (mode) {
+                VideoScaleMode.FIT -> {
+                    try {
+                        mp.videoScale = MediaPlayer.ScaleType.SURFACE_BEST_FIT
+                    } catch (_: Throwable) {
+                        mp.setVideoScale(MediaPlayer.ScaleType.SURFACE_BEST_FIT)
+                    }
+                    try { mp.aspectRatio = null } catch (_: Throwable) {}
+                    try { mp.scale = 0f } catch (_: Throwable) {}
+                }
+                VideoScaleMode.FILL -> {
+                    try {
+                        mp.videoScale = MediaPlayer.ScaleType.SURFACE_FIT_SCREEN
+                    } catch (_: Throwable) {
+                        mp.setVideoScale(MediaPlayer.ScaleType.SURFACE_FIT_SCREEN)
+                    }
+                    try { mp.aspectRatio = null } catch (_: Throwable) {}
+                    try { mp.scale = 0f } catch (_: Throwable) {}
+                }
+                VideoScaleMode.SIXTEEN_NINE -> {
+                    try {
+                        mp.videoScale = MediaPlayer.ScaleType.SURFACE_16_9
+                    } catch (_: Throwable) {
+                        mp.setVideoScale(MediaPlayer.ScaleType.SURFACE_16_9)
+                    }
+                    try { mp.aspectRatio = "16:9" } catch (_: Throwable) {}
+                }
+                VideoScaleMode.FOUR_THREE -> {
+                    try {
+                        mp.videoScale = MediaPlayer.ScaleType.SURFACE_4_3
+                    } catch (_: Throwable) {
+                        mp.setVideoScale(MediaPlayer.ScaleType.SURFACE_4_3)
+                    }
+                    try { mp.aspectRatio = "4:3" } catch (_: Throwable) {}
+                }
+            }
+        } catch (e: Throwable) {
+            Log.w("VlcPlayerManager", "setVideoScale error", e)
+        }
+    }
+
     fun playUrl(urlOrUri: String) {
         if (isReleased) return
         val vlc = libVLC
@@ -137,6 +188,7 @@ class VlcPlayerManager(private val context: Context) {
             mp.media = media
             media.release()
             mp.play()
+            setVideoScale(currentScaleMode)
         } catch (e: Throwable) {
             Log.e("VlcPlayerManager", "playUrl error", e)
             onStatusChanged?.invoke("Error: ${e.message}")

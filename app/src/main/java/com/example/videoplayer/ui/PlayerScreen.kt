@@ -6,10 +6,12 @@ import android.app.Activity
 import android.app.PictureInPictureParams
 import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import android.provider.OpenableColumns
+import android.provider.Settings
 import android.util.Rational
 import android.view.SurfaceHolder
 import android.view.SurfaceView
@@ -18,6 +20,7 @@ import android.widget.Toast
 import android.widget.VideoView
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -26,6 +29,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -54,6 +58,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -63,9 +68,11 @@ import com.example.videoplayer.model.MediaStoreHelper
 import com.example.videoplayer.player.VlcPlayerManager
 import com.example.videoplayer.ui.theme.ThemeConfigManager
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.io.File
 import java.net.URLDecoder
 import java.util.Locale
+import kotlin.math.roundToInt
 
 enum class VideoScaleMode(val label: String) {
     FIT("По размеру экрана"),
@@ -168,6 +175,37 @@ fun PlayerScreen(
     var repeatMode by remember { mutableStateOf(VideoRepeatMode.OFF) }
     var infoFeedbackText by remember { mutableStateOf<String?>(null) }
 
+    val activity = context as? Activity
+    val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
+    val maxVolume = remember { audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1) }
+
+    val initialWindowBrightness = remember {
+        activity?.window?.attributes?.screenBrightness ?: -1f
+    }
+
+    val systemBrightness = remember {
+        try {
+            Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS) / 255f
+        } catch (_: Throwable) {
+            0.5f
+        }
+    }
+
+    var currentBrightness by remember {
+        val b = activity?.window?.attributes?.screenBrightness ?: -1f
+        mutableFloatStateOf(if (b in 0.01f..1.0f) b else systemBrightness.coerceIn(0.01f, 1.0f))
+    }
+
+    var currentVolumeFloat by remember {
+        val cur = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+        mutableFloatStateOf(cur.toFloat())
+    }
+
+    var showBrightnessGauge by remember { mutableStateOf(false) }
+    var showVolumeGauge by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+    var gaugeDismissJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+
     var nativeVideoView by remember { mutableStateOf<VideoView?>(null) }
 
     BackHandler {
@@ -175,13 +213,24 @@ fun PlayerScreen(
     }
 
     DisposableEffect(Unit) {
-        val window = (context as? Activity)?.window
+        val window = activity?.window
         window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         onDispose {
             window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            activity?.let { act ->
+                val lp = act.window.attributes
+                lp.screenBrightness = initialWindowBrightness
+                act.window.attributes = lp
+            }
             try {
                 playerManager.release()
             } catch (_: Throwable) {}
+        }
+    }
+
+    LaunchedEffect(scaleMode) {
+        if (!useNativeFallback) {
+            playerManager.setVideoScale(scaleMode)
         }
     }
 
@@ -227,16 +276,64 @@ fun PlayerScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF000104))
-            .pointerInput(Unit) {
-                detectDragGestures { change, _ ->
-                    change.consume()
-                }
+            .pointerInput(isControlsLocked) {
+                detectTapGestures(
+                    onTap = {
+                        showControls = !showControls
+                    }
+                )
             }
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null
-            ) {
-                showControls = !showControls
+            .pointerInput(isControlsLocked) {
+                if (isControlsLocked) return@pointerInput
+                var isLeftHalf = false
+                detectVerticalDragGestures(
+                    onDragStart = { offset ->
+                        isLeftHalf = offset.x < size.width / 2f
+                        gaugeDismissJob?.cancel()
+                        if (isLeftHalf) {
+                            showBrightnessGauge = true
+                            showVolumeGauge = false
+                        } else {
+                            showVolumeGauge = true
+                            showBrightnessGauge = false
+                        }
+                    },
+                    onDragEnd = {
+                        gaugeDismissJob = coroutineScope.launch {
+                            delay(900)
+                            showBrightnessGauge = false
+                            showVolumeGauge = false
+                        }
+                    },
+                    onDragCancel = {
+                        gaugeDismissJob = coroutineScope.launch {
+                            delay(900)
+                            showBrightnessGauge = false
+                            showVolumeGauge = false
+                        }
+                    },
+                    onVerticalDrag = { change, dragAmount ->
+                        change.consume()
+                        val totalHeight = size.height.toFloat()
+                        if (totalHeight > 0) {
+                            val deltaFraction = -dragAmount / (0.80f * totalHeight)
+                            if (isLeftHalf) {
+                                currentBrightness = (currentBrightness + deltaFraction).coerceIn(0.01f, 1.0f)
+                                activity?.let { act ->
+                                    val lp = act.window.attributes
+                                    lp.screenBrightness = currentBrightness
+                                    act.window.attributes = lp
+                                }
+                            } else {
+                                currentVolumeFloat = (currentVolumeFloat + deltaFraction * maxVolume).coerceIn(0f, maxVolume.toFloat())
+                                val targetVol = currentVolumeFloat.roundToInt().coerceIn(0, maxVolume)
+                                try {
+                                    audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVol, 0)
+                                } catch (_: Throwable) {}
+                            }
+                        }
+                    }
+                )
             }
     ) {
         val screenWidthDp = maxWidth
@@ -244,15 +341,7 @@ fun PlayerScreen(
 
         // 1. VIDEO VIEWPORT: Pure & uncorrupted
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(
-                    when (scaleMode) {
-                        VideoScaleMode.FOUR_THREE -> PaddingValues(horizontal = 36.dp)
-                        VideoScaleMode.SIXTEEN_NINE -> PaddingValues(vertical = 24.dp)
-                        else -> PaddingValues(0.dp)
-                    }
-                ),
+            modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
             if (!useNativeFallback) {
@@ -271,6 +360,7 @@ fun PlayerScreen(
 
                                 override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
                                     playerManager.updateWindowSize(width, height)
+                                    playerManager.setVideoScale(scaleMode)
                                 }
 
                                 override fun surfaceDestroyed(holder: SurfaceHolder) {
@@ -477,23 +567,28 @@ fun PlayerScreen(
                     }
                 }
 
-                // BOTTOM CONTROLS (Anchored to bottom, navigationBarsPadding)
-                Column(
+                // BOTTOM CONTROLS (Anchored to bottom, exact positions: buttons 57u / 26dp, seek 150u / 68dp, time 200u / 91dp)
+                val buttonRowH = (80f * uVal).dp.coerceAtLeast(48.dp)
+                val seekH = (44f * uVal).dp.coerceAtLeast(36.dp)
+                val timeRowH = (26f * uVal).dp.coerceAtLeast(20.dp)
+
+                Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(bottom = (87f * uVal).dp.coerceAtLeast(12.dp))
                 ) {
                     if (!isControlsLocked) {
-                        // Time Row
+                        // 1. Time Row: center at 200u from bottom (91 dp)
                         Row(
                             modifier = Modifier
+                                .align(Alignment.BottomCenter)
                                 .fillMaxWidth()
                                 .padding(
                                     start = (68f * uVal).dp.coerceAtLeast(16.dp),
-                                    end = (60f * uVal).dp.coerceAtLeast(16.dp)
-                                ),
+                                    end = (60f * uVal).dp.coerceAtLeast(16.dp),
+                                    bottom = ((200f * uVal).dp - (timeRowH / 2)).coerceAtLeast(0.dp)
+                                )
+                                .height(timeRowH),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -513,9 +608,7 @@ fun PlayerScreen(
                             )
                         }
 
-                        Spacer(modifier = Modifier.height((10f * uVal).dp.coerceAtLeast(4.dp)))
-
-                        // Seek Bar
+                        // 2. Seek Bar: center at 150u from bottom (68 dp)
                         val progressFraction = if (totalDurationMs > 0) {
                             (currentTimeMs.toFloat() / totalDurationMs.toFloat()).coerceIn(0f, 1f)
                         } else 0f
@@ -526,12 +619,14 @@ fun PlayerScreen(
 
                         Box(
                             modifier = Modifier
+                                .align(Alignment.BottomCenter)
                                 .fillMaxWidth()
                                 .padding(
                                     start = (68f * uVal).dp.coerceAtLeast(16.dp),
-                                    end = (60f * uVal).dp.coerceAtLeast(16.dp)
+                                    end = (60f * uVal).dp.coerceAtLeast(16.dp),
+                                    bottom = ((150f * uVal).dp - (seekH / 2)).coerceAtLeast(0.dp)
                                 )
-                                .height((44f * uVal).dp.coerceAtLeast(36.dp))
+                                .height(seekH)
                                 .pointerInput(totalDurationMs) {
                                     detectTapGestures { offset ->
                                         if (totalDurationMs > 0 && size.width > 0) {
@@ -592,13 +687,15 @@ fun PlayerScreen(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height((24f * uVal).dp.coerceAtLeast(8.dp)))
-
-                        // Bottom Row of buttons
+                        // 3. Bottom Row of buttons: center at 57u from bottom (26 dp)
                         Box(
                             modifier = Modifier
+                                .align(Alignment.BottomCenter)
                                 .fillMaxWidth()
-                                .height((80f * uVal).dp.coerceAtLeast(48.dp))
+                                .padding(
+                                    bottom = ((57f * uVal).dp - (buttonRowH / 2)).coerceAtLeast(0.dp)
+                                )
+                                .height(buttonRowH)
                         ) {
                             // 1. Subtitles (b-sub, left 93u, w=52, h=46)
                             Box(
@@ -687,26 +784,20 @@ fun PlayerScreen(
                                 NextIconCanvas(uVal)
                             }
 
-                            // 6. PiP (b-fit, right 216u, w=56, h=46)
+                            // 6. Video Scale (b-fit, right 216u, w=56, h=46)
                             Box(
                                 modifier = Modifier
                                     .align(Alignment.CenterEnd)
                                     .offset(x = -(((216f * uVal).dp - 24.dp).coerceAtLeast(0.dp)))
                                     .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                                     .clickable(onClick = {
-                                        val activity = context as? Activity
-                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activity != null) {
-                                            try {
-                                                val params = PictureInPictureParams.Builder()
-                                                    .setAspectRatio(Rational(16, 9))
-                                                    .build()
-                                                activity.enterPictureInPictureMode(params)
-                                            } catch (e: Exception) {
-                                                Toast.makeText(context, "PiP режим: ${e.message}", Toast.LENGTH_SHORT).show()
-                                            }
-                                        } else {
-                                            Toast.makeText(context, "Режим PiP поддерживается на Android 8.0+", Toast.LENGTH_SHORT).show()
+                                        scaleMode = when (scaleMode) {
+                                            VideoScaleMode.FIT -> VideoScaleMode.FILL
+                                            VideoScaleMode.FILL -> VideoScaleMode.SIXTEEN_NINE
+                                            VideoScaleMode.SIXTEEN_NINE -> VideoScaleMode.FOUR_THREE
+                                            VideoScaleMode.FOUR_THREE -> VideoScaleMode.FIT
                                         }
+                                        infoFeedbackText = "Масштаб: ${scaleMode.label}"
                                     }),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -729,8 +820,9 @@ fun PlayerScreen(
                         // Locked screen unlock indicator
                         Row(
                             modifier = Modifier
+                                .align(Alignment.BottomCenter)
                                 .fillMaxWidth()
-                                .padding(horizontal = 24.dp),
+                                .padding(start = 24.dp, end = 24.dp, bottom = 26.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -855,34 +947,63 @@ fun PlayerScreen(
                         }
                     }
 
-                    // Aspect ratio selector
+                    // Picture-in-picture option
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                showMoreBottomSheet = false
+                                val activity = context as? Activity
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activity != null) {
+                                    try {
+                                        val params = PictureInPictureParams.Builder()
+                                            .setAspectRatio(Rational(16, 9))
+                                            .build()
+                                        activity.enterPictureInPictureMode(params)
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "PiP режим: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    }
+                                } else {
+                                    Toast.makeText(context, "Режим PiP поддерживается на Android 8.0+", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                            .padding(vertical = 6.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Масштаб: ${scaleMode.label}", color = Color.LightGray, fontSize = 14.sp)
-                        Button(
-                            onClick = {
-                                scaleMode = when (scaleMode) {
-                                    VideoScaleMode.FIT -> VideoScaleMode.FILL
-                                    VideoScaleMode.FILL -> VideoScaleMode.SIXTEEN_NINE
-                                    VideoScaleMode.SIXTEEN_NINE -> VideoScaleMode.FOUR_THREE
-                                    VideoScaleMode.FOUR_THREE -> VideoScaleMode.FIT
-                                }
-                                infoFeedbackText = "Масштаб: ${scaleMode.label}"
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF141923)),
-                            border = BorderStroke(1.dp, Color(0xFF00D8FF))
-                        ) {
-                            Text(scaleMode.name, color = Color(0xFF00D8FF), fontSize = 11.sp)
-                        }
+                        Text("Картинка в картинке", color = Color.LightGray, fontSize = 14.sp)
+                        Icon(Icons.Default.PictureInPictureAlt, contentDescription = null, tint = Color(0xFF00D8FF))
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
                 }
             }
         }
+
+        // Brightness and Volume Gauges (player_screen_v4.html)
+        BrightnessGauge(
+            uVal = uVal,
+            brightness = currentBrightness,
+            visible = showBrightnessGauge,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .offset(
+                    x = (121f * uVal).dp,
+                    y = (maxHeight * 0.46f) - (228f * uVal).dp
+                )
+        )
+
+        VolumeGauge(
+            uVal = uVal,
+            volumeFraction = (currentVolumeFloat / maxVolume.toFloat()).coerceIn(0f, 1f),
+            visible = showVolumeGauge,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(
+                    x = -((121f * uVal).dp),
+                    y = (maxHeight * 0.46f) - (228f * uVal).dp
+                )
+        )
     }
 }
 
@@ -1278,5 +1399,220 @@ private fun formatTime(ms: Long): String {
         String.format(Locale.getDefault(), "%d:%02d:%02d", hour, min, sec)
     } else {
         String.format(Locale.getDefault(), "%d:%02d", min, sec)
+    }
+}
+
+/* =========================================================================
+   BRIGHTNESS & VOLUME GAUGES (player_screen_v4.html)
+   ========================================================================= */
+
+@Composable
+private fun BrightnessGauge(
+    uVal: Float,
+    brightness: Float,
+    visible: Boolean,
+    modifier: Modifier = Modifier
+) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(tween(150)),
+        exit = fadeOut(tween(300)),
+        modifier = modifier
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.width((120f * uVal).dp)
+        ) {
+            val pct = (brightness.coerceIn(0f, 1f) * 100f).roundToInt()
+            Text(
+                text = "$pct%",
+                color = Color.White,
+                fontSize = (30f * uVal).sp,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = FontFamily.Monospace,
+                maxLines = 1
+            )
+
+            Spacer(modifier = Modifier.height((44f * uVal).dp))
+
+            Box(
+                modifier = Modifier.size((19f * uVal).dp, (270f * uVal).dp),
+                contentAlignment = Alignment.Center
+            ) {
+                VerticalBarCanvas(uVal = uVal, fraction = brightness)
+
+                Text(
+                    text = "Яркость",
+                    color = Color(0xFFC4CBDB),
+                    fontSize = (28f * uVal).sp,
+                    softWrap = false,
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .offset(x = (44f * uVal).dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height((56f * uVal).dp))
+
+            SunIconCanvas(uVal)
+        }
+    }
+}
+
+@Composable
+private fun VolumeGauge(
+    uVal: Float,
+    volumeFraction: Float,
+    visible: Boolean,
+    modifier: Modifier = Modifier
+) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(tween(150)),
+        exit = fadeOut(tween(300)),
+        modifier = modifier
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.width((120f * uVal).dp)
+        ) {
+            val pct = (volumeFraction.coerceIn(0f, 1f) * 100f).roundToInt()
+            Text(
+                text = "$pct%",
+                color = Color.White,
+                fontSize = (30f * uVal).sp,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = FontFamily.Monospace,
+                maxLines = 1
+            )
+
+            Spacer(modifier = Modifier.height((44f * uVal).dp))
+
+            Box(
+                modifier = Modifier.size((19f * uVal).dp, (270f * uVal).dp),
+                contentAlignment = Alignment.Center
+            ) {
+                VerticalBarCanvas(uVal = uVal, fraction = volumeFraction)
+
+                Text(
+                    text = "Громкость",
+                    color = Color(0xFFC4CBDB),
+                    fontSize = (28f * uVal).sp,
+                    softWrap = false,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .offset(x = -((44f * uVal).dp))
+                )
+            }
+
+            Spacer(modifier = Modifier.height((56f * uVal).dp))
+
+            SpeakerIconCanvas(uVal)
+        }
+    }
+}
+
+@Composable
+private fun VerticalBarCanvas(uVal: Float, fraction: Float) {
+    Canvas(modifier = Modifier.size((19f * uVal).dp, (270f * uVal).dp)) {
+        val r = (10f * uVal).dp.toPx()
+        val barPath = androidx.compose.ui.graphics.Path().apply {
+            addRoundRect(
+                androidx.compose.ui.geometry.RoundRect(
+                    left = 0f,
+                    top = 0f,
+                    right = size.width,
+                    bottom = size.height,
+                    cornerRadius = CornerRadius(r, r)
+                )
+            )
+        }
+        drawPath(barPath, color = Color(0x2EFFFFFF))
+
+        val fillH = size.height * fraction.coerceIn(0f, 1f)
+        if (fillH > 0f) {
+            clipPath(barPath) {
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        0.0f to Color(0xFFA63EF6),
+                        0.45f to Color(0xFF606DF7),
+                        1.0f to Color(0xFF00BAF1)
+                    ),
+                    topLeft = Offset(0f, size.height - fillH),
+                    size = Size(size.width, fillH)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SunIconCanvas(uVal: Float) {
+    Canvas(modifier = Modifier.size((56f * uVal).dp, (56f * uVal).dp)) {
+        val s = size.width / 24f
+        val gCyan = Brush.linearGradient(
+            colors = listOf(Color(0xFF00DCFF), Color(0xFF3D8BFF)),
+            start = Offset.Zero,
+            end = Offset(size.width, size.height)
+        )
+        val stroke = Stroke(
+            width = (2f * s).coerceAtLeast(1.5f),
+            cap = StrokeCap.Round,
+            join = StrokeJoin.Round
+        )
+        drawCircle(
+            brush = gCyan,
+            radius = 4.2f * s,
+            center = Offset(12f * s, 12f * s),
+            style = stroke
+        )
+        val sw = (2f * s).coerceAtLeast(1.5f)
+        drawLine(brush = gCyan, start = Offset(12f * s, 2.5f * s), end = Offset(12f * s, 4.8f * s), strokeWidth = sw, cap = StrokeCap.Round)
+        drawLine(brush = gCyan, start = Offset(12f * s, 19.2f * s), end = Offset(12f * s, 21.5f * s), strokeWidth = sw, cap = StrokeCap.Round)
+        drawLine(brush = gCyan, start = Offset(2.5f * s, 12f * s), end = Offset(4.8f * s, 12f * s), strokeWidth = sw, cap = StrokeCap.Round)
+        drawLine(brush = gCyan, start = Offset(19.2f * s, 12f * s), end = Offset(21.5f * s, 12f * s), strokeWidth = sw, cap = StrokeCap.Round)
+        drawLine(brush = gCyan, start = Offset(5.3f * s, 5.3f * s), end = Offset(6.9f * s, 6.9f * s), strokeWidth = sw, cap = StrokeCap.Round)
+        drawLine(brush = gCyan, start = Offset(17.1f * s, 17.1f * s), end = Offset(18.7f * s, 18.7f * s), strokeWidth = sw, cap = StrokeCap.Round)
+        drawLine(brush = gCyan, start = Offset(18.7f * s, 5.3f * s), end = Offset(17.1f * s, 6.9f * s), strokeWidth = sw, cap = StrokeCap.Round)
+        drawLine(brush = gCyan, start = Offset(6.9f * s, 17.1f * s), end = Offset(5.3f * s, 18.7f * s), strokeWidth = sw, cap = StrokeCap.Round)
+    }
+}
+
+@Composable
+private fun SpeakerIconCanvas(uVal: Float) {
+    Canvas(modifier = Modifier.size((56f * uVal).dp, (56f * uVal).dp)) {
+        val s = size.width / 24f
+        val gPurple = Brush.linearGradient(
+            colors = listOf(Color(0xFF6A8BFF), Color(0xFFB05CFF)),
+            start = Offset.Zero,
+            end = Offset(size.width, size.height)
+        )
+        val stroke = Stroke(
+            width = (2f * s).coerceAtLeast(1.5f),
+            cap = StrokeCap.Round,
+            join = StrokeJoin.Round
+        )
+        val hornPath = androidx.compose.ui.graphics.Path().apply {
+            moveTo(4f * s, 9.5f * s)
+            lineTo(7.5f * s, 9.5f * s)
+            lineTo(12f * s, 5.5f * s)
+            lineTo(12f * s, 18.5f * s)
+            lineTo(7.5f * s, 14.5f * s)
+            lineTo(4f * s, 14.5f * s)
+            close()
+        }
+        drawPath(hornPath, brush = gPurple, style = stroke)
+
+        val wave1 = androidx.compose.ui.graphics.Path().apply {
+            moveTo(15.5f * s, 9f * s)
+            cubicTo(17.5f * s, 10.2f * s, 17.5f * s, 13.8f * s, 15.5f * s, 15f * s)
+        }
+        drawPath(wave1, brush = gPurple, style = stroke)
+
+        val wave2 = androidx.compose.ui.graphics.Path().apply {
+            moveTo(18f * s, 6.5f * s)
+            cubicTo(21.2f * s, 8.5f * s, 21.2f * s, 15.5f * s, 18f * s, 17.5f * s)
+        }
+        drawPath(wave2, brush = gPurple, style = stroke)
     }
 }
