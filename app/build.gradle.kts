@@ -3,7 +3,6 @@ import java.util.Base64
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
-    id("com.google.android.libraries.mapsplatform.secrets-gradle-plugin")
 }
 
 android {
@@ -17,6 +16,7 @@ android {
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "GEMINI_API_KEY", "\"\"")
     }
 
     signingConfigs {
@@ -78,10 +78,6 @@ android {
     }
 }
 
-secrets {
-    propertiesFileName = ".env"
-    defaultPropertiesFileName = ".env.example"
-}
 
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2024.09.00"))
