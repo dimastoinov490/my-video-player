@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#080604">
+<title>Nexora Media — Главная</title>
+<style>
+/* ===========================================================================
+   NEXORA MEDIA — ГЛАВНАЯ СТРАНИЦА ВЕБ-СЕРВЕРА (рабочая версия макета Nexora_Media_Homepage).
+   Макет фиксированный 864x411 (1 единица = 1 пиксель макета) и масштабируется целиком под экран.
+   На телефоне в вертикальном положении макет поворачивается на 90°, как в исходной картинке
+   (отключить: добавить к адресу ?rotate=0).
+   Данные приходят от сервера через window.NEXORA (маркер NEXORA_DATA перед основным скриптом),
+   без них показываются демо-данные.
+   Нижняя панель: стеклянная «плашка» плавно переезжает между вкладками, разделы плавно сменяют друг друга.
+   =========================================================================== */
+:root{--o1:#ffb020;--o2:#ff8a00;--o3:#ff6a00;--green:#2fe05d;--muted:#d6cfc7;--gray:#9b9792}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:#080604;overflow:hidden;color:#fff;font-family:"Roboto","Inter","Segoe UI",system-ui,-apple-system,sans-serif}
+svg{display:block}.ico{width:1em;height:1em;flex:none}
+button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:0}
+a{color:inherit;text-decoration:none}
+.canvas{position:absolute;left:0;top:0;width:864px;height:411px;transform-origin:0 0}
+.frame{position:absolute;inset:4px;border-radius:18px;border:1.4px solid rgba(255,138,0,.85);overflow:hidden;display:flex;flex-direction:column;
+  box-shadow:0 0 0 1px rgba(255,138,0,.14),0 0 14px rgba(255,110,0,.30),inset 0 0 24px rgba(255,110,0,.10);
+  background:
+   radial-gradient(58% 52% at 6% 100%,rgba(255,110,0,.40),transparent 62%),
+   radial-gradient(40% 40% at 100% 100%,rgba(255,130,0,.18),transparent 65%),
+   radial-gradient(70% 40% at 50% 0%,rgba(255,138,0,.06),transparent 70%),
+   linear-gradient(180deg,#0c0704,#070402)}
+.waves{position:absolute;left:-10px;bottom:56px;width:300px;height:210px;pointer-events:none;opacity:.95}
+
+/* ---------- шапка ---------- */
+.top{position:relative;z-index:3;height:58px;flex:none;display:flex;align-items:center;padding:0 16px 0 17px}
+.top:after{content:"";position:absolute;left:0;right:0;bottom:0;height:1px;background:linear-gradient(90deg,rgba(255,138,0,.55),rgba(255,138,0,.16) 60%,rgba(255,138,0,.05))}
+.menu{width:42px;height:36px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,138,0,.28);display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:inset 0 0 8px rgba(255,138,0,.08)}
+.menu i{display:block;width:19px;height:2.4px;border-radius:2px;background:var(--o2)}.menu i+i{margin-top:4.4px}
+.brand{display:flex;align-items:center;gap:11px;margin-left:27px;font-size:21px;font-weight:700;letter-spacing:.1px}
+.brand svg{width:30px;height:32px;filter:drop-shadow(0 0 5px rgba(255,138,0,.55))}
+.brand .a{color:var(--o2)}.brand .b{color:#fff}
+.status{margin-left:auto;position:relative}
+.status button{display:flex;align-items:center;gap:9px;color:var(--green);font-size:13.5px;font-weight:500}
+.status .wifi{width:27px;height:27px;filter:drop-shadow(0 0 4px rgba(47,224,93,.5))}
+.status .chev{width:14px;height:14px;color:#fff;margin-left:4px}
+.status.off button{color:#ff6b4a}
+.pop{position:absolute;right:0;top:calc(100% + 6px);min-width:190px;padding:10px 12px;border-radius:12px;background:#150b05;border:1px solid rgba(255,138,0,.4);box-shadow:0 10px 24px rgba(0,0,0,.6);font-size:11.5px;color:#e9ddd0;display:none;z-index:30}
+.pop.show{display:block}.pop b{display:block;color:var(--o1);margin-bottom:3px;font-size:12px}
+
+/* ---------- разделы ---------- */
+.stage{position:relative;flex:1;min-height:0;z-index:2}
+.pane{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;opacity:0;pointer-events:none;transform:translateX(var(--tx,0px));
+  transition:opacity .38s ease,transform .55s cubic-bezier(.22,1,.36,1)}
+.pane.on{opacity:1;pointer-events:auto;transform:none}
+.pane::-webkit-scrollbar{width:6px}.pane::-webkit-scrollbar-thumb{background:rgba(255,138,0,.35);border-radius:4px}
+
+/* главная */
+.home{display:grid;grid-template-columns:206px 1fr;gap:18px;padding:3px 28px 22px 22px;height:100%}
+.hubwrap{display:flex;align-items:center;justify-content:center;min-height:0}
+.hub{position:relative;width:206px;height:206px;border-radius:50%;border:1px solid rgba(255,138,0,.55);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+  background:radial-gradient(circle at 50% 38%,rgba(255,138,0,.20),rgba(255,138,0,.04) 62%,transparent 72%);box-shadow:inset 0 0 34px rgba(255,120,0,.10),0 0 26px rgba(255,100,0,.14)}
+.hub:before{content:"";position:absolute;inset:-9px;border-radius:50%;border:1px solid rgba(255,138,0,.16)}
+.hub svg{width:68px;height:72px;margin-top:-14px;filter:drop-shadow(0 0 10px rgba(255,120,0,.55))}
+.hub h2{font-size:21px;font-weight:700;margin-top:10px}.hub h2 .a{color:#fff}.hub h2 .b{color:var(--o2)}
+.hub p{font-size:13px;color:var(--muted);margin-top:6px}
+.rcol{display:flex;flex-direction:column;min-width:0;min-height:0}
+.stats{display:flex;gap:15px;height:103px;flex:none}
+.stat{position:relative;flex:1 1 0;min-width:0;border-radius:16px;padding:16px 0 0 22px;overflow:hidden;
+  background:linear-gradient(150deg,rgba(255,255,255,.085),rgba(255,255,255,.022) 62%);border:1px solid rgba(255,255,255,.13);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.10),0 8px 20px rgba(0,0,0,.40)}
+.stat:before{content:"";position:absolute;left:-14px;top:30%;width:22px;height:46%;background:radial-gradient(closest-side,rgba(255,138,0,.30),transparent);pointer-events:none}
+.stat.wide{flex:1.22 1 0}
+.stat .ico{font-size:27px;color:var(--o2)}
+.stat b{position:relative;display:block;font-size:20px;font-weight:700;line-height:1;margin-top:9px;white-space:nowrap}
+.stat b:before{content:"";position:absolute;left:-9px;top:50%;width:30px;height:24px;margin-top:-12px;border-radius:50%;background:radial-gradient(closest-side,rgba(255,138,0,.34),transparent);z-index:-1}
+.stat span{display:block;font-size:12.5px;color:var(--muted);margin-top:8px}
+.sec{display:flex;align-items:center;justify-content:space-between;margin:13px 0 9px;flex:none}
+.sec h3{font-size:16px;font-weight:700;color:var(--o2)}
+.sec button{display:flex;align-items:center;gap:7px;color:var(--o2);font-size:16px;font-weight:600}
+.sec .ico{font-size:17px}
+.recent{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;flex:1;min-height:0}
+.rc{position:relative;border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,.11);background:linear-gradient(135deg,#3a1c08,#120804);padding:0;min-height:0;
+  transition:transform .25s cubic-bezier(.22,1,.36,1),border-color .25s,box-shadow .25s}
+.rc:hover{transform:translateY(-2px);border-color:rgba(255,138,0,.7);box-shadow:0 6px 16px rgba(255,110,0,.25)}
+.rc img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.rc:after{content:"";position:absolute;left:0;right:0;bottom:0;height:46%;background:linear-gradient(0deg,rgba(0,0,0,.82),transparent)}
+.rc span{position:absolute;z-index:2;left:11px;right:11px;bottom:8px;font-size:13.5px;font-weight:700;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rc .ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(255,138,0,.55);font-size:34px}
+.nodata{grid-column:1/-1;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px;border:1px dashed rgba(255,138,0,.3);border-radius:12px}
+
+/* списки, поиск */
+.page{padding:6px 28px 20px}
+.head{display:flex;align-items:center;gap:14px;margin:6px 0 12px}
+.head h2{display:flex;align-items:center;gap:9px;font-size:18px;font-weight:700}.head h2 .ico{font-size:23px;color:var(--o2)}
+.search{display:flex;align-items:center;gap:8px;height:34px;width:250px;margin-left:auto;border-radius:12px;border:1.2px solid rgba(255,138,0,.4);background:rgba(255,255,255,.04);padding:0 11px}
+.search .ico{font-size:16px;color:var(--o2)}
+.search input{flex:1;min-width:0;background:none;border:0;outline:none;color:#fff;font-size:13px;font-family:inherit}
+.search:focus-within{border-color:var(--o1)}
+.list{display:flex;flex-direction:column;gap:8px}
+.row{display:flex;align-items:center;gap:13px;padding:7px 11px 7px 7px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
+  transition:border-color .2s,background .2s}
+.row:hover{border-color:rgba(255,138,0,.5);background:rgba(255,138,0,.05)}
+.thumb{position:relative;width:86px;height:49px;border-radius:9px;overflow:hidden;flex:none;background:linear-gradient(135deg,#3a1c08,#120804);display:flex;align-items:center;justify-content:center;color:rgba(255,138,0,.75);font-size:22px}
+.thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.meta{flex:1;min-width:0}
+.meta b{display:block;font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meta small{display:flex;gap:12px;margin-top:4px;font-size:11px;color:#b9aa9a}
+.meta small span{display:flex;align-items:center;gap:4px}.meta small .ico{font-size:12px}
+.act{display:flex;gap:7px;flex:none}
+.btn-w{display:flex;align-items:center;gap:7px;height:31px;padding:0 15px;border-radius:16px;border:1.2px solid var(--o2);background:rgba(255,138,0,.08);color:var(--o1);font-size:12.5px;font-weight:600}
+.btn-w .ico{font-size:14px}
+.btn-d{width:31px;height:31px;border-radius:10px;border:1.2px solid var(--o2);background:rgba(255,138,0,.08);color:var(--o1);display:flex;align-items:center;justify-content:center;font-size:16px}
+.btn-w:hover,.btn-d:hover{background:rgba(255,138,0,.22)}
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:46px 12px;color:var(--muted);font-size:13px;text-align:center}
+.empty .disc{width:54px;height:54px;border-radius:50%;background:rgba(255,138,0,.12);border:1px solid rgba(255,138,0,.4);display:flex;align-items:center;justify-content:center;color:var(--o2);font-size:26px}
+.photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}
+.photos .rc{aspect-ratio:1}
+
+/* настройки */
+.set{display:grid;grid-template-columns:170px 1fr;gap:22px;align-items:start}
+.sub{display:flex;flex-direction:column;gap:6px}
+.sm{display:flex;align-items:center;gap:10px;height:38px;padding:0 14px;border-radius:13px;font-size:13px;color:#e9ddd0;text-align:left;transition:background .25s}
+.sm .ico{font-size:18px}.sm:hover{background:rgba(255,255,255,.05)}
+.sm.on{background:linear-gradient(180deg,var(--o1),var(--o3));color:#1b0d02;font-weight:700;box-shadow:0 5px 14px rgba(255,120,0,.30)}
+.set-main{max-width:520px}
+.set-head{display:flex;align-items:center;gap:14px;margin-bottom:14px}
+.set-head svg{width:48px;height:51px;filter:drop-shadow(0 0 8px rgba(255,120,0,.5))}
+.set-head h2{font-size:21px;font-weight:700}.set-head h2 .a{color:#fff}.set-head h2 .b{color:var(--o2)}
+.set-head p{font-size:12px;color:#b9aa9a;margin-top:2px}
+.card{border-radius:16px;border:1px solid rgba(255,255,255,.11);background:linear-gradient(150deg,rgba(255,255,255,.07),rgba(255,255,255,.02));padding:4px 16px}
+.kv{display:flex;align-items:center;gap:11px;padding:10px 0;font-size:13px}
+.kv+.kv{border-top:1px solid rgba(255,255,255,.06)}
+.kv .ico{font-size:19px;color:#aab4c4}.kv .v{margin-left:auto;text-align:right;color:#e9ddd0;min-width:0;word-break:break-all}
+.kv .v.ok{color:var(--green);font-weight:600}
+.kv .v.ok:before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:6px;box-shadow:0 0 6px var(--green)}
+.copy{color:var(--o2);font-size:16px;display:flex}
+.thanks{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:14px;padding:11px;border-radius:15px;border:1.2px solid var(--o2);background:rgba(255,138,0,.06);color:var(--o1);font-size:12.5px;font-weight:600}
+.thanks .ico{font-size:17px}
+.logout{display:none;margin-top:12px;width:max-content;align-items:center;gap:7px;height:31px;padding:0 16px;border-radius:16px;border:1.2px solid rgba(255,255,255,.22);color:#e9ddd0;font-size:12.5px}
+.set.s-server .blk-head,.set.s-server .blk-thanks,.set.s-app .blk-card{display:none}.set.s-app .blk-head{display:flex}
+
+/* ---------- нижняя панель со скользящим стеклом ---------- */
+.nav{position:relative;z-index:3;height:66px;flex:none;display:flex;align-items:center;padding:0 22px;
+  border-top:1px solid rgba(255,138,0,.42);background:linear-gradient(180deg,rgba(255,255,255,.028),rgba(0,0,0,.30))}
+.glass{position:absolute;top:5px;left:0;height:55px;width:120px;border-radius:19px;z-index:1;pointer-events:none;
+  border:1.2px solid rgba(255,150,30,.65);
+  background:linear-gradient(180deg,rgba(255,170,60,.17),rgba(255,120,0,.05) 70%),rgba(20,10,4,.35);
+  -webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);
+  box-shadow:0 0 16px rgba(255,120,0,.42),inset 0 0 14px rgba(255,138,0,.14),inset 0 1px 0 rgba(255,225,170,.30);
+  transition:transform .6s cubic-bezier(.34,1.32,.5,1),width .6s cubic-bezier(.34,1.32,.5,1)}
+.glass:after{content:"";position:absolute;left:12%;right:12%;top:1px;height:42%;border-radius:18px 18px 40% 40%;background:linear-gradient(180deg,rgba(255,235,200,.16),transparent)}
+.glass.snap{transition:none}
+.tab{position:relative;z-index:2;flex:1;height:55px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--gray);transition:color .4s}
+.tab .disc{width:31px;height:31px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:23px;transition:background .5s,box-shadow .5s,transform .5s cubic-bezier(.34,1.5,.5,1)}
+.tab span{font-size:12px;color:#d0cac3;transition:color .4s}
+.tab:hover .disc{transform:translateY(-1px)}
+.tab.on{color:var(--o2)}.tab.on span{color:var(--o1);font-weight:700}
+.tab.on .disc{background:radial-gradient(circle,rgba(255,138,0,.34),rgba(255,138,0,.20));box-shadow:0 0 12px rgba(255,120,0,.35);transform:translateY(-1px)}
+
+/* ---------- боковое меню ---------- */
+.scrim{position:absolute;inset:0;z-index:40;background:rgba(0,0,0,.6);opacity:0;pointer-events:none;transition:opacity .3s}.scrim.show{opacity:1;pointer-events:auto}
+.drawer{position:absolute;left:0;top:0;bottom:0;width:230px;z-index:41;transform:translateX(-102%);transition:transform .45s cubic-bezier(.22,1,.36,1);background:linear-gradient(180deg,#120905,#080403);border-right:1px solid rgba(255,138,0,.4);padding:16px 12px}
+.drawer.show{transform:none}
+.drawer .brand{margin:0 6px 14px}
+.dm{display:flex;align-items:center;gap:11px;width:100%;height:40px;padding:0 14px;border-radius:13px;font-size:13.5px;color:#e9ddd0;text-align:left;margin-bottom:5px}
+.dm .ico{font-size:19px}.dm:hover{background:rgba(255,255,255,.05)}
+.dm.on{background:linear-gradient(180deg,var(--o1),var(--o3));color:#1b0d02;font-weight:700}
+
+/* ---------- плеер и подсказка ---------- */
+.modal{position:absolute;inset:0;z-index:60;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center;padding:14px}.modal.show{display:flex}
+.pbox{width:100%;max-width:640px;border-radius:16px;overflow:hidden;border:1.2px solid var(--o2);background:#0a0503;box-shadow:0 0 40px rgba(255,110,0,.28)}
+.pbox video,.pbox audio{display:block;width:100%;max-height:260px;background:#000;outline:none}.pbox audio{padding:16px 12px}
+.pbar{display:flex;align-items:center;gap:10px;padding:8px 12px;border-top:1px solid rgba(255,138,0,.25)}
+.pbar b{flex:1;min-width:0;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.toast{position:absolute;left:50%;bottom:78px;transform:translateX(-50%);z-index:70;padding:7px 14px;border-radius:12px;background:#1a0d05;border:1px solid var(--o2);color:var(--o1);font-size:12px;opacity:0;pointer-events:none;transition:opacity .25s}.toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div class="canvas" id="canvas">
+<div class="frame" id="frame">
+
+<svg class="waves" viewBox="0 0 300 210" aria-hidden="true">
+  <defs>
+    <linearGradient id="wf" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a00" stop-opacity=".75"/><stop offset=".6" stop-color="#ff9a1a" stop-opacity=".25"/><stop offset="1" stop-color="#ffb020" stop-opacity="0"/></linearGradient>
+    <linearGradient id="wl" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ffb020" stop-opacity=".95"/><stop offset="1" stop-color="#ff8a00" stop-opacity="0"/></linearGradient>
+  </defs>
+  <path d="M0 210V120C40 150 70 170 120 175S210 185 300 210z" fill="url(#wf)"/>
+  <path d="M0 140C50 168 90 182 150 185S250 190 300 210" fill="none" stroke="url(#wl)" stroke-width="1.6"/>
+  <path d="M0 105C46 140 86 160 140 170S230 182 300 200" fill="none" stroke="url(#wl)" stroke-width="1" opacity=".7"/>
+  <path d="M0 175C60 185 120 192 200 198" fill="none" stroke="url(#wl)" stroke-width="2"/>
+</svg>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffc233"/><stop offset=".55" stop-color="#ff8a00"/><stop offset="1" stop-color="#ff5a00"/></linearGradient>
+  <symbol id="logo" viewBox="0 0 120 120"><path d="M30 16 L102 60 L30 104 Z" fill="url(#lg)" stroke="url(#lg)" stroke-width="14" stroke-linejoin="round"/><path d="M42 40 L74 60 L42 80 Z" fill="#150a04" stroke="#150a04" stroke-width="8" stroke-linejoin="round"/></symbol>
+  <symbol id="logo-o" viewBox="0 0 30 32"><path d="M7 5 L25 16 L7 27 Z" fill="rgba(255,138,0,.12)" stroke="url(#lg)" stroke-width="3.6" stroke-linejoin="round"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M6.5 4.6v14.8L19.200 12z" fill="none" stroke="currentColor" stroke-width="2.600" stroke-linejoin="round"/></symbol>
+  <symbol id="i-play-s" viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+  <symbol id="i-music" viewBox="0 0 24 24"><path fill="currentColor" d="M19.500 2.500v12.300a3.200 3.200 0 1 1-2.100-3V7.100L10 8.600v8.200a3.200 3.200 0 1 1-2.100-3V5.100z"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="2.800" y="3.300" width="18.400" height="17.400" rx="3" fill="none" stroke="currentColor" stroke-width="2.200"/><circle cx="8.400" cy="9.200" r="1.800" fill="currentColor"/><path d="M3.600 18.400l5.200-5.600 3.800 3.800 2.600-2.600 5.200 5.100v.700H3.600z" fill="currentColor"/></symbol>
+  <symbol id="i-db" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2.500c4.400 0 8 1.300 8 3.100s-3.600 3.100-8 3.100-8-1.300-8-3.100 3.600-3.100 8-3.100zM4 8.100c1.700 1.300 4.600 2 8 2s6.300-.7 8-2v3.500c0 1.800-3.600 3.100-8 3.100s-8-1.300-8-3.100zM4 15c1.700 1.300 4.600 2 8 2s6.300-.7 8-2v3.400c0 1.800-3.600 3.100-8 3.100s-8-1.300-8-3.100z"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3.600 11.300L12 4l8.400 7.300V20a1 1 0 0 1-1 1H15v-6.200H9V21H4.600a1 1 0 0 1-1-1z" fill="none" stroke="currentColor" stroke-width="2.200" stroke-linejoin="round"/></symbol>
+  <symbol id="i-clap" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M3 10.200h18V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zm3 3v1.600h5v-1.600zm0 3.200V18h8.500v-1.600zM3.300 5.700l15.700-2.900.8 3.700L4.200 9.400zM8 4.500l-2 .4 1.200 2.900 2-.4zm5.200-1l-2 .4 1.200 2.900 2-.4z"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4.200l2 2.200H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="currentColor"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><path fill="currentColor" d="M19.140 12.940c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.030-1.580a.49.49 0 0 0 .12-.61l-1.920-3.320a.488.488 0 0 0-.59-.22l-2.390.96c-.5-.38-1.030-.7-1.620-.94l-.36-2.540a.484.484 0 0 0-.48-.41h-3.840c-.24 0-.43.17-.47.41l-.36 2.540c-.59.24-1.130.57-1.620.94l-2.390-.96c-.22-.08-.47 0-.59.22L2.740 8.870c-.12.21-.08.47.12.61l2.030 1.580c-.05.3-.09.63-.09.94s.02.64.07.94l-2.030 1.580a.49.49 0 0 0-.12.61l1.920 3.320c.12.22.37.29.59.22l2.390-.96c.5.38 1.030.7 1.620.94l.36 2.540c.05.24.24.41.48.41h3.840c.24 0 .44-.17.47-.41l.36-2.540c.59-.24 1.130-.56 1.620-.94l2.390.96c.22.08.47 0 .59-.22l1.920-3.320c.12-.22.07-.47-.12-.61l-2.010-1.580zM12 15.600c-1.980 0-3.600-1.620-3.600-3.600s1.620-3.600 3.600-3.600 3.600 1.620 3.600 3.600-1.620 3.600-3.600 3.600z"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><circle cx="12" cy="7.600" r=".6" fill="currentColor"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3.300l2.700 5.600 6.100.8-4.500 4.300 1.100 6.100L12 17.100 6.600 20.100l1.100-6.100L3.200 9.700l6.100-.8z"/></symbol>
+  <symbol id="i-wifi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.400" stroke-linecap="round"><path d="M2.500 9a15 15 0 0 1 19 0"/><path d="M5.500 12.500a10.500 10.500 0 0 1 13 0"/><path d="M8.700 16a6 6 0 0 1 6.600 0"/><circle cx="12" cy="19.400" r="1.400" fill="currentColor"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.800" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 14a4 4 0 0 0 5.700 0l3-3a4 4 0 0 0-5.700-5.700l-1 1"/><path d="M14 10a4 4 0 0 0-5.700 0l-3 3A4 4 0 0 0 11 18.700l1-1"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4.500" y="10.500" width="15" height="10.500" rx="2.500"/><path d="M8 10.500V7.500a4 4 0 0 1 8 0v3"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.800" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.400" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-dl" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.200" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.200" stroke-linecap="round"><circle cx="11" cy="11" r="6.500"/><path d="M16 16l4.500 4.500"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 20.500S3.500 15.200 3.500 9.300A4.500 4.500 0 0 1 12 7.200a4.500 4.500 0 0 1 8.500 2.100C20.500 15.200 12 20.500 12 20.500z"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2.500"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8.500"/><path d="M12 7.500V12l3 2"/></symbol>
+  <symbol id="i-save" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 4v5h7V4M8 20v-6h8v6"/></symbol>
+  <symbol id="i-out" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.200" stroke-linecap="round" stroke-linejoin="round"><path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4M20 12H9M16 8l4 4-4 4"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.400" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+</defs></svg>
+
+<header class="top">
+  <button class="menu" id="menuBtn" aria-label="Меню"><i></i><i></i><i></i></button>
+  <div class="brand"><svg><use href="#logo-o" xlink:href="#logo-o"/></svg><span><span class="a">Nexora</span> <span class="b">Media</span></span></div>
+  <div class="status" id="status">
+    <button id="statusBtn" aria-label="Состояние сервера"><svg class="wifi"><use href="#i-wifi" xlink:href="#i-wifi"/></svg><span id="statusTxt">Сервер онлайн</span><svg class="chev"><use href="#i-chev" xlink:href="#i-chev"/></svg></button>
+    <div class="pop" id="pop"><b>Адрес сервера</b><span id="popAddr"></span></div>
+  </div>
+</header>
+
+<div class="stage" id="stage">
+  <!-- ГЛАВНАЯ -->
+  <section class="pane on" id="v-home">
+    <div class="home">
+      <div class="hubwrap"><div class="hub"><svg><use href="#logo" xlink:href="#logo"/></svg><h2><span class="a">Nexora</span> <span class="b">Media</span></h2><p>Твой медиа-сервер</p></div></div>
+      <div class="rcol">
+        <div class="stats">
+          <div class="stat"><svg class="ico"><use href="#i-play" xlink:href="#i-play"/></svg><b id="stV">0</b><span>Видео</span></div>
+          <div class="stat"><svg class="ico"><use href="#i-music" xlink:href="#i-music"/></svg><b id="stA">0</b><span>Аудио</span></div>
+          <div class="stat"><svg class="ico"><use href="#i-image" xlink:href="#i-image"/></svg><b id="stP">0</b><span>Фото</span></div>
+          <div class="stat wide"><svg class="ico"><use href="#i-db" xlink:href="#i-db"/></svg><b id="stM">0 MB</b><span>Память</span></div>
+        </div>
+        <div class="sec"><h3>Последние видео</h3><button data-go="videos">Все <svg class="ico"><use href="#i-arrow" xlink:href="#i-arrow"/></svg></button></div>
+        <div class="recent" id="recent"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ВИДЕО -->
+  <section class="pane" id="v-videos"><div class="page">
+    <div class="head"><h2><svg class="ico"><use href="#i-clap" xlink:href="#i-clap"/></svg>Видео</h2><label class="search"><svg class="ico"><use href="#i-search" xlink:href="#i-search"/></svg><input id="qV" type="search" placeholder="Поиск видео"></label></div>
+    <div class="list" id="lV"></div>
+  </div></section>
+
+  <!-- АУДИО -->
+  <section class="pane" id="v-audio"><div class="page">
+    <div class="head"><h2><svg class="ico"><use href="#i-music" xlink:href="#i-music"/></svg>Аудио</h2><label class="search"><svg class="ico"><use href="#i-search" xlink:href="#i-search"/></svg><input id="qA" type="search" placeholder="Поиск музыки"></label></div>
+    <div class="list" id="lA"></div>
+  </div></section>
+
+  <!-- ФОТО -->
+  <section class="pane" id="v-photos"><div class="page">
+    <div class="head"><h2><svg class="ico"><use href="#i-image" xlink:href="#i-image"/></svg>Фото</h2></div>
+    <div id="lP"></div>
+  </div></section>
+
+  <!-- ПАПКИ -->
+  <section class="pane" id="v-folders"><div class="page">
+    <div class="head"><h2><svg class="ico"><use href="#i-folder" xlink:href="#i-folder"/></svg>Папки</h2></div>
+    <div class="list" id="lF"></div>
+  </div></section>
+
+  <!-- НАСТРОЙКИ -->
+  <section class="pane" id="v-settings"><div class="page">
+    <div class="set" id="setBox">
+      <div class="sub">
+        <button class="sm on" data-sub="settings"><svg class="ico"><use href="#i-gear" xlink:href="#i-gear"/></svg>Настройки</button>
+        <button class="sm" data-sub="server"><svg class="ico"><use href="#i-info" xlink:href="#i-info"/></svg>О сервере</button>
+        <button class="sm" data-sub="app"><svg class="ico"><use href="#i-star" xlink:href="#i-star"/></svg>О приложении</button>
+      </div>
+      <div class="set-main">
+        <div class="set-head blk-head"><svg><use href="#logo" xlink:href="#logo"/></svg><div><h2><span class="a">Nexora</span> <span class="b">Media</span></h2><p>Версия <span id="ver">1.0</span></p></div></div>
+        <div class="card blk-card">
+          <div class="kv"><svg class="ico"><use href="#i-globe" xlink:href="#i-globe"/></svg><span>Wi-Fi сервер</span><span class="v ok" id="kvState">Активен</span></div>
+          <div class="kv"><svg class="ico"><use href="#i-link" xlink:href="#i-link"/></svg><span>Адрес сервера</span><span class="v" id="kvAddr">-</span><button class="copy" id="copyBtn" aria-label="Копировать адрес"><svg class="ico"><use href="#i-copy" xlink:href="#i-copy"/></svg></button></div>
+          <div class="kv"><svg class="ico"><use href="#i-db" xlink:href="#i-db"/></svg><span>Память</span><span class="v" id="kvMem">-</span></div>
+          <div class="kv"><svg class="ico"><use href="#i-folder" xlink:href="#i-folder"/></svg><span>Видео</span><span class="v" id="kvVid">-</span></div>
+          <div class="kv"><svg class="ico"><use href="#i-music" xlink:href="#i-music"/></svg><span>Аудио</span><span class="v" id="kvAud">-</span></div>
+          <div class="kv"><svg class="ico"><use href="#i-save" xlink:href="#i-save"/></svg><span>Вещание</span><span class="v" id="kvFolder">-</span></div>
+          <div class="kv"><svg class="ico"><use href="#i-lock" xlink:href="#i-lock"/></svg><span>Защита паролем</span><span class="v" id="kvAuth">-</span></div>
+        </div>
+        <div class="thanks blk-thanks"><svg class="ico"><use href="#i-heart" xlink:href="#i-heart"/></svg>Спасибо, что используете Nexora Media!</div>
+        <a class="logout" id="logout" href="/logout"><svg class="ico"><use href="#i-out" xlink:href="#i-out"/></svg>Выйти</a>
+      </div>
+    </div>
+  </div></section>
+</div>
+
+<nav class="nav" id="nav"><div class="glass snap" id="glass"></div></nav>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer">
+  <div class="brand"><svg><use href="#logo-o" xlink:href="#logo-o"/></svg><span><span class="a">Nexora</span> <span class="b">Media</span></span></div>
+  <button class="dm on" data-go="settings" data-sub="settings"><svg class="ico"><use href="#i-gear" xlink:href="#i-gear"/></svg>Настройки</button>
+  <button class="dm" data-go="settings" data-sub="server"><svg class="ico"><use href="#i-info" xlink:href="#i-info"/></svg>О сервере</button>
+  <button class="dm" data-go="settings" data-sub="app"><svg class="ico"><use href="#i-star" xlink:href="#i-star"/></svg>О приложении</button>
+</aside>
+
+<div class="modal" id="modal">
+  <div class="pbox">
+    <video id="pv" controls playsinline preload="metadata" style="display:none"></video>
+    <audio id="pa" controls style="display:none"></audio>
+    <div class="pbar"><b id="pt"></b><a class="btn-d" id="pd" href="#" download aria-label="Скачать"><svg class="ico"><use href="#i-dl" xlink:href="#i-dl"/></svg></a><button class="btn-d" id="pc" aria-label="Закрыть"><svg class="ico"><use href="#i-x" xlink:href="#i-x"/></svg></button></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+</div>
+</div>
+
+<!--NEXORA_DATA-->
+<script>
+/* Сервер заменяет HTML-комментарий-маркер NEXORA_DATA (строка выше) на тег script с присваиванием window.NEXORA = {...}.
+   Формат: {version, address, port, online, authRequired, folder, features:{photos,folders},
+            stats:{videos,audio,photos,storage}, files:[{id,title,name,size,dur,isVideo,mime,kind,folder}]}
+   kind:'photo' помечает фото, folder — имя папки (по желанию). */
+var DEMO={version:'1.0',address:'http://192.168.1.64:8765',port:8765,online:true,authRequired:true,folder:'Все папки',features:{photos:false,folders:false},
+ files:[
+  {id:'1',title:'Furious 6',name:'Furious6.mp4',size:'552.4 MB',dur:'2:10:06',isVideo:true},
+  {id:'2',title:'Седьмой_сын',name:'Seventh.mp4',size:'346.1 MB',dur:'1:41:59',isVideo:true},
+  {id:'3',title:'Rogue One',name:'RogueOne.mp4',size:'612.0 MB',dur:'2:13:10',isVideo:true},
+  {id:'4',title:'Fast Five (2011)',name:'FastFive.mp4',size:'562.3 MB',dur:'2:11:35',isVideo:true},
+  {id:'5',title:'John Wick / Chapter 4',name:'JohnWick.mp4',size:'451.7 MB',dur:'1:46:57',isVideo:true},
+  {id:'6',title:'Night Drive',name:'NightDrive.mp3',size:'8.4 MB',dur:'3:41',isVideo:false}]};
+var D=window.NEXORA||DEMO; D.features=D.features||{};
+var files=D.files||[];
+var videos=files.filter(function(f){return f.isVideo;});
+var photos=files.filter(function(f){return f.kind==='photo';});
+var audios=files.filter(function(f){return !f.isVideo && f.kind!=='photo';});
+function $(id){return document.getElementById(id);}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function ic(n){return '<svg class="ico"><use href="#i-'+n+'" xlink:href="#i-'+n+'"/></svg>';}
+function totalMem(){
+  if(D.stats&&D.stats.storage) return D.stats.storage;
+  var mb=0; files.forEach(function(f){var n=parseFloat(f.size); if(!isNaN(n)) mb+= /GB/i.test(f.size)? n*1024 : n;});
+  return mb>=1024? (mb/1024).toFixed(1)+' GB' : mb.toFixed(1)+' MB';
+}
+function toast(t){var el=$('toast'); el.textContent=t; el.className='toast show'; clearTimeout(toast.t); toast.t=setTimeout(function(){el.className='toast';},1800);}
+
+/* ---------- данные ---------- */
+$('stV').textContent=(D.stats&&D.stats.videos!=null)?D.stats.videos:videos.length;
+$('stA').textContent=(D.stats&&D.stats.audio!=null)?D.stats.audio:audios.length;
+$('stP').textContent=(D.stats&&D.stats.photos!=null)?D.stats.photos:photos.length;
+$('stM').textContent=totalMem();
+$('ver').textContent=D.version||'1.0';
+$('popAddr').textContent=D.address||''; $('kvAddr').textContent=D.address||'-';
+$('kvMem').textContent=totalMem(); $('kvVid').textContent=videos.length+' файлов'; $('kvAud').textContent=audios.length+' файлов';
+$('kvFolder').textContent=D.folder||'Все папки'; $('kvAuth').textContent=D.authRequired?'Включена':'Выключена';
+$('kvState').textContent=D.online===false?'Остановлен':'Активен';
+if(D.online===false){$('kvState').className='v';$('status').className='status off';$('statusTxt').textContent='Сервер офлайн';}
+if(D.authRequired) $('logout').style.display='flex';
+
+function thumbHtml(f){
+  return f.isVideo ? '<img loading="lazy" alt="" src="/thumb?id='+encodeURIComponent(f.id)+'" onerror="this.remove()">'+ic('play-s') : ic('music');
+}
+function rowHtml(f){
+  var dur=f.dur?'<span>'+ic('clock')+esc(f.dur)+'</span>':'';
+  return '<div class="row"><div class="thumb">'+thumbHtml(f)+'</div><div class="meta"><b title="'+esc(f.name)+'">'+esc(f.title)+'</b>'+
+    '<small><span>'+ic('save')+esc(f.size)+'</span>'+dur+'</small></div><div class="act">'+
+    '<button class="btn-w" data-play="'+esc(f.id)+'">'+ic('play-s')+'<span>'+(f.isVideo?'Смотреть':'Слушать')+'</span></button>'+
+    '<a class="btn-d" href="/download?id='+encodeURIComponent(f.id)+'" download="'+esc(f.name)+'" aria-label="Скачать">'+ic('dl')+'</a></div></div>';
+}
+function emptyHtml(icon,text){return '<div class="empty"><div class="disc">'+ic(icon)+'</div>'+esc(text)+'</div>';}
+function renderList(listEl,data,q,emptyIcon,emptyText){
+  q=(q||'').toLowerCase().trim();
+  var r=data.filter(function(f){return !q||String(f.title).toLowerCase().indexOf(q)>-1||String(f.name).toLowerCase().indexOf(q)>-1;});
+  listEl.innerHTML=r.length? r.map(rowHtml).join('') : emptyHtml(emptyIcon,q?'Ничего не найдено':emptyText);
+}
+renderList($('lV'),videos,'','clap','Видео пока нет'); renderList($('lA'),audios,'','music','Аудио пока нет');
+$('qV').addEventListener('input',function(){renderList($('lV'),videos,this.value,'clap','Видео пока нет');});
+$('qA').addEventListener('input',function(){renderList($('lA'),audios,this.value,'music','Аудио пока нет');});
+$('recent').innerHTML=videos.slice(0,3).map(function(f){
+  return '<button class="rc" data-play="'+esc(f.id)+'"><img loading="lazy" alt="" src="/thumb?id='+encodeURIComponent(f.id)+'" onerror="this.remove()"><div class="ph">'+ic('play-s')+'</div><span>'+esc(f.title)+'</span></button>';
+}).join('') || '<div class="nodata">Видео пока нет</div>';
+$('lP').innerHTML=photos.length? '<div class="photos">'+photos.map(function(f){return '<div class="rc"><img loading="lazy" alt="" src="/stream?id='+encodeURIComponent(f.id)+'"></div>';}).join('')+'</div>' : emptyHtml('image','Фото пока нет');
+(function(){
+  var groups={}, any=false; files.forEach(function(f){ if(f.folder){any=true; (groups[f.folder]=groups[f.folder]||[]).push(f);} });
+  $('lF').innerHTML=any? Object.keys(groups).map(function(k){return '<div class="row"><div class="thumb">'+ic('folder')+'</div><div class="meta"><b>'+esc(k)+'</b><small><span>'+groups[k].length+' файлов</span></small></div></div>';}).join('') : emptyHtml('folder','Папок пока нет');
+})();
+
+/* ---------- плеер ---------- */
+function openPlayer(id){
+  var f=files.filter(function(x){return String(x.id)===String(id);})[0]; if(!f) return;
+  var v=$('pv'), a=$('pa'), url='/stream?id='+encodeURIComponent(f.id);
+  $('pt').textContent=f.title; $('pd').href='/download?id='+encodeURIComponent(f.id); $('pd').setAttribute('download',f.name);
+  v.pause(); a.pause(); v.style.display='none'; a.style.display='none';
+  var el=f.isVideo?v:a; el.style.display='block'; el.src=url; el.load();
+  var p=el.play(); if(p&&p.catch) p.catch(function(){});
+  $('modal').className='modal show';
+}
+function closePlayer(){var v=$('pv'),a=$('pa'); v.pause(); a.pause(); v.removeAttribute('src'); a.removeAttribute('src'); v.load(); a.load(); $('modal').className='modal';}
+$('pc').addEventListener('click',closePlayer);
+$('modal').addEventListener('click',function(e){if(e.target===this) closePlayer();});
+document.addEventListener('click',function(e){
+  var p=e.target.closest&&e.target.closest('[data-play]'); if(p){openPlayer(p.getAttribute('data-play')); return;}
+  var g=e.target.closest&&e.target.closest('[data-go]'); if(g){go(g.getAttribute('data-go')); closeDrawer();}
+  var s=e.target.closest&&e.target.closest('[data-sub]'); if(s){setSub(s.getAttribute('data-sub'));}
+});
+
+/* ---------- навигация: стеклянная плашка плавно переезжает между вкладками ---------- */
+var TABS=[['home','Главная','home'],['videos','Видео','clap'],['audio','Аудио','music'],['photos','Фото','image'],['folders','Папки','folder'],['settings','Настройки','gear']];
+var nav=$('nav'), glass=$('glass'), cur=0;
+TABS.forEach(function(t,i){
+  var b=document.createElement('button'); b.className='tab'; b.setAttribute('data-go',t[0]); b.setAttribute('data-i',i);
+  b.innerHTML='<div class="disc">'+ic(t[2])+'</div><span>'+t[1]+'</span>'; nav.appendChild(b);
+});
+function tabs(){return nav.querySelectorAll('.tab');}
+function moveGlass(i,instant){
+  var b=tabs()[i]; if(!b) return;
+  var x=b.offsetLeft+6, w=b.offsetWidth-12;
+  if(instant) glass.classList.add('snap');
+  glass.style.width=w+'px'; glass.style.transform='translateX('+x+'px)';
+  if(instant){ void glass.offsetWidth; glass.classList.remove('snap'); }
+}
+function go(name){
+  var i=-1; TABS.forEach(function(t,k){ if(t[0]===name) i=k; }); if(i<0){ i=0; name='home'; }
+  cur=i;
+  Array.prototype.forEach.call(tabs(),function(b,k){ b.classList.toggle('on',k===i); });
+  TABS.forEach(function(t,k){
+    var p=$('v-'+t[0]); p.style.setProperty('--tx', k<i?'-34px':(k>i?'34px':'0px'));
+    p.classList.toggle('on',k===i); if(k===i) p.scrollTop=0;
+  });
+  moveGlass(i,false);
+  if(location.hash!=='#'+name) history.replaceState(null,'','#'+name);
+}
+window.addEventListener('hashchange',function(){go(location.hash.slice(1)||'home');});
+
+/* ---------- меню, статус, подразделы, копирование ---------- */
+function closeDrawer(){$('drawer').classList.remove('show'); $('scrim').classList.remove('show');}
+$('menuBtn').addEventListener('click',function(){$('drawer').classList.add('show'); $('scrim').classList.add('show');});
+$('scrim').addEventListener('click',closeDrawer);
+$('statusBtn').addEventListener('click',function(e){e.stopPropagation(); $('pop').classList.toggle('show');});
+document.addEventListener('click',function(){$('pop').classList.remove('show');});
+function setSub(name){
+  $('setBox').className='set'+(name==='server'?' s-server':name==='app'?' s-app':'');
+  Array.prototype.forEach.call(document.querySelectorAll('.sm,.dm'),function(b){b.classList.toggle('on',b.getAttribute('data-sub')===name);});
+}
+$('copyBtn').addEventListener('click',function(){
+  var t=D.address||'';
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(function(){toast('Адрес скопирован');},function(){toast(t);});}
+  else{var ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy'); toast('Адрес скопирован');}catch(_){toast(t);} document.body.removeChild(ta);}
+});
+
+/* ---------- масштаб макета под экран (на телефоне вертикально: поворот на 90°) ---------- */
+var BW=864, BH=411, noRot=/[?&]rotate=0/.test(location.search);
+function fit(){
+  var cv=$('canvas'), w=window.innerWidth, h=window.innerHeight;
+  var rot=(!noRot && h>w*1.05);
+  var W=rot?h:w, H=rot?w:h;
+  var s=Math.min(W/BW, H/BH);
+  cv.style.width=(W/s)+'px'; cv.style.height=(H/s)+'px';
+  var t=rot? 'translateX('+w+'px) rotate(90deg) scale('+s+')' : 'scale('+s+')';
+  cv.style.transform=t; cv.style.webkitTransform=t;
+  moveGlass(cur,true);
+}
+window.addEventListener('resize',fit); window.addEventListener('orientationchange',function(){setTimeout(fit,120);});
+fit();
+go(location.hash.slice(1)||'home'); moveGlass(cur,true);
+</script>
+</body>
+</html>

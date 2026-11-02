@@ -31,6 +31,7 @@ object HttpServerConfig {
 
     fun setAuthRequired(context: Context, required: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_AUTH_REQUIRED, required).apply()
+        LocalHttpShareServer.clearSessions()
     }
 
     fun getUsername(context: Context): String {
@@ -39,6 +40,7 @@ object HttpServerConfig {
 
     fun setUsername(context: Context, username: String) {
         getPrefs(context).edit().putString(KEY_USERNAME, username.trim()).apply()
+        LocalHttpShareServer.clearSessions()
     }
 
     fun getPassword(context: Context): String {
@@ -47,6 +49,7 @@ object HttpServerConfig {
 
     fun setPassword(context: Context, password: String) {
         getPrefs(context).edit().putString(KEY_PASSWORD, password.trim()).apply()
+        LocalHttpShareServer.clearSessions()
     }
 
     fun getBroadcastFolder(context: Context): HttpBroadcastFolder {

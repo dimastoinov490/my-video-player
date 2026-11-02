@@ -3,16 +3,22 @@ package com.example.videoplayer.service
 import android.content.ContentUris
 import android.content.Context
 import android.database.Cursor
+import android.graphics.Bitmap
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.net.wifi.WifiManager
+import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.text.format.Formatter
 import android.util.Base64
 import android.util.Log
+import android.util.Size
 import java.io.*
 import java.net.*
 import java.util.Collections
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 
 data class HttpMediaFile(
@@ -30,6 +36,12 @@ data class HttpMediaFile(
 object LocalHttpShareServer {
     private const val TAG = "LocalHttpShareServer"
     const val DEFAULT_PORT = 8765
+
+    private val activeSessions = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
+
+    fun clearSessions() {
+        activeSessions.clear()
+    }
 
     private var serverSocket: ServerSocket? = null
     var isRunning: Boolean = false
@@ -91,6 +103,7 @@ object LocalHttpShareServer {
     @Synchronized
     fun stop() {
         isRunning = false
+        clearSessions()
         try {
             serverSocket?.close()
         } catch (e: Exception) {
@@ -148,6 +161,7 @@ object LocalHttpShareServer {
             // Read headers
             var authHeader: String? = null
             var rangeHeader: String? = null
+            var cookieHeader: String? = null
             var line: String? = input.readLine()
             while (!line.isNullOrBlank()) {
                 val lower = line.lowercase()
@@ -155,53 +169,179 @@ object LocalHttpShareServer {
                     authHeader = line.substringAfter(":").trim()
                 } else if (lower.startsWith("range:")) {
                     rangeHeader = line.substringAfter(":").trim()
+                } else if (lower.startsWith("cookie:")) {
+                    cookieHeader = line.substringAfter(":").trim()
                 }
                 line = input.readLine()
             }
 
-            // Check Basic Authentication if enabled
-            if (HttpServerConfig.isAuthRequired(context)) {
-                if (!checkBasicAuth(authHeader, context)) {
-                    send401Unauthorized(output)
-                    return
-                }
-            }
-
             if (method.equals("GET", ignoreCase = true) || method.equals("HEAD", ignoreCase = true)) {
                 val isHead = method.equals("HEAD", ignoreCase = true)
+                val authRequired = HttpServerConfig.isAuthRequired(context)
+                val authorized = !authRequired || isAuthorized(cookieHeader, authHeader, context)
+
                 when {
+                    decodedPath == "/api/login" -> {
+                        val isValid = !authRequired || checkBasicAuth(authHeader, context)
+                        if (isValid) {
+                            val sessionToken = UUID.randomUUID().toString().replace("-", "")
+                            activeSessions.add(sessionToken)
+                            val json = "{\"ok\":true}".toByteArray(Charsets.UTF_8)
+                            val headers = "HTTP/1.1 200 OK\r\n" +
+                                    "Content-Type: application/json; charset=UTF-8\r\n" +
+                                    "Set-Cookie: nx_session=$sessionToken; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400\r\n" +
+                                    "Content-Length: ${json.size}\r\n" +
+                                    "Connection: close\r\n\r\n"
+                            output.write(headers.toByteArray(Charsets.UTF_8))
+                            if (!isHead) output.write(json)
+                            output.flush()
+                        } else {
+                            val json = "{\"ok\":false}".toByteArray(Charsets.UTF_8)
+                            val headers = "HTTP/1.1 401 Unauthorized\r\n" +
+                                    "Content-Type: application/json; charset=UTF-8\r\n" +
+                                    "Content-Length: ${json.size}\r\n" +
+                                    "Connection: close\r\n\r\n"
+                            output.write(headers.toByteArray(Charsets.UTF_8))
+                            if (!isHead) output.write(json)
+                            output.flush()
+                        }
+                    }
+                    decodedPath == "/logout" -> {
+                        val token = extractCookie(cookieHeader, "nx_session")
+                        if (!token.isNullOrEmpty()) {
+                            activeSessions.remove(token)
+                        }
+                        val headers = "HTTP/1.1 302 Found\r\n" +
+                                "Location: /\r\n" +
+                                "Set-Cookie: nx_session=; Path=/; Max-Age=0\r\n" +
+                                "Content-Length: 0\r\n" +
+                                "Connection: close\r\n\r\n"
+                        output.write(headers.toByteArray(Charsets.UTF_8))
+                        output.flush()
+                    }
+                    decodedPath == "/login" -> {
+                        if (!authRequired || authorized) {
+                            sendRedirect(output, "/")
+                        } else {
+                            sendHtmlLogin(output, context, isHead)
+                        }
+                    }
                     decodedPath == "/" || decodedPath == "/index.html" -> {
-                        val mediaList = loadMediaList(context)
-                        sendHtmlIndex(output, mediaList, context, isHead)
+                        if (authRequired && !authorized) {
+                            sendHtmlLogin(output, context, isHead)
+                        } else {
+                            val mediaList = loadMediaList(context)
+                            sendHtmlIndex(output, mediaList, context, isHead)
+                        }
                     }
                     decodedPath == "/stream" || decodedPath.startsWith("/stream/") -> {
-                        val idParam = extractQueryParam(queryString, "id")
-                            ?: decodedPath.removePrefix("/stream/").removePrefix("/")
-                        serveMediaContent(output, idParam, rangeHeader, context, asDownload = false, isHead = isHead)
+                        if (authRequired && !authorized) {
+                            send401WithAuth(output)
+                        } else {
+                            val idParam = extractQueryParam(queryString, "id")
+                                ?: decodedPath.removePrefix("/stream/").removePrefix("/")
+                            serveMediaContent(output, idParam, rangeHeader, context, asDownload = false, isHead = isHead)
+                        }
                     }
                     decodedPath == "/download" || decodedPath.startsWith("/download/") -> {
-                        val idParam = extractQueryParam(queryString, "id")
-                            ?: decodedPath.removePrefix("/download/").removePrefix("/")
-                        serveMediaContent(output, idParam, rangeHeader, context, asDownload = true, isHead = isHead)
+                        if (authRequired && !authorized) {
+                            send401WithAuth(output)
+                        } else {
+                            val idParam = extractQueryParam(queryString, "id")
+                                ?: decodedPath.removePrefix("/download/").removePrefix("/")
+                            serveMediaContent(output, idParam, rangeHeader, context, asDownload = true, isHead = isHead)
+                        }
+                    }
+                    decodedPath == "/thumb" || decodedPath.startsWith("/thumb/") -> {
+                        if (authRequired && !authorized) {
+                            send401WithoutAuth(output)
+                        } else {
+                            val idParam = extractQueryParam(queryString, "id")
+                                ?: decodedPath.removePrefix("/thumb/").removePrefix("/")
+                            serveThumbnail(output, idParam, context, isHead)
+                        }
                     }
                     decodedPath == "/api/status" -> {
-                        val json = "{\"status\":\"running\",\"port\":$currentPort,\"auth\":${HttpServerConfig.isAuthRequired(context)}}"
-                        sendResponse(output, 200, "application/json", json.toByteArray(Charsets.UTF_8))
+                        if (authRequired && !authorized) {
+                            send401WithoutAuth(output)
+                        } else {
+                            val json = "{\"status\":\"running\",\"port\":$currentPort,\"auth\":$authRequired}"
+                            sendResponse(output, 200, "application/json; charset=UTF-8", json.toByteArray(Charsets.UTF_8))
+                        }
+                    }
+                    decodedPath.startsWith("/api/") -> {
+                        if (authRequired && !authorized) {
+                            send401WithoutAuth(output)
+                        } else {
+                            sendResponse(output, 404, "application/json; charset=UTF-8", "{\"error\":\"not_found\"}".toByteArray(Charsets.UTF_8))
+                        }
                     }
                     else -> {
                         val notFound = "404 Not Found"
-                        sendResponse(output, 404, "text/plain", notFound.toByteArray(Charsets.UTF_8))
+                        sendResponse(output, 404, "text/plain; charset=UTF-8", notFound.toByteArray(Charsets.UTF_8))
                     }
                 }
             } else {
                 val methodNotAllowed = "405 Method Not Allowed"
-                sendResponse(output, 405, "text/plain", methodNotAllowed.toByteArray(Charsets.UTF_8))
+                sendResponse(output, 405, "text/plain; charset=UTF-8", methodNotAllowed.toByteArray(Charsets.UTF_8))
             }
         } catch (e: Exception) {
             Log.w(TAG, "Error handling client connection: ${e.message}")
         } finally {
             try { client.close() } catch (_: Exception) {}
         }
+    }
+
+    private fun isAuthorized(cookieHeader: String?, authHeader: String?, context: Context): Boolean {
+        val token = extractCookie(cookieHeader, "nx_session")
+        if (!token.isNullOrEmpty() && activeSessions.contains(token)) {
+            return true
+        }
+        return checkBasicAuth(authHeader, context)
+    }
+
+    private fun extractCookie(cookieHeader: String?, cookieName: String): String? {
+        if (cookieHeader.isNullOrBlank()) return null
+        val cookies = cookieHeader.split(";")
+        for (cookie in cookies) {
+            val parts = cookie.trim().split("=", limit = 2)
+            if (parts.size == 2 && parts[0].trim() == cookieName) {
+                return parts[1].trim()
+            }
+        }
+        return null
+    }
+
+    private fun sendRedirect(output: OutputStream, location: String) {
+        val header = "HTTP/1.1 302 Found\r\n" +
+                "Location: $location\r\n" +
+                "Content-Length: 0\r\n" +
+                "Connection: close\r\n\r\n"
+        output.write(header.toByteArray(Charsets.UTF_8))
+        output.flush()
+    }
+
+    private fun send401WithAuth(output: OutputStream) {
+        val body = "401 Unauthorized\r\n".toByteArray(Charsets.UTF_8)
+        val header = "HTTP/1.1 401 Unauthorized\r\n" +
+                "WWW-Authenticate: Basic realm=\"Nexora Media\"\r\n" +
+                "Content-Type: text/plain; charset=UTF-8\r\n" +
+                "Content-Length: ${body.size}\r\n" +
+                "Connection: close\r\n\r\n"
+        output.write(header.toByteArray(Charsets.UTF_8))
+        output.write(body)
+        output.flush()
+    }
+
+    private fun send401WithoutAuth(output: OutputStream) {
+        val body = "401 Unauthorized\r\n".toByteArray(Charsets.UTF_8)
+        val header = "HTTP/1.1 401 Unauthorized\r\n" +
+                "Content-Type: text/plain; charset=UTF-8\r\n" +
+                "Content-Length: ${body.size}\r\n" +
+                "Connection: close\r\n\r\n"
+        output.write(header.toByteArray(Charsets.UTF_8))
+        output.write(body)
+        output.flush()
     }
 
     private fun checkBasicAuth(authHeader: String?, context: Context): Boolean {
@@ -222,28 +362,6 @@ object LocalHttpShareServer {
         val user = decoded.substring(0, colonIndex)
         val pass = decoded.substring(colonIndex + 1)
         return user == expectedUser && pass == expectedPass
-    }
-
-    private fun send401Unauthorized(output: OutputStream) {
-        val body = """
-            <!DOCTYPE html>
-            <html>
-            <head><meta charset="utf-8"><title>401 Требуется авторизация</title></head>
-            <body style="background:#121212; color:#fff; font-family:sans-serif; text-align:center; padding:50px;">
-                <h2 style="color:#ff8a00;">🔒 Требуется авторизация</h2>
-                <p>Введите логин и пароль, настроенные в приложении Nexora Video Player.</p>
-            </body>
-            </html>
-        """.trimIndent().toByteArray(Charsets.UTF_8)
-
-        val header = "HTTP/1.1 401 Unauthorized\r\n" +
-                "WWW-Authenticate: Basic realm=\"Nexora Media Server\"\r\n" +
-                "Content-Type: text/html; charset=UTF-8\r\n" +
-                "Content-Length: ${body.size}\r\n" +
-                "Connection: close\r\n\r\n"
-        output.write(header.toByteArray(Charsets.UTF_8))
-        output.write(body)
-        output.flush()
     }
 
     private fun extractQueryParam(query: String, paramName: String): String? {
@@ -538,21 +656,263 @@ object LocalHttpShareServer {
         }
     }
 
+    private fun serveThumbnail(
+        output: OutputStream,
+        mediaId: String,
+        context: Context,
+        isHead: Boolean
+    ) {
+        val thumbsDir = File(context.cacheDir, "http_thumbs")
+        val safeFileName = mediaId.replace(Regex("[^a-zA-Z0-9._-]"), "_") + ".jpg"
+        val cachedFile = File(thumbsDir, safeFileName)
+
+        if (cachedFile.exists() && cachedFile.length() > 0) {
+            try {
+                val bytes = cachedFile.readBytes()
+                val header = "HTTP/1.1 200 OK\r\n" +
+                        "Content-Type: image/jpeg\r\n" +
+                        "Content-Length: ${bytes.size}\r\n" +
+                        "Cache-Control: max-age=86400\r\n" +
+                        "Connection: close\r\n\r\n"
+                output.write(header.toByteArray(Charsets.UTF_8))
+                if (!isHead) output.write(bytes)
+                output.flush()
+                return
+            } catch (e: Exception) {
+                Log.w(TAG, "Error reading cached thumbnail: ${e.message}")
+            }
+        }
+
+        val mediaList = loadMediaList(context)
+        val item = mediaList.find { it.id == mediaId || it.fileName == mediaId }
+
+        if (item == null || !item.isVideo) {
+            val notFound = "Thumbnail not found".toByteArray(Charsets.UTF_8)
+            val header = "HTTP/1.1 404 Not Found\r\n" +
+                    "Content-Type: text/plain; charset=UTF-8\r\n" +
+                    "Content-Length: ${notFound.size}\r\n" +
+                    "Connection: close\r\n\r\n"
+            output.write(header.toByteArray(Charsets.UTF_8))
+            if (!isHead) output.write(notFound)
+            output.flush()
+            return
+        }
+
+        var bitmap: Bitmap? = null
+
+        // 1. Android 10+ (API 29+) loadThumbnail
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && item.contentUri != null) {
+            try {
+                bitmap = context.contentResolver.loadThumbnail(item.contentUri, Size(480, 270), null)
+            } catch (e: Throwable) {
+                Log.w(TAG, "contentResolver.loadThumbnail failed for ${item.id}: ${e.message}")
+            }
+        }
+
+        // 2. Older versions MediaStore.Video.Thumbnails.getThumbnail if id is numeric
+        if (bitmap == null && item.contentUri != null) {
+            val numericId = item.id.removePrefix("vid_").toLongOrNull()
+            if (numericId != null) {
+                try {
+                    @Suppress("DEPRECATION")
+                    bitmap = MediaStore.Video.Thumbnails.getThumbnail(
+                        context.contentResolver,
+                        numericId,
+                        MediaStore.Video.Thumbnails.MINI_KIND,
+                        null
+                    )
+                } catch (e: Throwable) {
+                    Log.w(TAG, "MediaStore.Video.Thumbnails failed: ${e.message}")
+                }
+            }
+        }
+
+        // 3. Fallback: MediaMetadataRetriever
+        if (bitmap == null) {
+            val retriever = MediaMetadataRetriever()
+            try {
+                if (item.directFile != null && item.directFile.exists()) {
+                    retriever.setDataSource(item.directFile.absolutePath)
+                } else if (item.contentUri != null) {
+                    retriever.setDataSource(context, item.contentUri)
+                }
+                val durUs = if (item.durationMs > 0) item.durationMs * 1000L else 10_000_000L
+                val frameTimeUs = (durUs * 0.1).toLong().coerceAtLeast(1_000_000L)
+                bitmap = retriever.getFrameAtTime(frameTimeUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                    ?: retriever.getFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+            } catch (e: Throwable) {
+                Log.w(TAG, "MediaMetadataRetriever failed for ${item.id}: ${e.message}")
+            } finally {
+                try {
+                    retriever.release()
+                } catch (_: Throwable) {}
+            }
+        }
+
+        if (bitmap == null) {
+            val notFound = "Thumbnail generation failed".toByteArray(Charsets.UTF_8)
+            val header = "HTTP/1.1 404 Not Found\r\n" +
+                    "Content-Type: text/plain; charset=UTF-8\r\n" +
+                    "Content-Length: ${notFound.size}\r\n" +
+                    "Connection: close\r\n\r\n"
+            output.write(header.toByteArray(Charsets.UTF_8))
+            if (!isHead) output.write(notFound)
+            output.flush()
+            return
+        }
+
+        val baos = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 80, baos)
+        val bytes = baos.toByteArray()
+
+        try {
+            if (!thumbsDir.exists()) thumbsDir.mkdirs()
+            cachedFile.writeBytes(bytes)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed writing thumb cache: ${e.message}")
+        }
+
+        val header = "HTTP/1.1 200 OK\r\n" +
+                "Content-Type: image/jpeg\r\n" +
+                "Content-Length: ${bytes.size}\r\n" +
+                "Cache-Control: max-age=86400\r\n" +
+                "Connection: close\r\n\r\n"
+        output.write(header.toByteArray(Charsets.UTF_8))
+        if (!isHead) output.write(bytes)
+        output.flush()
+    }
+
     private fun sendHtmlIndex(output: OutputStream, files: List<HttpMediaFile>, context: Context, isHead: Boolean) {
+        val totalVideos = files.count { it.isVideo }
+        val totalAudio = files.count { !it.isVideo }
+        val folderSetting = HttpServerConfig.getBroadcastFolder(context)
+
+        val totalBytes = files.sumOf { it.sizeBytes }
+        val totalMb = totalBytes / (1024.0 * 1024.0)
+        val storageStr = if (totalMb >= 1024.0) {
+            String.format(java.util.Locale.US, "%.1f GB", totalMb / 1024.0)
+        } else {
+            String.format(java.util.Locale.US, "%.1f MB", totalMb)
+        }
+
+        val versionName = try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0"
+        } catch (_: Throwable) {
+            "1.0"
+        }
+
+        val filesJson = StringBuilder("[")
+        files.forEachIndexed { i, f ->
+            val sizeMb = String.format(java.util.Locale.US, "%.1f MB", f.sizeBytes / (1024.0 * 1024.0))
+            val dur = if (f.durationMs > 0) formatDuration(f.durationMs) else ""
+            filesJson.append("{")
+            filesJson.append("\"id\":${jsonEscape(f.id)},")
+            filesJson.append("\"title\":${jsonEscape(f.title)},")
+            filesJson.append("\"name\":${jsonEscape(f.fileName)},")
+            filesJson.append("\"size\":${jsonEscape(sizeMb)},")
+            filesJson.append("\"dur\":${jsonEscape(dur)},")
+            filesJson.append("\"isVideo\":${f.isVideo},")
+            filesJson.append("\"mime\":${jsonEscape(f.mimeType)}")
+            filesJson.append("}")
+            if (i < files.size - 1) filesJson.append(",")
+        }
+        filesJson.append("]")
+
+        val jsonBuilder = StringBuilder("{")
+        jsonBuilder.append("\"version\":${jsonEscape(versionName)},")
+        jsonBuilder.append("\"address\":${jsonEscape(getServerUrl(context))},")
+        jsonBuilder.append("\"port\":$currentPort,")
+        jsonBuilder.append("\"online\":true,")
+        jsonBuilder.append("\"authRequired\":${HttpServerConfig.isAuthRequired(context)},")
+        jsonBuilder.append("\"folder\":${jsonEscape(folderSetting.title)},")
+        jsonBuilder.append("\"features\":{\"photos\":false,\"folders\":false},")
+        jsonBuilder.append("\"stats\":{")
+        jsonBuilder.append("\"videos\":$totalVideos,")
+        jsonBuilder.append("\"audio\":$totalAudio,")
+        jsonBuilder.append("\"photos\":0,")
+        jsonBuilder.append("\"storage\":${jsonEscape(storageStr)}")
+        jsonBuilder.append("},")
+        jsonBuilder.append("\"files\":$filesJson")
+        jsonBuilder.append("}")
+
+        val jsonString = jsonBuilder.toString().replace("</", "<\\/")
+
+        val rawHtml = try {
+            context.assets.open("web/index.html").bufferedReader(Charsets.UTF_8).use { it.readText() }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed reading web/index.html from assets", e)
+            null
+        }
+
+        val html = if (rawHtml != null && rawHtml.contains("<!--NEXORA_DATA-->")) {
+            rawHtml.replaceFirst("<!--NEXORA_DATA-->", "<script>window.NEXORA = $jsonString;</script>")
+        } else {
+            fallbackIndexHtml(files, context)
+        }
+
+        val data = html.toByteArray(Charsets.UTF_8)
+        val header = "HTTP/1.1 200 OK\r\n" +
+                "Content-Type: text/html; charset=UTF-8\r\n" +
+                "Content-Length: ${data.size}\r\n" +
+                "Connection: close\r\n\r\n"
+
+        output.write(header.toByteArray(Charsets.UTF_8))
+        if (!isHead) {
+            output.write(data)
+        }
+        output.flush()
+    }
+
+    private fun sendHtmlLogin(output: OutputStream, context: Context, isHead: Boolean) {
+        val rawHtml = try {
+            context.assets.open("web/login.html").bufferedReader(Charsets.UTF_8).use { it.readText() }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed reading web/login.html from assets", e)
+            null
+        }
+
+        val html = rawHtml ?: fallbackLoginHtml()
+        val data = html.toByteArray(Charsets.UTF_8)
+        val header = "HTTP/1.1 200 OK\r\n" +
+                "Content-Type: text/html; charset=UTF-8\r\n" +
+                "Content-Length: ${data.size}\r\n" +
+                "Connection: close\r\n\r\n"
+
+        output.write(header.toByteArray(Charsets.UTF_8))
+        if (!isHead) {
+            output.write(data)
+        }
+        output.flush()
+    }
+
+    private fun fallbackLoginHtml(): String {
+        return """
+            <!DOCTYPE html>
+            <html lang="ru">
+            <head><meta charset="utf-8"><title>Nexora Media — Вход</title></head>
+            <body style="background:#070403; color:#fff; font-family:sans-serif; text-align:center; padding:50px;">
+                <h1 style="color:#ff8a00;">Nexora Media</h1>
+                <p>Вход в медиа-сервер</p>
+            </body>
+            </html>
+        """.trimIndent()
+    }
+
+    private fun fallbackIndexHtml(files: List<HttpMediaFile>, context: Context): String {
         val totalVideos = files.count { it.isVideo }
         val totalAudio = files.count { !it.isVideo }
         val folderSetting = HttpServerConfig.getBroadcastFolder(context)
 
         val filesJson = StringBuilder("[")
         files.forEachIndexed { i, f ->
-            val sizeMb = "%.1f MB".format(f.sizeBytes / (1024.0 * 1024.0))
+            val sizeMb = String.format(java.util.Locale.US, "%.1f MB", f.sizeBytes / (1024.0 * 1024.0))
             val dur = if (f.durationMs > 0) formatDuration(f.durationMs) else ""
             filesJson.append("{\"id\":\"${f.id}\",\"title\":${jsonEscape(f.title)},\"name\":${jsonEscape(f.fileName)},\"size\":\"$sizeMb\",\"dur\":\"$dur\",\"isVideo\":${f.isVideo},\"mime\":\"${f.mimeType}\"}")
             if (i < files.size - 1) filesJson.append(",")
         }
         filesJson.append("]")
 
-        val html = """
+        return """
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -566,21 +926,15 @@ object LocalHttpShareServer {
         .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,138,0,0.25); padding-bottom: 14px; margin-bottom: 16px; }
         .logo { font-size: 22px; font-weight: 800; color: var(--neon); letter-spacing: 0.5px; }
         .badge { background: rgba(255,138,0,0.15); border: 1px solid var(--neon); color: var(--neon); padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
-        
-        /* Player Card */
         .player-container { background: #000; border-radius: 18px; overflow: hidden; border: 1px solid rgba(255,138,0,0.4); box-shadow: 0 10px 30px rgba(0,0,0,0.8); margin-bottom: 20px; }
         video, audio { width: 100%; display: block; max-height: 480px; outline: none; background: #000; }
         .player-bar { padding: 12px 18px; background: var(--card); display: flex; align-items: center; justify-content: space-between; border-top: 1px solid rgba(255,255,255,0.06); }
         .now-playing-title { font-weight: 700; color: #fff; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%; }
-        
-        /* Controls & Filter */
         .search-box { width: 100%; box-sizing: border-box; background: var(--card); border: 1px solid rgba(255,255,255,0.15); padding: 12px 16px; border-radius: 12px; color: #fff; font-size: 14px; outline: none; margin-bottom: 12px; transition: border 0.2s; }
         .search-box:focus { border-color: var(--neon); }
         .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
         .tab-btn { background: var(--card); color: #aaa; border: 1px solid rgba(255,255,255,0.08); padding: 8px 14px; border-radius: 10px; cursor: pointer; font-size: 13px; font-weight: 600; }
         .tab-btn.active { background: var(--neon); color: #000; border-color: var(--neon); }
-
-        /* Media List */
         .file-list { display: flex; flex-direction: column; gap: 10px; }
         .file-item { background: var(--card); border-radius: 14px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; border: 1px solid rgba(255,255,255,0.05); transition: background 0.2s, transform 0.1s; }
         .file-item:hover { background: #222632; border-color: rgba(255,138,0,0.3); }
@@ -601,12 +955,10 @@ object LocalHttpShareServer {
         <div class="header">
             <div>
                 <div class="logo">⚡ Nexora Media Server</div>
-                <div style="font-size:11px; color:#aaa;">Вещание: ${folderSetting.title} • Порт $currentPort</div>
+                <div style="font-size:11px; color:#aaa;">Вещание: ${'$'}{folderSetting.title} • Порт $currentPort</div>
             </div>
             <div class="badge">Видео: $totalVideos | Аудио: $totalAudio</div>
         </div>
-
-        <!-- Embedded Web Player -->
         <div class="player-container" id="playerWrap">
             <video id="webVideoPlayer" controls playsinline preload="metadata" style="display:none;"></video>
             <audio id="webAudioPlayer" controls style="display:none; padding:20px;"></audio>
@@ -615,22 +967,17 @@ object LocalHttpShareServer {
                 <div style="font-size:11px; color:var(--neon); font-weight:bold;">▶ ПРЯМОЙ ПОТОК (RANGE 206)</div>
             </div>
         </div>
-
         <input type="text" id="searchInput" class="search-box" placeholder="🔍 Быстрый поиск видео или музыки..." oninput="filterMedia()">
-
         <div class="tabs">
-            <button class="tab-btn active" id="tabAll" onclick="setTab('all')">Все ($filesJson.count { it == '{' })</button>
+            <button class="tab-btn active" id="tabAll" onclick="setTab('all')">Все (${'$'}{files.size})</button>
             <button class="tab-btn" id="tabVideos" onclick="setTab('video')">🎬 Видео ($totalVideos)</button>
             <button class="tab-btn" id="tabAudio" onclick="setTab('audio')">🎵 Аудио ($totalAudio)</button>
         </div>
-
         <div id="mediaList" class="file-list"></div>
     </div>
-
     <script>
         const mediaData = $filesJson;
         let currentTab = 'all';
-
         function setTab(tab) {
             currentTab = tab;
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -639,30 +986,25 @@ object LocalHttpShareServer {
             if (tab === 'audio') document.getElementById('tabAudio').classList.add('active');
             filterMedia();
         }
-
         function filterMedia() {
             const query = document.getElementById('searchInput').value.toLowerCase().trim();
             const list = document.getElementById('mediaList');
             list.innerHTML = '';
-
             const filtered = mediaData.filter(item => {
                 const matchesTab = currentTab === 'all' || (currentTab === 'video' && item.isVideo) || (currentTab === 'audio' && !item.isVideo);
                 const matchesQuery = !query || item.title.toLowerCase().includes(query) || item.name.toLowerCase().includes(query);
                 return matchesTab && matchesQuery;
             });
-
             if (filtered.length === 0) {
-                list.innerHTML = '<div class="empty">Файлы не найдены. Убедитесь, что на устройстве есть видео или музыка.</div>';
+                list.innerHTML = '<div class="empty">Файлы не найдены.</div>';
                 return;
             }
-
             filtered.forEach(item => {
                 const el = document.createElement('div');
                 el.className = 'file-item';
                 const icon = item.isVideo ? '🎬' : '🎵';
                 const playLabel = item.isVideo ? '▶ Смотреть' : '▶ Слушать';
                 const durBadge = item.dur ? `<span>⏱ ${'$'}{item.dur}</span>` : '';
-
                 el.innerHTML = `
                     <div class="file-info">
                         <div class="file-icon">${'$'}{icon}</div>
@@ -682,17 +1024,14 @@ object LocalHttpShareServer {
                 list.appendChild(el);
             });
         }
-
         function playMedia(id, name, isVideo) {
             const videoPlayer = document.getElementById('webVideoPlayer');
             const audioPlayer = document.getElementById('webAudioPlayer');
             const playerBar = document.getElementById('playerBar');
             const nowPlaying = document.getElementById('nowPlayingText');
-
             const streamUrl = '/stream?id=' + encodeURIComponent(id);
             nowPlaying.innerText = (isVideo ? '🎬 ' : '🎵 ') + name;
             playerBar.style.display = 'flex';
-
             if (isVideo) {
                 audioPlayer.pause();
                 audioPlayer.style.display = 'none';
@@ -708,27 +1047,13 @@ object LocalHttpShareServer {
                 audioPlayer.load();
                 audioPlayer.play().catch(e => console.log('Autoplay blocked', e));
             }
-
             document.getElementById('playerWrap').scrollIntoView({ behavior: 'smooth' });
         }
-
         filterMedia();
     </script>
 </body>
 </html>
         """.trimIndent()
-
-        val data = html.toByteArray(Charsets.UTF_8)
-        val header = "HTTP/1.1 200 OK\r\n" +
-                "Content-Type: text/html; charset=UTF-8\r\n" +
-                "Content-Length: ${data.size}\r\n" +
-                "Connection: close\r\n\r\n"
-
-        output.write(header.toByteArray(Charsets.UTF_8))
-        if (!isHead) {
-            output.write(data)
-        }
-        output.flush()
     }
 
     private fun jsonEscape(str: String): String {
