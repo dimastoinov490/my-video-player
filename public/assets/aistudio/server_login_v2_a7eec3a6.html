@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#070403">
+<title>Nexora Media — вход</title>
+<style>
+/* ===========================================================================
+   NEXORA MEDIA — СТРАНИЦА ВХОДА В МЕДИА-СЕРВЕР, ВЕРСИЯ ДЛЯ КОМПЬЮТЕРА (по макету, правая верхняя панель, на всё окно). Макет фиксированный (сетка 1280px) и масштабируется целиком под любой экран; на телефоне в вертикальном положении поворачивается на 90° (отключить: ?rotate=0)
+   Самодостаточный файл: без внешних шрифтов, картинок и скриптов.
+   Форма вызывает GET /api/login с заголовком Authorization: Basic ...
+   Успех (200) -> переход на "/", ошибка (401) -> сообщение под полями.
+   =========================================================================== */
+:root{--bg:#070403;--o1:#ffb020;--o2:#ff8a00;--o3:#ff6a00;--line:rgba(255,138,0,.75);--text:#fff;--muted:#b9aa9a;--err:#ff6b4a}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:"Inter","Segoe UI",system-ui,-apple-system,Roboto,sans-serif}
+body{height:100vh;padding:0;overflow:hidden}
+.frame{position:absolute;left:12px;top:12px;right:12px;bottom:12px;display:flex;align-items:center;justify-content:center;overflow:hidden;border-radius:28px;
+  border:1.5px solid rgba(255,138,0,.75);box-shadow:0 0 0 1px rgba(255,138,0,.12),0 0 46px rgba(255,110,0,.22),inset 0 0 60px rgba(255,110,0,.06);
+  background:
+   radial-gradient(55% 45% at 85% 100%,rgba(255,120,0,.38),transparent 65%),
+   radial-gradient(45% 40% at 10% 100%,rgba(255,90,0,.22),transparent 65%),
+   radial-gradient(60% 50% at 70% 10%,rgba(255,150,0,.10),transparent 70%),
+   linear-gradient(180deg,#0b0603,#060302)}
+.swirl{position:absolute;right:-6%;bottom:-6%;width:80%;max-width:1000px;z-index:0;opacity:.85;pointer-events:none}
+.strip{position:absolute;left:-70px;top:-40px;height:125%;width:430px;z-index:0;opacity:.95;pointer-events:none;
+  -webkit-mask-image:linear-gradient(90deg,#000 55%,transparent);mask-image:linear-gradient(90deg,#000 55%,transparent)}
+.panel{position:relative;z-index:2;width:100%;max-width:470px;padding:0 14px;text-align:center}
+.logo{width:132px;height:132px;margin:0 auto 6px;display:block;filter:drop-shadow(0 0 16px rgba(255,120,0,.45))}
+h1{font-size:46px;font-weight:700;letter-spacing:.3px;line-height:1.1}
+h1 .a{color:var(--text)}h1 .b{color:var(--o2)}
+.sub{margin:10px 0 30px;font-size:21px;color:#e9ddd0}
+.field{position:relative;margin-bottom:16px}
+.field input{width:100%;height:56px;border-radius:18px;border:1.5px solid var(--line);background:rgba(255,255,255,.05);
+  color:var(--text);font-size:17px;padding:0 52px 0 54px;outline:none;transition:border-color .2s,box-shadow .2s;font-family:inherit}
+.field input::placeholder{color:#9d8f82}
+.field input:focus{border-color:var(--o1);box-shadow:0 0 0 3px rgba(255,138,0,.18)}
+.field .ic{position:absolute;left:18px;top:50%;width:26px;height:26px;margin-top:-13px;color:var(--o2);pointer-events:none}
+.eye{position:absolute;right:10px;top:50%;width:40px;height:40px;margin-top:-20px;border:0;background:none;color:#cfc3b6;cursor:pointer;border-radius:12px}
+.eye svg{width:26px;height:26px}
+.btn{width:100%;height:56px;border:0;border-radius:18px;cursor:pointer;font-family:inherit;font-size:19px;font-weight:700;color:#1b0d02;
+  background:linear-gradient(180deg,var(--o1),var(--o2) 55%,var(--o3));box-shadow:0 8px 24px rgba(255,120,0,.35),inset 0 1px 0 rgba(255,255,255,.35);
+  display:flex;align-items:center;justify-content:center;gap:12px;margin-top:6px;transition:transform .12s,filter .2s}
+.btn:active{transform:scale(.98)}.btn:disabled{filter:grayscale(.5) brightness(.8);cursor:default}
+.btn svg{width:26px;height:26px}
+.err{min-height:22px;margin-top:12px;font-size:14px;color:var(--err);display:none}
+.err.show{display:block}
+.or{display:flex;align-items:center;gap:14px;margin:24px 0 18px;color:var(--muted);font-size:14px}
+.or:before,.or:after{content:"";flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.22),transparent)}
+.hint{display:flex;align-items:center;justify-content:center;gap:14px;text-align:left;color:#d9cdc0;font-size:14px;line-height:1.35}
+.hint svg{width:38px;height:38px;color:var(--o2);flex:none}
+</style>
+</head>
+<body>
+<div class="frame">
+
+<!-- декоративная плёнка слева -->
+<svg class="strip" viewBox="0 0 360 1000" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+  <defs>
+    <linearGradient id="fr1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7a3a10"/><stop offset="1" stop-color="#1a0b04"/></linearGradient>
+    <linearGradient id="fr2" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff8a00" stop-opacity=".75"/><stop offset="1" stop-color="#2a1205"/></linearGradient>
+    <pattern id="perf" width="30" height="46" patternUnits="userSpaceOnUse"><rect x="8" y="12" width="14" height="22" rx="4" fill="#070403"/></pattern>
+  </defs>
+  <g transform="rotate(-16 180 500)">
+    <rect x="70" y="-200" width="230" height="1500" rx="10" fill="#150b05" stroke="rgba(255,138,0,.55)" stroke-width="2"/>
+    <rect x="70" y="-200" width="30" height="1500" fill="url(#perf)"/>
+    <rect x="270" y="-200" width="30" height="1500" fill="url(#perf)"/>
+    <rect x="112" y="40" width="146" height="190" rx="8" fill="url(#fr1)"/>
+    <rect x="112" y="260" width="146" height="190" rx="8" fill="url(#fr2)"/>
+    <rect x="112" y="480" width="146" height="190" rx="8" fill="url(#fr1)"/>
+    <rect x="112" y="700" width="146" height="190" rx="8" fill="url(#fr2)"/>
+  </g>
+</svg>
+
+<!-- оранжевые волны справа внизу -->
+<svg class="swirl" viewBox="0 0 900 520" aria-hidden="true">
+  <defs><linearGradient id="sw" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff5a00" stop-opacity="0"/><stop offset=".5" stop-color="#ff8a00" stop-opacity=".9"/><stop offset="1" stop-color="#ffb020" stop-opacity=".1"/></linearGradient></defs>
+  <path d="M0 470C180 330 360 470 520 330S800 120 900 190" fill="none" stroke="url(#sw)" stroke-width="3"/>
+  <path d="M0 500C200 380 380 500 560 380S820 200 900 270" fill="none" stroke="url(#sw)" stroke-width="2"/>
+  <path d="M60 520C240 420 420 520 600 420S840 290 900 340" fill="none" stroke="url(#sw)" stroke-width="1.5"/>
+</svg>
+
+<main class="panel">
+  <svg class="logo" viewBox="0 0 120 120" aria-label="Nexora">
+    <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffc233"/><stop offset=".55" stop-color="#ff8a00"/><stop offset="1" stop-color="#ff5a00"/></linearGradient></defs>
+    <path d="M30 16 L102 60 L30 104 Z" fill="url(#lg)" stroke="url(#lg)" stroke-width="14" stroke-linejoin="round"/>
+    <path d="M42 40 L74 60 L42 80 Z" fill="#150a04" stroke="#150a04" stroke-width="8" stroke-linejoin="round"/>
+  </svg>
+  <h1><span class="a">Nexora</span> <span class="b">Media</span></h1>
+  <p class="sub">Вход в медиа-сервер</p>
+
+  <form id="form" autocomplete="on" novalidate>
+    <div class="field">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>
+      <input id="user" name="username" type="text" placeholder="Логин" autocomplete="username" autocapitalize="none" spellcheck="false">
+    </div>
+    <div class="field">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10.5" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></svg>
+      <input id="pass" name="password" type="password" placeholder="Пароль" autocomplete="current-password">
+      <button class="eye" id="eye" type="button" aria-label="Показать пароль">
+        <svg id="eyeOff" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 6.2A9.8 9.8 0 0 1 12 6c5 0 8.5 4 9.5 6-.4.8-1.2 2-2.4 3.1M6.6 7.6C4.6 9 3.3 10.9 2.5 12c1 2 4.5 6 9.5 6 1.5 0 2.8-.4 4-.9"/><path d="M9.9 10a3 3 0 0 0 4.1 4.1"/></svg>
+        <svg id="eyeOn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M2.5 12C3.5 10 7 6 12 6s8.5 4 9.5 6c-1 2-4.5 6-9.5 6s-8.5-4-9.5-6z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
+    </div>
+    <button class="btn" id="go" type="submit">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="M4 12h11M11 8l4 4-4 4"/></svg>
+      <span>Войти</span>
+    </button>
+    <div class="err" id="err" role="alert"></div>
+  </form>
+
+  <div class="or">или</div>
+  <div class="hint">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 9a15 15 0 0 1 19 0"/><path d="M5.5 12.5a10.5 10.5 0 0 1 13 0"/><path d="M8.7 16a6 6 0 0 1 6.6 0"/><circle cx="12" cy="19.2" r="1.2" fill="currentColor"/></svg>
+    <span>Подключитесь к Wi-Fi серверу<br>для просмотра медиафайлов</span>
+  </div>
+</main>
+</div>
+
+<script>
+(function(){
+  var form=document.getElementById('form'), user=document.getElementById('user'), pass=document.getElementById('pass');
+  var err=document.getElementById('err'), go=document.getElementById('go');
+  document.getElementById('eye').addEventListener('click',function(){
+    var show = pass.type==='password';
+    pass.type = show ? 'text' : 'password';
+    document.getElementById('eyeOff').style.display = show ? 'none' : '';
+    document.getElementById('eyeOn').style.display = show ? '' : 'none';
+  });
+  function showErr(t){ err.textContent=t; err.className='err show'; }
+  form.addEventListener('submit',function(e){
+    e.preventDefault();
+    err.className='err';
+    var u=user.value.trim(), p=pass.value;
+    if(!u){ showErr('Введите логин'); user.focus(); return; }
+    go.disabled=true;
+    var token=btoa(unescape(encodeURIComponent(u+':'+p)));
+    fetch('/api/login',{headers:{'Authorization':'Basic '+token},cache:'no-store',credentials:'same-origin'})
+      .then(function(r){
+        if(r.ok){ location.replace('/'); }
+        else { showErr('Неверный логин или пароль'); go.disabled=false; pass.select(); }
+      })
+      .catch(function(){ showErr('Нет связи с сервером'); go.disabled=false; });
+  });
+})();
+
+/* ---------- ПК-макет: фиксированная широкая сетка (минимум 1280x680), масштабируется целиком под любой экран ---------- */
+(function(){
+  var fr=document.querySelector('.frame');
+  var noRot=/[?&]rotate=0/.test(location.search);
+  function fit(){
+    var w=window.innerWidth, h=window.innerHeight;
+    var rot=(!noRot && h>w*1.05);               /* телефон вертикально: поворот на 90°, как на главной */
+    var W=rot?h:w, H=rot?w:h;
+    var s=Math.min((W-24)/1280, (H-24)/680);
+    var cw=(W-24)/s, ch=Math.min((H-24)/s, 900);
+    fr.style.position='absolute'; fr.style.right='auto'; fr.style.bottom='auto';
+    fr.style.width=cw+'px'; fr.style.height=ch+'px'; fr.style.transformOrigin='0 0';
+    var t;
+    if(rot){ fr.style.left='0px'; fr.style.top='0px'; t='translateX('+w+'px) rotate(90deg) translate(12px,12px) scale('+s+')'; }
+    else   { fr.style.left='12px'; fr.style.top='12px'; t='scale('+s+')'; }
+    fr.style.transform=t; fr.style.webkitTransform=t;
+  }
+  window.addEventListener('resize',fit); window.addEventListener('orientationchange',function(){setTimeout(fit,120);}); fit();
+})();
+</script>
+</body>
+</html>

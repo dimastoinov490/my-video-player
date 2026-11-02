@@ -2,14 +2,17 @@ package com.example.videoplayer.service
 
 import android.content.ContentUris
 import android.content.Context
+import android.content.Intent
 import android.database.Cursor
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.provider.Settings
 import android.text.format.Formatter
 import android.util.Base64
 import android.util.Log
@@ -38,6 +41,7 @@ object LocalHttpShareServer {
     const val DEFAULT_PORT = 8765
 
     private val activeSessions = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
+    private var requestedManageStorageOnce = false
 
     fun clearSessions() {
         activeSessions.clear()
@@ -59,6 +63,26 @@ object LocalHttpShareServer {
             return true
         }
         stop()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
+            if (!requestedManageStorageOnce) {
+                requestedManageStorageOnce = true
+                try {
+                    val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                        data = Uri.parse("package:${context.packageName}")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(intent)
+                } catch (_: Exception) {
+                    try {
+                        val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(intent)
+                    } catch (_: Exception) {}
+                }
+            }
+        }
 
         return try {
             val portsToTry = listOf(chosenPort, 8766, 8767, 8080, 0)
@@ -133,7 +157,7 @@ object LocalHttpShareServer {
                 threadPool.execute {
                     handleClient(client, context)
                 }
-            } catch (e: SocketException) {
+            } catch (_: SocketException) {
                 break
             } catch (e: Exception) {
                 Log.e(TAG, "Exception in client accept loop", e)
@@ -261,24 +285,71 @@ object LocalHttpShareServer {
                             serveThumbnail(output, idParam, context, isHead)
                         }
                     }
+                    decodedPath == "/api/photos" -> {
+                        if (authRequired && !authorized) {
+                            send401WithoutAuth(output)
+                        } else {
+                            val albumParam = extractQueryParam(queryString, "album")
+                            serveApiPhotos(output, albumParam, context, isHead)
+                        }
+                    }
+                    decodedPath == "/photo" -> {
+                        val isThumb = extractQueryParam(queryString, "thumb") == "1"
+                        val idParam = extractQueryParam(queryString, "id")
+                        val isDl = extractQueryParam(queryString, "dl") == "1"
+                        if (isThumb) {
+                            if (authRequired && !authorized) {
+                                send401WithoutAuth(output)
+                            } else {
+                                servePhotoThumbnail(output, idParam, context, isHead)
+                            }
+                        } else {
+                            if (authRequired && !authorized) {
+                                send401WithAuth(output)
+                            } else {
+                                servePhotoOriginal(output, idParam, isDl, context, isHead)
+                            }
+                        }
+                    }
+                    decodedPath == "/api/fs" -> {
+                        if (!HttpServerConfig.isAuthRequired(context)) {
+                            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"auth_required\"}".toByteArray(Charsets.UTF_8), isHead)
+                        } else if (!authorized) {
+                            send401WithoutAuth(output)
+                        } else {
+                            val pathParam = extractQueryParam(queryString, "path")
+                            serveApiFs(output, pathParam, context, isHead)
+                        }
+                    }
+                    decodedPath == "/file" -> {
+                        if (!HttpServerConfig.isAuthRequired(context)) {
+                            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"auth_required\"}".toByteArray(Charsets.UTF_8), isHead)
+                        } else if (!authorized) {
+                            send401WithAuth(output)
+                        } else {
+                            val pathParam = extractQueryParam(queryString, "path")
+                            val isDl = extractQueryParam(queryString, "dl") == "1"
+                            serveFsFile(output, pathParam, rangeHeader, isDl, context, isHead)
+                        }
+                    }
                     decodedPath == "/api/status" -> {
                         if (authRequired && !authorized) {
                             send401WithoutAuth(output)
                         } else {
                             val json = "{\"status\":\"running\",\"port\":$currentPort,\"auth\":$authRequired}"
-                            sendResponse(output, 200, "application/json; charset=UTF-8", json.toByteArray(Charsets.UTF_8))
+                            sendResponse(output, 200, "application/json; charset=UTF-8", json.toByteArray(Charsets.UTF_8), isHead)
                         }
                     }
                     decodedPath.startsWith("/api/") -> {
                         if (authRequired && !authorized) {
                             send401WithoutAuth(output)
                         } else {
-                            sendResponse(output, 404, "application/json; charset=UTF-8", "{\"error\":\"not_found\"}".toByteArray(Charsets.UTF_8))
+                            sendResponse(output, 404, "application/json; charset=UTF-8", "{\"error\":\"not_found\"}".toByteArray(Charsets.UTF_8), isHead)
                         }
                     }
                     else -> {
                         val notFound = "404 Not Found"
-                        sendResponse(output, 404, "text/plain; charset=UTF-8", notFound.toByteArray(Charsets.UTF_8))
+                        sendResponse(output, 404, "text/plain; charset=UTF-8", notFound.toByteArray(Charsets.UTF_8), isHead)
                     }
                 }
             } else {
@@ -368,7 +439,13 @@ object LocalHttpShareServer {
         if (query.isBlank()) return null
         return query.split("&").mapNotNull {
             val kv = it.split("=", limit = 2)
-            if (kv.size == 2 && kv[0] == paramName) URLDecoder.decode(kv[1], Charsets.UTF_8.name()) else null
+            if (kv.size == 2 && kv[0] == paramName) {
+                try {
+                    URLDecoder.decode(kv[1], Charsets.UTF_8.name())
+                } catch (_: Exception) {
+                    kv[1]
+                }
+            } else null
         }.firstOrNull()
     }
 
@@ -563,7 +640,7 @@ object LocalHttpShareServer {
 
         if (item == null) {
             val msg = "Медиафайл не найден"
-            sendResponse(output, 404, "text/plain; charset=UTF-8", msg.toByteArray(Charsets.UTF_8))
+            sendResponse(output, 404, "text/plain; charset=UTF-8", msg.toByteArray(Charsets.UTF_8), isHead)
             return
         }
 
@@ -598,7 +675,7 @@ object LocalHttpShareServer {
 
         val status = if (isPartial && totalLength > 0) "206 Partial Content" else "200 OK"
         val mime = item.mimeType
-        val disposition = if (asDownload) "attachment; filename=\"${item.fileName}\"" else "inline"
+        val disposition = if (asDownload) "attachment; filename=\"${item.fileName.replace("\"", "\\\"")}\"" else "inline"
 
         val headerBuilder = StringBuilder()
             .append("HTTP/1.1 $status\r\n")
@@ -649,7 +726,7 @@ object LocalHttpShareServer {
                 bytesToRead -= read
             }
             output.flush()
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // Client socket disconnect or video seek abort - standard behavior
         } finally {
             try { inputStream?.close() } catch (_: Exception) {}
@@ -662,8 +739,8 @@ object LocalHttpShareServer {
         context: Context,
         isHead: Boolean
     ) {
-        val thumbsDir = File(context.cacheDir, "http_thumbs")
         val safeFileName = mediaId.replace(Regex("[^a-zA-Z0-9._-]"), "_") + ".jpg"
+        val thumbsDir = File(context.cacheDir, "http_thumbs")
         val cachedFile = File(thumbsDir, safeFileName)
 
         if (cachedFile.exists() && cachedFile.length() > 0) {
@@ -782,9 +859,517 @@ object LocalHttpShareServer {
         output.flush()
     }
 
+    private fun serveApiPhotos(output: OutputStream, albumParam: String?, context: Context, isHead: Boolean) {
+        if (albumParam.isNullOrBlank()) {
+            // Group by MediaStore.Images BUCKET_ID, sorted by latest date DESC
+            val projection = arrayOf(
+                MediaStore.Images.Media._ID,
+                MediaStore.Images.Media.BUCKET_ID,
+                MediaStore.Images.Media.BUCKET_DISPLAY_NAME,
+                MediaStore.Images.Media.DATE_MODIFIED,
+                MediaStore.Images.Media.DATE_ADDED
+            )
+            val sortOrder = "${MediaStore.Images.Media.DATE_MODIFIED} DESC, ${MediaStore.Images.Media.DATE_ADDED} DESC"
+
+            data class AlbumEntry(
+                val id: String,
+                val name: String,
+                var count: Int,
+                val cover: Long,
+                val date: Long
+            )
+
+            val albumMap = linkedMapOf<String, AlbumEntry>()
+
+            try {
+                val cursor = context.contentResolver.query(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    projection,
+                    null,
+                    null,
+                    sortOrder
+                )
+                cursor?.use { c ->
+                    val idCol = c.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+                    val bucketIdCol = c.getColumnIndexOrThrow(MediaStore.Images.Media.BUCKET_ID)
+                    val bucketNameCol = c.getColumnIndexOrThrow(MediaStore.Images.Media.BUCKET_DISPLAY_NAME)
+                    val dateModCol = c.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_MODIFIED)
+                    val dateAddCol = c.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_ADDED)
+
+                    while (c.moveToNext()) {
+                        val photoId = c.getLong(idCol)
+                        val bucketId = c.getString(bucketIdCol) ?: "0"
+                        val bucketName = c.getString(bucketNameCol) ?: "Фото"
+                        val dateMod = c.getLong(dateModCol)
+                        val dateAdd = c.getLong(dateAddCol)
+                        val date = maxOf(dateMod, dateAdd)
+
+                        val existing = albumMap[bucketId]
+                        if (existing == null) {
+                            albumMap[bucketId] = AlbumEntry(bucketId, bucketName, 1, photoId, date)
+                        } else {
+                            existing.count++
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed querying MediaStore photos: ${e.message}")
+            }
+
+            val sortedAlbums = albumMap.values.sortedByDescending { it.date }
+            val json = StringBuilder("{\"albums\":[")
+            sortedAlbums.forEachIndexed { i, a ->
+                json.append("{")
+                json.append("\"id\":${jsonEscape(a.id)},")
+                json.append("\"name\":${jsonEscape(a.name)},")
+                json.append("\"count\":${a.count},")
+                json.append("\"cover\":${a.cover}")
+                json.append("}")
+                if (i < sortedAlbums.size - 1) json.append(",")
+            }
+            json.append("]}")
+            val bytes = json.toString().toByteArray(Charsets.UTF_8)
+            sendResponse(output, 200, "application/json; charset=UTF-8", bytes, isHead)
+        } else {
+            // Photos inside single album
+            val projection = arrayOf(
+                MediaStore.Images.Media._ID,
+                MediaStore.Images.Media.DISPLAY_NAME,
+                MediaStore.Images.Media.SIZE,
+                MediaStore.Images.Media.DATE_MODIFIED,
+                MediaStore.Images.Media.DATE_ADDED
+            )
+            val json = StringBuilder("{\"items\":[")
+            var first = true
+
+            try {
+                val cursor = context.contentResolver.query(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    projection,
+                    "${MediaStore.Images.Media.BUCKET_ID} = ?",
+                    arrayOf(albumParam),
+                    "${MediaStore.Images.Media.DATE_MODIFIED} DESC, ${MediaStore.Images.Media.DATE_ADDED} DESC"
+                )
+                cursor?.use { c ->
+                    val idCol = c.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+                    val nameCol = c.getColumnIndexOrThrow(MediaStore.Images.Media.DISPLAY_NAME)
+                    val sizeCol = c.getColumnIndexOrThrow(MediaStore.Images.Media.SIZE)
+                    val dateModCol = c.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_MODIFIED)
+                    val dateAddCol = c.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_ADDED)
+
+                    while (c.moveToNext()) {
+                        val id = c.getLong(idCol)
+                        val name = c.getString(nameCol) ?: "IMG_$id.jpg"
+                        val size = c.getLong(sizeCol)
+                        val dateMod = c.getLong(dateModCol)
+                        val dateAdd = c.getLong(dateAddCol)
+                        val dateMs = maxOf(dateMod, dateAdd) * 1000L
+
+                        if (!first) json.append(",")
+                        first = false
+                        json.append("{")
+                        json.append("\"id\":\"$id\",")
+                        json.append("\"name\":${jsonEscape(name)},")
+                        json.append("\"size\":$size,")
+                        json.append("\"date\":$dateMs")
+                        json.append("}")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed querying album photos: ${e.message}")
+            }
+
+            json.append("]}")
+            val bytes = json.toString().toByteArray(Charsets.UTF_8)
+            sendResponse(output, 200, "application/json; charset=UTF-8", bytes, isHead)
+        }
+    }
+
+    private fun servePhotoOriginal(
+        output: OutputStream,
+        idParam: String?,
+        isDl: Boolean,
+        context: Context,
+        isHead: Boolean
+    ) {
+        val id = idParam?.toLongOrNull()
+        if (id == null) {
+            sendResponse(output, 404, "text/plain; charset=UTF-8", "Photo not found".toByteArray(Charsets.UTF_8), isHead)
+            return
+        }
+
+        val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
+        var fileName = "photo_$id.jpg"
+        var mimeType = "image/jpeg"
+        var fileSize = -1L
+
+        try {
+            context.contentResolver.query(
+                uri,
+                arrayOf(MediaStore.Images.Media.DISPLAY_NAME, MediaStore.Images.Media.MIME_TYPE, MediaStore.Images.Media.SIZE),
+                null,
+                null,
+                null
+            )?.use { c ->
+                if (c.moveToFirst()) {
+                    val nameIdx = c.getColumnIndex(MediaStore.Images.Media.DISPLAY_NAME)
+                    val mimeIdx = c.getColumnIndex(MediaStore.Images.Media.MIME_TYPE)
+                    val sizeIdx = c.getColumnIndex(MediaStore.Images.Media.SIZE)
+                    if (nameIdx >= 0) c.getString(nameIdx)?.let { fileName = it }
+                    if (mimeIdx >= 0) c.getString(mimeIdx)?.let { mimeType = it }
+                    if (sizeIdx >= 0) fileSize = c.getLong(sizeIdx)
+                }
+            }
+        } catch (_: Exception) {}
+
+        val inputStream = try {
+            context.contentResolver.openInputStream(uri)
+        } catch (_: Exception) {
+            null
+        }
+
+        if (inputStream == null) {
+            sendResponse(output, 404, "text/plain; charset=UTF-8", "Photo not found".toByteArray(Charsets.UTF_8), isHead)
+            return
+        }
+
+        val disposition = if (isDl) "attachment; filename=\"${fileName.replace("\"", "\\\"")}\"" else "inline"
+        val headerBuilder = StringBuilder()
+            .append("HTTP/1.1 200 OK\r\n")
+            .append("Content-Type: $mimeType\r\n")
+            .append("Content-Disposition: $disposition\r\n")
+            .append("Cache-Control: max-age=3600\r\n")
+        if (fileSize > 0) {
+            headerBuilder.append("Content-Length: $fileSize\r\n")
+        }
+        headerBuilder.append("Connection: close\r\n\r\n")
+
+        output.write(headerBuilder.toString().toByteArray(Charsets.UTF_8))
+        output.flush()
+
+        if (isHead) {
+            inputStream.close()
+            return
+        }
+
+        try {
+            inputStream.use { input ->
+                val buf = ByteArray(64 * 1024)
+                var n: Int
+                while (input.read(buf).also { n = it } != -1) {
+                    output.write(buf, 0, n)
+                }
+                output.flush()
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun servePhotoThumbnail(
+        output: OutputStream,
+        idParam: String?,
+        context: Context,
+        isHead: Boolean
+    ) {
+        val id = idParam?.toLongOrNull()
+        if (id == null) {
+            sendResponse(output, 404, "text/plain; charset=UTF-8", "Photo thumbnail not found".toByteArray(Charsets.UTF_8), isHead)
+            return
+        }
+
+        val safeId = idParam.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+        val thumbsDir = File(context.cacheDir, "http_thumbs")
+        val cachedFile = File(thumbsDir, "p_$safeId.jpg")
+
+        if (cachedFile.exists() && cachedFile.length() > 0) {
+            try {
+                val bytes = cachedFile.readBytes()
+                val header = "HTTP/1.1 200 OK\r\n" +
+                        "Content-Type: image/jpeg\r\n" +
+                        "Content-Length: ${bytes.size}\r\n" +
+                        "Cache-Control: max-age=86400\r\n" +
+                        "Connection: close\r\n\r\n"
+                output.write(header.toByteArray(Charsets.UTF_8))
+                if (!isHead) output.write(bytes)
+                output.flush()
+                return
+            } catch (_: Exception) {}
+        }
+
+        val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
+        var bitmap: Bitmap? = null
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                bitmap = context.contentResolver.loadThumbnail(uri, Size(360, 360), null)
+            } catch (e: Throwable) {
+                Log.w(TAG, "Failed loading image thumbnail via loadThumbnail: ${e.message}")
+            }
+        }
+
+        if (bitmap == null) {
+            try {
+                @Suppress("DEPRECATION")
+                bitmap = MediaStore.Images.Thumbnails.getThumbnail(
+                    context.contentResolver,
+                    id,
+                    MediaStore.Images.Thumbnails.MINI_KIND,
+                    null
+                )
+            } catch (e: Throwable) {
+                Log.w(TAG, "Failed loading image thumbnail via MediaStore: ${e.message}")
+            }
+        }
+
+        if (bitmap == null) {
+            try {
+                context.contentResolver.openInputStream(uri)?.use { stream ->
+                    val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeStream(stream, null, options)
+                    var sampleSize = 1
+                    val maxDim = maxOf(options.outWidth, options.outHeight)
+                    while (maxDim / (sampleSize * 2) >= 360) {
+                        sampleSize *= 2
+                    }
+                    context.contentResolver.openInputStream(uri)?.use { stream2 ->
+                        val decodeOpts = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+                        bitmap = BitmapFactory.decodeStream(stream2, null, decodeOpts)
+                    }
+                }
+            } catch (e: Throwable) {
+                Log.w(TAG, "BitmapFactory fallback failed: ${e.message}")
+            }
+        }
+
+        if (bitmap == null) {
+            sendResponse(output, 404, "text/plain; charset=UTF-8", "Photo thumbnail not found".toByteArray(Charsets.UTF_8), isHead)
+            return
+        }
+
+        val baos = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 80, baos)
+        val bytes = baos.toByteArray()
+
+        try {
+            if (!thumbsDir.exists()) thumbsDir.mkdirs()
+            cachedFile.writeBytes(bytes)
+        } catch (_: Exception) {}
+
+        val header = "HTTP/1.1 200 OK\r\n" +
+                "Content-Type: image/jpeg\r\n" +
+                "Content-Length: ${bytes.size}\r\n" +
+                "Cache-Control: max-age=86400\r\n" +
+                "Connection: close\r\n\r\n"
+        output.write(header.toByteArray(Charsets.UTF_8))
+        if (!isHead) output.write(bytes)
+        output.flush()
+    }
+
+    private fun serveApiFs(output: OutputStream, pathParam: String?, context: Context, isHead: Boolean) {
+        val canonicalRoot = try {
+            Environment.getExternalStorageDirectory().canonicalFile
+        } catch (_: Exception) {
+            File("/storage/emulated/0").canonicalFile
+        }
+        val canonicalRootPath = canonicalRoot.canonicalPath
+
+        val targetFile = try {
+            if (pathParam.isNullOrBlank()) canonicalRoot else File(pathParam).canonicalFile
+        } catch (_: Exception) {
+            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"forbidden\"}".toByteArray(Charsets.UTF_8), isHead)
+            return
+        }
+        val targetPath = targetFile.canonicalPath
+
+        val isUnderRoot = targetPath == canonicalRootPath || targetPath.startsWith(canonicalRootPath + File.separator)
+        if (!isUnderRoot) {
+            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"forbidden\"}".toByteArray(Charsets.UTF_8), isHead)
+            return
+        }
+
+        val androidDir = File(canonicalRoot, "Android").canonicalPath
+        val isAndroidDir = targetPath == androidDir || targetPath.startsWith(androidDir + File.separator)
+        if (isAndroidDir) {
+            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"forbidden\"}".toByteArray(Charsets.UTF_8), isHead)
+            return
+        }
+
+        if (!targetFile.exists() || !targetFile.isDirectory) {
+            sendResponse(output, 404, "application/json; charset=UTF-8", "{\"error\":\"not_found\"}".toByteArray(Charsets.UTF_8), isHead)
+            return
+        }
+
+        val fileList = try {
+            targetFile.listFiles()
+        } catch (_: Exception) {
+            null
+        }
+        if (fileList == null) {
+            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"no_access\"}".toByteArray(Charsets.UTF_8), isHead)
+            return
+        }
+
+        val visibleList = fileList.filter { !it.name.startsWith(".") }
+        val dirs = visibleList.filter { it.isDirectory }.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+        val files = visibleList.filter { it.isFile }.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+        val allItems = dirs + files
+
+        val parentPath = if (targetPath == canonicalRootPath) null else targetFile.parentFile?.canonicalPath
+
+        val json = StringBuilder()
+        json.append("{")
+        json.append("\"root\":${jsonEscape(canonicalRootPath)},")
+        json.append("\"path\":${jsonEscape(targetPath)},")
+        json.append("\"parent\":${if (parentPath == null) "null" else jsonEscape(parentPath)},")
+        json.append("\"items\":[")
+        allItems.forEachIndexed { idx, it ->
+            val isDir = it.isDirectory
+            val size = if (isDir) 0L else it.length()
+            val mtime = it.lastModified()
+            val kind = if (isDir) "other" else getFileKind(it.extension)
+            val count = if (isDir) {
+                try {
+                    it.listFiles()?.count { child -> !child.name.startsWith(".") }
+                } catch (_: Exception) {
+                    null
+                }
+            } else null
+            json.append("{")
+            json.append("\"name\":${jsonEscape(it.name)},")
+            json.append("\"path\":${jsonEscape(it.canonicalPath)},")
+            json.append("\"dir\":$isDir,")
+            json.append("\"size\":$size,")
+            json.append("\"mtime\":$mtime,")
+            json.append("\"kind\":${jsonEscape(kind)},")
+            json.append("\"count\":${count ?: "null"}")
+            json.append("}")
+            if (idx < allItems.size - 1) json.append(",")
+        }
+        json.append("]")
+        json.append("}")
+
+        sendResponse(output, 200, "application/json; charset=UTF-8", json.toString().toByteArray(Charsets.UTF_8), isHead)
+    }
+
+    private fun serveFsFile(
+        output: OutputStream,
+        pathParam: String?,
+        rangeHeader: String?,
+        isDl: Boolean,
+        context: Context,
+        isHead: Boolean
+    ) {
+        if (pathParam.isNullOrBlank()) {
+            sendResponse(output, 404, "text/plain; charset=UTF-8", "Path missing".toByteArray(Charsets.UTF_8), isHead)
+            return
+        }
+        val canonicalRoot = try {
+            Environment.getExternalStorageDirectory().canonicalFile
+        } catch (_: Exception) {
+            File("/storage/emulated/0").canonicalFile
+        }
+        val canonicalRootPath = canonicalRoot.canonicalPath
+
+        val targetFile = try {
+            File(pathParam).canonicalFile
+        } catch (_: Exception) {
+            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"forbidden\"}".toByteArray(Charsets.UTF_8), isHead)
+            return
+        }
+        val targetPath = targetFile.canonicalPath
+
+        val isUnderRoot = targetPath == canonicalRootPath || targetPath.startsWith(canonicalRootPath + File.separator)
+        if (!isUnderRoot) {
+            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"forbidden\"}".toByteArray(Charsets.UTF_8), isHead)
+            return
+        }
+
+        val androidDir = File(canonicalRoot, "Android").canonicalPath
+        val isAndroidDir = targetPath == androidDir || targetPath.startsWith(androidDir + File.separator)
+        if (isAndroidDir) {
+            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"forbidden\"}".toByteArray(Charsets.UTF_8), isHead)
+            return
+        }
+
+        if (!targetFile.exists() || !targetFile.isFile) {
+            sendResponse(output, 404, "text/plain; charset=UTF-8", "File not found".toByteArray(Charsets.UTF_8), isHead)
+            return
+        }
+
+        val totalLength = targetFile.length()
+        var startByte = 0L
+        var endByte = if (totalLength > 0) totalLength - 1 else Long.MAX_VALUE
+        var isPartial = false
+
+        if (!rangeHeader.isNullOrBlank() && rangeHeader.startsWith("bytes=")) {
+            val rangeVal = rangeHeader.removePrefix("bytes=").trim()
+            val dashIdx = rangeVal.indexOf('-')
+            if (dashIdx != -1) {
+                val startStr = rangeVal.substring(0, dashIdx).trim()
+                val endStr = rangeVal.substring(dashIdx + 1).trim()
+                try {
+                    if (startStr.isNotEmpty()) startByte = startStr.toLong()
+                    if (endStr.isNotEmpty()) endByte = endStr.toLong()
+                    if (totalLength > 0 && endByte >= totalLength) endByte = totalLength - 1
+                    isPartial = true
+                } catch (_: Exception) {}
+            }
+        }
+
+        val contentLength = if (totalLength > 0) (endByte - startByte + 1).coerceAtLeast(0) else -1L
+        val status = if (isPartial && totalLength > 0) "206 Partial Content" else "200 OK"
+        val mime = getMimeTypeByExtension(targetFile.extension)
+        val disposition = if (isDl) "attachment; filename=\"${targetFile.name.replace("\"", "\\\"")}\"" else "inline"
+
+        val headerBuilder = StringBuilder()
+            .append("HTTP/1.1 $status\r\n")
+            .append("Content-Type: $mime\r\n")
+            .append("Accept-Ranges: bytes\r\n")
+            .append("Content-Disposition: $disposition\r\n")
+
+        if (totalLength > 0) {
+            headerBuilder.append("Content-Length: $contentLength\r\n")
+            if (isPartial) {
+                headerBuilder.append("Content-Range: bytes $startByte-$endByte/$totalLength\r\n")
+            }
+        }
+        headerBuilder.append("Connection: keep-alive\r\n\r\n")
+
+        output.write(headerBuilder.toString().toByteArray(Charsets.UTF_8))
+        output.flush()
+
+        if (isHead) return
+
+        var inputStream: InputStream? = null
+        try {
+            inputStream = FileInputStream(targetFile)
+            if (startByte > 0) {
+                var skipped = 0L
+                while (skipped < startByte) {
+                    val s = inputStream.skip(startByte - skipped)
+                    if (s <= 0) break
+                    skipped += s
+                }
+            }
+            val buffer = ByteArray(64 * 1024)
+            var bytesToRead = if (totalLength > 0) contentLength else Long.MAX_VALUE
+            while (bytesToRead > 0) {
+                val toRead = if (bytesToRead > buffer.size) buffer.size else bytesToRead.toInt()
+                val read = inputStream.read(buffer, 0, toRead)
+                if (read == -1) break
+                output.write(buffer, 0, read)
+                bytesToRead -= read
+            }
+            output.flush()
+        } catch (_: Exception) {
+        } finally {
+            try { inputStream?.close() } catch (_: Exception) {}
+        }
+    }
+
     private fun sendHtmlIndex(output: OutputStream, files: List<HttpMediaFile>, context: Context, isHead: Boolean) {
         val totalVideos = files.count { it.isVideo }
         val totalAudio = files.count { !it.isVideo }
+        val totalPhotos = getPhotoCount(context)
         val folderSetting = HttpServerConfig.getBroadcastFolder(context)
 
         val totalBytes = files.sumOf { it.sizeBytes }
@@ -825,11 +1410,11 @@ object LocalHttpShareServer {
         jsonBuilder.append("\"online\":true,")
         jsonBuilder.append("\"authRequired\":${HttpServerConfig.isAuthRequired(context)},")
         jsonBuilder.append("\"folder\":${jsonEscape(folderSetting.title)},")
-        jsonBuilder.append("\"features\":{\"photos\":false,\"folders\":false},")
+        jsonBuilder.append("\"features\":{\"photos\":true,\"folders\":true},")
         jsonBuilder.append("\"stats\":{")
         jsonBuilder.append("\"videos\":$totalVideos,")
         jsonBuilder.append("\"audio\":$totalAudio,")
-        jsonBuilder.append("\"photos\":0,")
+        jsonBuilder.append("\"photos\":$totalPhotos,")
         jsonBuilder.append("\"storage\":${jsonEscape(storageStr)}")
         jsonBuilder.append("},")
         jsonBuilder.append("\"files\":$filesJson")
@@ -1056,6 +1641,60 @@ object LocalHttpShareServer {
         """.trimIndent()
     }
 
+    private fun getPhotoCount(context: Context): Int {
+        return try {
+            val cursor = context.contentResolver.query(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                arrayOf(MediaStore.Images.Media._ID),
+                null,
+                null,
+                null
+            )
+            cursor?.use { it.count } ?: 0
+        } catch (_: Exception) {
+            0
+        }
+    }
+
+    private fun getFileKind(ext: String): String {
+        val e = ext.lowercase()
+        return when (e) {
+            in listOf("mp4", "mkv", "avi", "mov", "webm", "3gp", "m4v", "ts") -> "video"
+            in listOf("mp3", "m4a", "flac", "wav", "ogg", "aac", "opus") -> "audio"
+            in listOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "heic") -> "photo"
+            else -> "other"
+        }
+    }
+
+    private fun getMimeTypeByExtension(ext: String): String {
+        return when (ext.lowercase()) {
+            "mp4" -> "video/mp4"
+            "mkv" -> "video/x-matroska"
+            "webm" -> "video/webm"
+            "avi" -> "video/x-msvideo"
+            "mov" -> "video/quicktime"
+            "3gp" -> "video/3gpp"
+            "m4v" -> "video/x-m4v"
+            "ts" -> "video/mp2t"
+            "mp3" -> "audio/mpeg"
+            "m4a" -> "audio/mp4"
+            "wav" -> "audio/wav"
+            "ogg" -> "audio/ogg"
+            "flac" -> "audio/flac"
+            "aac" -> "audio/aac"
+            "opus" -> "audio/opus"
+            "jpg", "jpeg" -> "image/jpeg"
+            "png" -> "image/png"
+            "gif" -> "image/gif"
+            "webp" -> "image/webp"
+            "bmp" -> "image/bmp"
+            "heic" -> "image/heic"
+            "pdf" -> "application/pdf"
+            "txt" -> "text/plain; charset=UTF-8"
+            else -> "application/octet-stream"
+        }
+    }
+
     private fun jsonEscape(str: String): String {
         val out = StringBuilder("\"")
         for (ch in str) {
@@ -1092,14 +1731,29 @@ object LocalHttpShareServer {
         }
     }
 
-    private fun sendResponse(output: OutputStream, code: Int, contentType: String, data: ByteArray) {
-        val statusText = if (code == 200) "OK" else if (code == 404) "Not Found" else "Error"
+    private fun sendResponse(
+        output: OutputStream,
+        code: Int,
+        contentType: String,
+        data: ByteArray,
+        isHead: Boolean = false
+    ) {
+        val statusText = when (code) {
+            200 -> "OK"
+            401 -> "Unauthorized"
+            403 -> "Forbidden"
+            404 -> "Not Found"
+            405 -> "Method Not Allowed"
+            else -> "Error"
+        }
         val header = "HTTP/1.1 $code $statusText\r\n" +
                 "Content-Type: $contentType\r\n" +
                 "Content-Length: ${data.size}\r\n" +
                 "Connection: close\r\n\r\n"
         output.write(header.toByteArray(Charsets.UTF_8))
-        output.write(data)
+        if (!isHead) {
+            output.write(data)
+        }
         output.flush()
     }
 
