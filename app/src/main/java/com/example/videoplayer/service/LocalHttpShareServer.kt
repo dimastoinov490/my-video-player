@@ -336,8 +336,7 @@ object LocalHttpShareServer {
                         if (authRequired && !authorized) {
                             send401WithoutAuth(output)
                         } else {
-                            val json = "{\"status\":\"running\",\"port\":$currentPort,\"auth\":$authRequired}"
-                            sendResponse(output, 200, "application/json; charset=UTF-8", json.toByteArray(Charsets.UTF_8), isHead)
+                            serveApiStatus(output, context, isHead)
                         }
                     }
                     decodedPath.startsWith("/api/") -> {
@@ -1411,6 +1410,13 @@ object LocalHttpShareServer {
         jsonBuilder.append("\"authRequired\":${HttpServerConfig.isAuthRequired(context)},")
         jsonBuilder.append("\"folder\":${jsonEscape(folderSetting.title)},")
         jsonBuilder.append("\"features\":{\"photos\":true,\"folders\":true},")
+        val wifiSignal = getWifiSignal(context)
+        val wifiJson = if (wifiSignal.level != null) {
+            "{\"level\":${wifiSignal.level},\"rssi\":${wifiSignal.rssi}}"
+        } else {
+            "{\"level\":null,\"rssi\":null}"
+        }
+        jsonBuilder.append("\"wifi\":$wifiJson,")
         jsonBuilder.append("\"stats\":{")
         jsonBuilder.append("\"videos\":$totalVideos,")
         jsonBuilder.append("\"audio\":$totalAudio,")
@@ -1784,5 +1790,65 @@ object LocalHttpShareServer {
         } catch (_: Throwable) {}
 
         return "127.0.0.1"
+    }
+
+    data class WifiSignal(val level: Int?, val rssi: Int?)
+
+    @Volatile
+    private var cachedWifiSignal: WifiSignal? = null
+    @Volatile
+    private var cachedWifiSignalTime: Long = 0L
+
+    @Synchronized
+    private fun getWifiSignal(context: Context): WifiSignal {
+        val now = System.currentTimeMillis()
+        val cached = cachedWifiSignal
+        if (cached != null && now - cachedWifiSignalTime < 1000L) {
+            return cached
+        }
+
+        var signal = WifiSignal(level = null, rssi = null)
+        try {
+            val wm = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            val info = wm?.connectionInfo
+            if (info != null) {
+                val rssi = info.rssi
+                if (info.networkId == -1 || rssi <= -127) {
+                    signal = WifiSignal(level = null, rssi = null)
+                } else {
+                    @Suppress("DEPRECATION")
+                    val level = WifiManager.calculateSignalLevel(rssi, 5)
+                    signal = WifiSignal(level = level.coerceIn(0, 4), rssi = rssi)
+                }
+            }
+        } catch (_: Exception) {
+            signal = WifiSignal(level = null, rssi = null)
+        }
+
+        cachedWifiSignal = signal
+        cachedWifiSignalTime = now
+        return signal
+    }
+
+    private fun serveApiStatus(output: OutputStream, context: Context, isHead: Boolean) {
+        val signal = getWifiSignal(context)
+        val timeMs = System.currentTimeMillis()
+        val wifiJson = if (signal.level != null) {
+            "{\"level\":${signal.level},\"rssi\":${signal.rssi}}"
+        } else {
+            "{\"level\":null,\"rssi\":null}"
+        }
+        val json = "{\"ok\":true,\"online\":true,\"time\":$timeMs,\"wifi\":$wifiJson}"
+        val data = json.toByteArray(Charsets.UTF_8)
+        val header = "HTTP/1.1 200 OK\r\n" +
+                "Content-Type: application/json; charset=UTF-8\r\n" +
+                "Cache-Control: no-store\r\n" +
+                "Content-Length: ${data.size}\r\n" +
+                "Connection: close\r\n\r\n"
+        output.write(header.toByteArray(Charsets.UTF_8))
+        if (!isHead) {
+            output.write(data)
+        }
+        output.flush()
     }
 }

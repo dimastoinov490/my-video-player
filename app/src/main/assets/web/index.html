@@ -15,7 +15,7 @@
    без них показываются демо-данные.
    Нижняя панель: стеклянная «плашка» плавно переезжает между вкладками, разделы плавно сменяют друг друга.
    =========================================================================== */
-:root{--o1:#ffb020;--o2:#ff8a00;--o3:#ff6a00;--green:#2fe05d;--muted:#d6cfc7;--gray:#9b9792}
+:root{--o1:#ffb020;--o2:#ff8a00;--o3:#ff6a00;--green:#2fe05d;--muted:#d6cfc7;--gray:#9b9792;--wifi:#2f6bff;--wifitext:#5b92ff}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;background:#080604;overflow:hidden;color:#fff;font-family:"Roboto","Inter","Segoe UI",system-ui,-apple-system,sans-serif}
 svg{display:block}.ico{width:1em;height:1em;flex:none}
@@ -40,8 +40,11 @@ a{color:inherit;text-decoration:none}
 .brand svg{width:30px;height:32px;filter:drop-shadow(0 0 5px rgba(255,138,0,.55))}
 .brand .a{color:var(--o2)}.brand .b{color:#fff}
 .status{margin-left:auto;position:relative}
-.status button{display:flex;align-items:center;gap:9px;color:var(--green);font-size:13.5px;font-weight:500}
-.status .wifi{width:27px;height:27px;filter:drop-shadow(0 0 4px rgba(47,224,93,.5))}
+.status button{display:flex;align-items:center;gap:9px;color:var(--wifitext);font-size:13.5px;font-weight:500}
+.status .wifi{width:27px;height:27px;filter:drop-shadow(0 0 4px rgba(47,107,255,.55))}
+.wifi .p{stroke:rgba(255,255,255,.20);transition:stroke .5s}.wifi .p.on{stroke:var(--wifi)}
+.wifi .d{fill:rgba(255,255,255,.20);transition:fill .5s}.wifi .d.on{fill:var(--wifi)}
+.status.off .wifi .p.on{stroke:#ff6b4a}.status.off .wifi .d.on{fill:#ff6b4a}
 .status .chev{width:14px;height:14px;color:#fff;margin-left:4px}
 .status.off button{color:#ff6b4a}
 .pop{position:absolute;right:0;top:calc(100% + 6px);min-width:190px;padding:10px 12px;border-radius:12px;background:#150b05;border:1px solid rgba(255,138,0,.4);box-shadow:0 10px 24px rgba(0,0,0,.6);font-size:11.5px;color:#e9ddd0;display:none;z-index:30}
@@ -188,6 +191,28 @@ body.rot .pane{touch-action:none}
 .pic .ph{position:absolute;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;color:rgba(255,138,0,.5);font-size:24px}
 .pbox img.big{display:block;width:100%;max-height:270px;object-fit:contain;background:#000}
 
+
+/* ---------- объёмные карточки (Видео, Аудио, Фото, Папки): грани, глубина, анимация при прокрутке ---------- */
+.i3d{transform-origin:50% 50%;transition:border-color .25s,box-shadow .25s,background .25s,filter .25s !important}
+.row.i3d{
+  background:linear-gradient(180deg,rgba(255,255,255,.09),rgba(255,255,255,.028) 46%,rgba(0,0,0,.26));
+  border:1px solid rgba(255,255,255,.10);border-top-color:rgba(255,255,255,.24);border-bottom-color:rgba(0,0,0,.55);
+  box-shadow:0 11px 16px -7px rgba(0,0,0,.75),0 3px 0 rgba(0,0,0,.38),inset 0 1px 0 rgba(255,255,255,.16),inset 0 -12px 16px -9px rgba(0,0,0,.5),inset 0 0 0 1px rgba(255,138,0,.04);
+  will-change:transform,opacity}
+.row.i3d:hover{border-color:rgba(255,138,0,.55);border-top-color:rgba(255,170,70,.7);background:linear-gradient(180deg,rgba(255,138,0,.14),rgba(255,138,0,.04) 46%,rgba(0,0,0,.26));
+  box-shadow:0 11px 16px -7px rgba(0,0,0,.75),0 3px 0 rgba(0,0,0,.38),0 0 16px rgba(255,120,0,.22),inset 0 1px 0 rgba(255,200,120,.3),inset 0 -12px 16px -9px rgba(0,0,0,.5)}
+.row.i3d .thumb{box-shadow:0 7px 10px -4px rgba(0,0,0,.8),0 2px 0 rgba(0,0,0,.4),inset 0 0 0 1px rgba(255,255,255,.14),inset 0 9px 10px -7px rgba(255,255,255,.18),inset 0 -13px 14px -8px rgba(0,0,0,.55)}
+.row.i3d .btn-w,.row.i3d .btn-d{box-shadow:0 5px 8px -3px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,200,120,.25),inset 0 -6px 8px -5px rgba(0,0,0,.4)}
+.album.i3d,.pic.i3d{border:1px solid rgba(255,255,255,.14);border-top-color:rgba(255,255,255,.30);border-bottom-color:rgba(0,0,0,.6);
+  box-shadow:0 13px 18px -8px rgba(0,0,0,.8),0 3px 0 rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.28)}
+.album.i3d:hover,.pic.i3d:hover{transform:none;border-color:rgba(255,138,0,.75);filter:brightness(1.12);box-shadow:0 13px 18px -8px rgba(0,0,0,.8),0 3px 0 rgba(0,0,0,.45),0 0 18px rgba(255,120,0,.3),inset 0 1px 0 rgba(255,200,120,.4)}
+.pic.i3d:before,.album.i3d:before{content:"";position:absolute;left:0;right:0;top:0;height:38%;z-index:3;pointer-events:none;border-radius:inherit;background:linear-gradient(180deg,rgba(255,255,255,.17),transparent)}
+.pic.i3d:after{content:"";position:absolute;left:0;top:0;right:0;bottom:0;z-index:3;pointer-events:none;border-radius:inherit;box-shadow:inset 0 0 16px rgba(0,0,0,.55),inset 0 -14px 16px -10px rgba(0,0,0,.45)}
+.album.i3d{will-change:auto}
+@keyframes rise3d{from{opacity:0;transform:perspective(700px) translateY(18px) rotateX(-18deg) scale(.95)}to{opacity:1;transform:perspective(700px) translateY(0) rotateX(0) scale(1)}}
+.i3d.in{animation:rise3d .6s cubic-bezier(.22,1,.36,1) backwards;animation-delay:calc(var(--n,0)*40ms)}
+@media (prefers-reduced-motion:reduce){.i3d.in{animation:none}}
+
 /* ---------- боковое меню ---------- */
 .scrim{position:absolute;inset:0;z-index:40;background:rgba(0,0,0,.6);opacity:0;pointer-events:none;transition:opacity .3s}.scrim.show{opacity:1;pointer-events:auto}
 .drawer{position:absolute;left:0;top:0;bottom:0;width:230px;z-index:41;transform:translateX(-102%);transition:transform .45s cubic-bezier(.22,1,.36,1);background:linear-gradient(180deg,#120905,#080403);border-right:1px solid rgba(255,138,0,.4);padding:16px 12px}
@@ -260,8 +285,8 @@ body.rot .pane{touch-action:none}
   <button class="menu" id="menuBtn" aria-label="Меню"><i></i><i></i><i></i></button>
   <div class="brand"><svg><use href="#logo-o" xlink:href="#logo-o"/></svg><span><span class="a">Nexora</span> <span class="b">Media</span></span></div>
   <div class="status" id="status">
-    <button id="statusBtn" aria-label="Состояние сервера"><svg class="wifi"><use href="#i-wifi" xlink:href="#i-wifi"/></svg><span id="statusTxt">Сервер онлайн</span><svg class="chev"><use href="#i-chev" xlink:href="#i-chev"/></svg></button>
-    <div class="pop" id="pop"><b>Адрес сервера</b><span id="popAddr"></span></div>
+    <button id="statusBtn" aria-label="Состояние сервера"><svg class="wifi" viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round"><path id="wf3" class="p" d="M2.5 9a15 15 0 0 1 19 0"/><path id="wf2" class="p" d="M5.5 12.5a10.5 10.5 0 0 1 13 0"/><path id="wf1" class="p" d="M8.7 16a6 6 0 0 1 6.6 0"/><circle id="wfd" class="d" cx="12" cy="19.4" r="1.5"/></svg><span id="statusTxt">Сервер онлайн</span><svg class="chev"><use href="#i-chev" xlink:href="#i-chev"/></svg></button>
+    <div class="pop" id="pop"><b>Адрес сервера</b><span id="popAddr"></span><b style="margin-top:7px">Сигнал Wi-Fi</b><span id="popSig">-</span></div>
   </div>
 </header>
 
@@ -405,9 +430,9 @@ if(D.authRequired) $('logout').style.display='flex';
 function thumbHtml(f){
   return f.isVideo ? '<img loading="lazy" alt="" src="/thumb?id='+encodeURIComponent(f.id)+'" onerror="this.remove()">'+ic('play-s') : ic('music');
 }
-function rowHtml(f){
+function rowHtml(f,i){
   var dur=f.dur?'<span>'+ic('clock')+esc(f.dur)+'</span>':'';
-  return '<div class="row"><div class="thumb">'+thumbHtml(f)+'</div><div class="meta"><b title="'+esc(f.name)+'">'+esc(f.title)+'</b>'+
+  return '<div class="row i3d in" style="--n:'+Math.min(i||0,12)+'"><div class="thumb">'+thumbHtml(f)+'</div><div class="meta"><b title="'+esc(f.name)+'">'+esc(f.title)+'</b>'+
     '<small><span>'+ic('save')+esc(f.size)+'</span>'+dur+'</small></div><div class="act">'+
     '<button class="btn-w" data-play="'+esc(f.id)+'">'+ic('play-s')+'<span>'+(f.isVideo?'Смотреть':'Слушать')+'</span></button>'+
     '<a class="btn-d" href="/download?id='+encodeURIComponent(f.id)+'" download="'+esc(f.name)+'" aria-label="Скачать">'+ic('dl')+'</a></div></div>';
@@ -417,6 +442,7 @@ function renderList(listEl,data,q,emptyIcon,emptyText){
   q=(q||'').toLowerCase().trim();
   var r=data.filter(function(f){return !q||String(f.title).toLowerCase().indexOf(q)>-1||String(f.name).toLowerCase().indexOf(q)>-1;});
   listEl.innerHTML=r.length? r.map(rowHtml).join('') : emptyHtml(emptyIcon,q?'Ничего не найдено':emptyText);
+  after3d(listEl);
 }
 renderList($('lV'),videos,'','clap','Видео пока нет'); renderList($('lA'),audios,'','music','Аудио пока нет');
 $('qV').addEventListener('input',function(){renderList($('lV'),videos,this.value,'clap','Видео пока нет');});
@@ -463,9 +489,10 @@ function loadAlbums(){
     PH.albums=j.albums||[];
     var total=0; PH.albums.forEach(function(a){total+=a.count||0;});
     if(!(D.stats&&D.stats.photos!=null)) $('stP').textContent=total;
-    $('lP').innerHTML=PH.albums.length? '<div class="albums">'+PH.albums.map(function(a){
-      return '<button class="album" data-album="'+esc(a.id)+'" data-name="'+esc(a.name)+'"><img loading="lazy" alt="" src="/photo?id='+encodeURIComponent(a.cover)+'&thumb=1" onerror="this.remove()"><div class="ph">'+ic('image')+'</div><div class="an"><b>'+esc(a.name)+'</b><small>'+a.count+' фото</small></div></button>';
+    $('lP').innerHTML=PH.albums.length? '<div class="albums">'+PH.albums.map(function(a,i){
+      return '<button class="album i3d in" style="--n:'+Math.min(i,12)+'" data-album="'+esc(a.id)+'" data-name="'+esc(a.name)+'"><img loading="lazy" alt="" src="/photo?id='+encodeURIComponent(a.cover)+'&thumb=1" onerror="this.remove()"><div class="ph">'+ic('image')+'</div><div class="an"><b>'+esc(a.name)+'</b><small>'+a.count+' фото</small></div></button>';
     }).join('')+'</div>' : emptyHtml('image','Фото не найдены');
+    after3d($('lP'));
   }).catch(function(){ $('lP').innerHTML=emptyHtml('image','Не удалось загрузить фото. Проверьте, что приложению разрешён доступ к фото.'); });
 }
 function openAlbum(id,name){
@@ -473,9 +500,10 @@ function openAlbum(id,name){
   api('/api/photos?album='+encodeURIComponent(id)).then(function(j){
     PH.items=j.items||[];
     $('lP').innerHTML=PH.items.length? '<div class="photos">'+PH.items.map(function(f,i){
-      return '<button class="pic" data-photo="'+i+'"><img loading="lazy" alt="" src="/photo?id='+encodeURIComponent(f.id)+'&thumb=1" onerror="this.remove()"><div class="ph">'+ic('image')+'</div></button>';
+      return '<button class="pic i3d in" style="--n:'+Math.min(i,16)+'" data-photo="'+i+'"><img loading="lazy" alt="" src="/photo?id='+encodeURIComponent(f.id)+'&thumb=1" onerror="this.remove()"><div class="ph">'+ic('image')+'</div></button>';
     }).join('')+'</div>' : emptyHtml('image','В альбоме нет фото');
     var p=$('v-photos'); if(p) p.scrollTop=0;
+    after3d($('lP'));
   }).catch(function(){ $('lP').innerHTML=emptyHtml('image','Не удалось открыть альбом'); });
 }
 
@@ -498,16 +526,17 @@ function renderDir(j){
   $('crumbs').innerHTML=h;
   $('lF').innerHTML=FS.items.length? FS.items.map(fsRow).join('') : emptyHtml('folder','Папка пуста');
   var p=$('v-folders'); if(p) p.scrollTop=0;
+  after3d($('lF'));
 }
 function kindIcon(k){return k==='video'?'clap':k==='audio'?'music':k==='photo'?'image':'file';}
 function fsRow(it,i){
-  if(it.dir) return '<div class="row clickable" data-fs="'+esc(it.path)+'"><div class="thumb">'+ic('folder')+'</div><div class="meta"><b>'+esc(it.name)+'</b><small><span>'+(it.count!=null?it.count+' элементов':'Папка')+'</span></small></div><div class="act" style="color:var(--o2);font-size:18px">'+ic('arrow')+'</div></div>';
+  if(it.dir) return '<div class="row i3d in clickable" style="--n:'+Math.min(i||0,12)+'" data-fs="'+esc(it.path)+'"><div class="thumb">'+ic('folder')+'</div><div class="meta"><b>'+esc(it.name)+'</b><small><span>'+(it.count!=null?it.count+' элементов':'Папка')+'</span></small></div><div class="act" style="color:var(--o2);font-size:18px">'+ic('arrow')+'</div></div>';
   var u='/file?path='+encodeURIComponent(it.path), open='';
   if(it.kind==='video'||it.kind==='audio'||it.kind==='photo'){
     open='<button class="btn-w" data-fopen="'+i+'">'+ic(it.kind==='photo'?'image':'play-s')+'<span>'+(it.kind==='video'?'Смотреть':it.kind==='audio'?'Слушать':'Открыть')+'</span></button>';
   }
   var thumb=it.kind==='photo'? '<img loading="lazy" alt="" src="'+u+'" onerror="this.remove()">'+ic('image') : ic(kindIcon(it.kind));
-  return '<div class="row"><div class="thumb">'+thumb+'</div><div class="meta"><b title="'+esc(it.name)+'">'+esc(it.name)+'</b><small><span>'+ic('save')+fmtSize(it.size)+'</span></small></div><div class="act">'+open+
+  return '<div class="row i3d in" style="--n:'+Math.min(i||0,12)+'"><div class="thumb">'+thumb+'</div><div class="meta"><b title="'+esc(it.name)+'">'+esc(it.name)+'</b><small><span>'+ic('save')+fmtSize(it.size)+'</span></small></div><div class="act">'+open+
     '<a class="btn-d" href="'+u+'&dl=1" download="'+esc(it.name)+'" aria-label="Скачать">'+ic('dl')+'</a></div></div>';
 }
 
@@ -578,6 +607,7 @@ function go(name){
     p.classList.toggle('on',k===i); if(k===i) p.scrollTop=0;
   });
   moveGlass(i,false);
+  setTimeout(function(){ refresh3d($('v-'+name)); },120);
   if(name==='photos') loadAlbums();
   if(name==='folders') loadDir(FS.path);
   if(location.hash!=='#'+name) history.replaceState(null,'','#'+name);
@@ -638,6 +668,59 @@ var rotated=false, curScale=1, suppressClick=0;
   document.addEventListener('click',function(e){ if(Date.now()<suppressClick){ e.stopPropagation(); e.preventDefault(); } },true);
 })();
 
+/* ---------- объёмная анимация при прокрутке: карточки у краёв наклоняются и уходят вглубь ---------- */
+var REDUCE=!!(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches);
+function prep3d(p){
+  var items=p.querySelectorAll('.i3d'); p._i3=[];
+  for(var i=0;i<items.length;i++){ p._i3.push({el:items[i],y:items[i].offsetTop+items[i].offsetHeight/2,on:false}); }
+}
+function tilt3d(p){
+  if(REDUCE||!p._i3) return;
+  var h=p.clientHeight||1, mid=p.scrollTop+h/2, half=h/2, list=p._i3;
+  for(var i=0;i<list.length;i++){
+    var o=list[i], t=(o.y-mid)/half, a=Math.abs(t);
+    if(a>1.5){ if(o.on){ o.el.style.transform=''; o.el.style.opacity=''; o.on=false; } continue; }
+    o.on=true; var ty=t>1?1:(t<-1?-1:t);
+    o.el.style.transform='perspective(700px) rotateX('+(-ty*11).toFixed(2)+'deg) translateZ('+(-a*16).toFixed(1)+'px) scale('+(1-a*0.045).toFixed(3)+')';
+    o.el.style.opacity=(1-Math.max(0,a-0.62)*0.42).toFixed(2);
+  }
+}
+function refresh3d(p){ if(!p) return; prep3d(p); tilt3d(p); }
+function after3d(el){ var p=el; while(p&&!(p.classList&&p.classList.contains('pane'))) p=p.parentNode; if(!p) return; setTimeout(function(){ refresh3d(p); },80); }
+Array.prototype.forEach.call(document.querySelectorAll('.pane'),function(p){
+  var raf=0; p.addEventListener('scroll',function(){ if(raf) return; raf=requestAnimationFrame(function(){ raf=0; tilt3d(p); }); },{passive:true});
+});
+
+/* ---------- уровень сигнала Wi-Fi: данные от приложения (/api/status -> wifi.level 0-4), иначе по задержке связи ---------- */
+var SIGTXT=['Нет сигнала','Слабый','Средний','Хороший','Отличный'], failCount=0;
+function setWifi(level,info){
+  level=Math.max(0,Math.min(4,level|0)); var ids=['wfd','wf1','wf2','wf3'];
+  ids.forEach(function(id,i){ var el=$(id); el.setAttribute('class',(i===0?'d':'p')+(i<level?' on':'')); });
+  var t=SIGTXT[level]; info=info||{};
+  if(info.rssi!=null) t+=' ('+info.rssi+' дБм)'; if(info.rtt!=null) t+=', отклик '+info.rtt+' мс';
+  $('popSig').textContent=t;
+}
+function setOnline(on){
+  $('status').className=on?'status':'status off'; $('statusTxt').textContent=on?'Сервер онлайн':'Нет связи';
+  if(on===false) setWifi(0,{});
+}
+function levelFromRtt(ms){ return ms<35?4:ms<90?3:ms<220?2:1; }
+function nowMs(){ return (window.performance&&performance.now)?performance.now():Date.now(); }
+function pollStatus(){
+  if(DEMO_MODE){ var l=2+Math.round(Math.sin(Date.now()/6000)+1); setWifi(l,{rtt:10+l*3}); return; }
+  var t0=nowMs();
+  fetch('/api/status',{credentials:'same-origin',cache:'no-store'}).then(function(r){
+    if(r.status===401){ location.replace('/'); return null; }
+    return r.json();
+  }).then(function(j){
+    if(!j) return; var rtt=Math.round(nowMs()-t0); failCount=0; setOnline(true);
+    var w=j.wifi||{}, lv=(typeof w.level==='number')? w.level : levelFromRtt(rtt);
+    setWifi(lv,{rtt:rtt,rssi:(typeof w.rssi==='number')?w.rssi:null});
+  }).catch(function(){ failCount++; if(failCount>=2) setOnline(false); });
+}
+if(D.wifi&&typeof D.wifi.level==='number') setWifi(D.wifi.level,{rssi:D.wifi.rssi}); else setWifi(3,{});
+setInterval(pollStatus,4000); pollStatus();
+
 /* ---------- масштаб макета под экран (на телефоне вертикально: поворот на 90°) ---------- */
 var BW=864, BH=411, noRot=/[?&]rotate=0/.test(location.search);
 function fit(){
@@ -649,6 +732,7 @@ function fit(){
   var t=rot? 'translateX('+w+'px) rotate(90deg) scale('+s+')' : 'scale('+s+')';
   cv.style.transform=t; cv.style.webkitTransform=t;
   moveGlass(cur,true);
+  setTimeout(function(){ var p=document.querySelector('.pane.on'); if(p) refresh3d(p); },100);
 }
 window.addEventListener('resize',fit); window.addEventListener('orientationchange',function(){setTimeout(fit,120);});
 fit();
