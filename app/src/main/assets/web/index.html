@@ -213,6 +213,57 @@ body.rot .pane{touch-action:none}
 .i3d.in{animation:rise3d .6s cubic-bezier(.22,1,.36,1) backwards;animation-delay:calc(var(--n,0)*40ms)}
 @media (prefers-reduced-motion:reduce){.i3d.in{animation:none}}
 
+
+/* ---------- настройки: устройства, учётные записи, выбор файлов ---------- */
+.blk-dev,.blk-acc{display:none}
+.set.s-dev .blk-dev,.set.s-acc .blk-acc{display:block}
+.set.s-dev .blk-head,.set.s-dev .blk-card,.set.s-dev .blk-thanks,.set.s-dev .blk-set,.set.s-dev .blk-acc,
+.set.s-acc .blk-head,.set.s-acc .blk-card,.set.s-acc .blk-thanks,.set.s-acc .blk-set,.set.s-acc .blk-dev{display:none}
+.pt{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px}.pt h3{font-size:15px;font-weight:700;color:var(--o2)}.pt small{font-size:11.5px;color:#b9aa9a}
+.note{font-size:11.5px;color:#b9aa9a;line-height:1.5;margin:8px 2px}
+.devs{display:flex;flex-direction:column;gap:9px}
+.dev{display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:15px;
+  background:linear-gradient(180deg,rgba(255,255,255,.09),rgba(255,255,255,.028) 46%,rgba(0,0,0,.26));border:1px solid rgba(255,255,255,.10);border-top-color:rgba(255,255,255,.24);border-bottom-color:rgba(0,0,0,.55);
+  box-shadow:0 11px 16px -7px rgba(0,0,0,.75),0 3px 0 rgba(0,0,0,.38),inset 0 1px 0 rgba(255,255,255,.16),inset 0 -12px 16px -9px rgba(0,0,0,.5)}
+.dev .di{position:relative;flex:none;width:40px;height:40px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:23px;color:var(--o2);
+  background:rgba(255,138,0,.10);border:1px solid rgba(255,138,0,.38);box-shadow:inset 0 1px 0 rgba(255,200,120,.25),0 5px 8px -3px rgba(0,0,0,.7)}
+.dev .di i{position:absolute;right:-3px;bottom:-3px;width:11px;height:11px;border-radius:50%;background:#6b6560;border:2px solid #120a05}
+.dev.on .di i{background:var(--green);box-shadow:0 0 6px var(--green)}
+.dev .dm2{flex:1;min-width:0}
+.dev .dm2 b{display:flex;align-items:center;flex-wrap:wrap;gap:6px;font-size:13.5px;font-weight:600}
+.dev .dm2 small{display:block;font-size:11px;color:#b9aa9a;margin-top:3px;line-height:1.45}
+.bdg{display:inline-block;padding:1px 8px;border-radius:9px;font-size:10px;font-weight:700}
+.bdg.me{background:rgba(255,138,0,.18);color:var(--o1);border:1px solid rgba(255,138,0,.5)}
+.bdg.adm{background:rgba(47,107,255,.18);color:#8fb2ff;border:1px solid rgba(47,107,255,.5)}
+.bdg.usr{background:rgba(255,255,255,.08);color:#d6cfc7;border:1px solid rgba(255,255,255,.2)}
+.bdg.blk{background:rgba(255,80,60,.16);color:#ff8a78;border:1px solid rgba(255,80,60,.5)}
+.btn-danger{display:flex;align-items:center;gap:6px;height:31px;padding:0 13px;border-radius:16px;border:1.2px solid #ff6b4a;background:rgba(255,80,50,.08);color:#ff8a78;font-size:12px;font-weight:600;flex:none}
+.btn-danger:hover{background:rgba(255,80,50,.2)}.btn-danger.ok{border-color:var(--green);color:#7dec9a;background:rgba(47,224,93,.08)}
+.btn-main{display:flex;align-items:center;gap:6px;height:34px;padding:0 18px;border-radius:17px;border:0;background:linear-gradient(180deg,var(--o1),var(--o3));color:#1b0d02;font-size:13px;font-weight:700;box-shadow:0 6px 14px rgba(255,120,0,.3)}
+.btn-main:disabled{filter:grayscale(.6) brightness(.7);cursor:default}
+.fld{display:block;width:100%;height:36px;margin-bottom:9px;border-radius:12px;border:1.2px solid rgba(255,138,0,.4);background:rgba(255,255,255,.05);color:#fff;font-size:13px;padding:0 12px;outline:none;font-family:inherit}
+.fld:focus{border-color:var(--o1)}.fld::placeholder{color:#9d8f82}
+.row[data-fsel]{cursor:pointer}
+.cbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:11px}.cbar .crumbs{margin:0}
+.selbar{position:relative;display:flex;align-items:center;gap:7px;flex:none}
+.selbtn{display:flex;align-items:center;gap:6px;height:28px;padding:0 12px;border-radius:14px;border:1px solid rgba(255,138,0,.45);background:rgba(255,138,0,.08);color:var(--o1);font-size:12px;font-weight:600}
+.selbtn.main{background:linear-gradient(180deg,var(--o1),var(--o3));color:#1b0d02;border-color:var(--o2)}
+.selbtn:disabled{opacity:.45;cursor:default}.selbtn .ico{font-size:14px}
+.mpop{position:absolute;right:0;top:calc(100% + 6px);min-width:176px;padding:6px;border-radius:13px;background:#150b05;border:1px solid rgba(255,138,0,.45);box-shadow:0 12px 26px rgba(0,0,0,.65);z-index:20;display:none}
+.mpop.show{display:block}
+.mpop button{display:flex;align-items:center;gap:9px;width:100%;height:34px;padding:0 12px;border-radius:9px;font-size:13px;color:#e9ddd0;text-align:left}
+.mpop button:hover{background:rgba(255,255,255,.07)}.mpop button.danger{color:#ff8a78}.mpop button:disabled{opacity:.4}.mpop .ico{font-size:16px}
+.chk{flex:none;position:relative;overflow:hidden;width:0;height:20px;margin-right:0;opacity:0;border-radius:6px;border:1.6px solid rgba(255,255,255,.5);background:rgba(0,0,0,.35);
+  transition:width .3s cubic-bezier(.22,1,.36,1),margin .3s,opacity .25s,background .2s,border-color .2s}
+.selmode .chk{width:20px;margin-right:4px;opacity:1}
+.row.sel .chk{background:linear-gradient(180deg,var(--o1),var(--o3));border-color:var(--o2)}
+.row.sel .chk:after{content:"";position:absolute;left:5px;top:1px;width:5px;height:10px;border:solid #1b0d02;border-width:0 2.4px 2.4px 0;transform:rotate(45deg)}
+.row.sel{border-color:rgba(255,138,0,.75) !important}
+.dlg{position:absolute;left:0;top:0;right:0;bottom:0;z-index:80;background:rgba(0,0,0,.72);display:none;align-items:center;justify-content:center;padding:16px}.dlg.show{display:flex}
+.dbox{width:100%;max-width:330px;border-radius:18px;padding:16px;border:1.2px solid rgba(255,138,0,.6);background:linear-gradient(180deg,#1a0e07,#0c0704);box-shadow:0 0 36px rgba(255,110,0,.25)}
+.dbox h4{font-size:15px;margin-bottom:6px}.dbox p{font-size:12.5px;color:#d6cfc7;line-height:1.5;margin-bottom:12px;word-break:break-word}
+.dact{display:flex;justify-content:flex-end;gap:8px;margin-top:4px}
+
 /* ---------- боковое меню ---------- */
 .scrim{position:absolute;inset:0;z-index:40;background:rgba(0,0,0,.6);opacity:0;pointer-events:none;transition:opacity .3s}.scrim.show{opacity:1;pointer-events:auto}
 .drawer{position:absolute;left:0;top:0;bottom:0;width:230px;z-index:41;transform:translateX(-102%);transition:transform .45s cubic-bezier(.22,1,.36,1);background:linear-gradient(180deg,#120905,#080403);border-right:1px solid rgba(255,138,0,.4);padding:16px 12px}
@@ -278,6 +329,15 @@ body.rot .pane{touch-action:none}
   <symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><path d="M6 3h8l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M14 3v5h5M8 13h8M8 17h5"/></symbol>
   <symbol id="i-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.600" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></symbol>
   <symbol id="i-next" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.600" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.500" width="10" height="19" rx="2.500"/><path d="M11 18.500h2"/></symbol>
+  <symbol id="i-tablet" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4.500" y="3" width="15" height="18" rx="2.500"/><path d="M11 18h2"/></symbol>
+  <symbol id="i-pc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.400 3.600-7 8-7s8 2.600 8 7"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.600-3 8.500-7 10-4-1.500-7-5.400-7-10V6z"/></symbol>
+  <symbol id="i-ban" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.200" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M5.600 5.600l12.800 12.800"/></symbol>
+  <symbol id="i-anim" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 12.500l9 5 9-5M3 16.500l9 5 9-5"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19.500 8.500a2.100 2.100 0 0 0-3-3L5 17z"/><path d="M14.500 7.500l3 3"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.400" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></symbol>
 </defs></svg>
 
@@ -330,7 +390,7 @@ body.rot .pane{touch-action:none}
   <!-- ПАПКИ -->
   <section class="pane" id="v-folders"><div class="page">
     <div class="head"><h2><svg class="ico"><use href="#i-folder" xlink:href="#i-folder"/></svg>Папки</h2></div>
-    <div class="crumbs" id="crumbs"></div>
+    <div class="cbar"><div class="crumbs" id="crumbs"></div><div class="selbar" id="selbar"></div></div>
     <div class="list" id="lF"></div>
   </div></section>
 
@@ -339,12 +399,33 @@ body.rot .pane{touch-action:none}
     <div class="set" id="setBox">
       <div class="sub">
         <button class="sm on" data-sub="settings"><svg class="ico"><use href="#i-gear" xlink:href="#i-gear"/></svg>Настройки</button>
+        <button class="sm" data-sub="devices"><svg class="ico"><use href="#i-phone" xlink:href="#i-phone"/></svg>Устройства</button>
+        <button class="sm" data-sub="accounts"><svg class="ico"><use href="#i-user" xlink:href="#i-user"/></svg>Учётные записи</button>
         <button class="sm" data-sub="server"><svg class="ico"><use href="#i-info" xlink:href="#i-info"/></svg>О сервере</button>
         <button class="sm" data-sub="app"><svg class="ico"><use href="#i-star" xlink:href="#i-star"/></svg>О приложении</button>
       </div>
       <div class="set-main">
         <div class="card blk-set">
           <div class="kv" id="fsLine" style="cursor:pointer"><svg class="ico"><use href="#i-full" xlink:href="#i-full"/></svg><div class="kt"><b>Полный экран</b><small>Скрыть строку состояния и кнопки навигации</small></div><button class="sw" id="fsSw" role="switch" aria-checked="false" aria-label="Полный экран"><i></i></button></div>
+          <div class="kv" id="anLine" style="cursor:pointer"><svg class="ico"><use href="#i-anim" xlink:href="#i-anim"/></svg><div class="kt"><b>Анимация прокрутки</b><small>Наклон и отдаление карточек у краёв списка. Объёмный вид остаётся</small></div><button class="sw on" id="anSw" role="switch" aria-checked="true" aria-label="Анимация прокрутки"><i></i></button></div>
+        </div>
+        <div class="blk-dev">
+          <div class="pt"><h3>Подключённые устройства</h3><small id="devCount"></small></div>
+          <div class="devs" id="devs"></div>
+          <p class="note" id="devNote"></p>
+        </div>
+        <div class="blk-acc">
+          <div class="card" style="margin-bottom:12px">
+            <div class="kv"><svg class="ico"><use href="#i-user" xlink:href="#i-user"/></svg><span>Вы вошли как</span><span class="v" id="meName">-</span></div>
+            <div class="kv"><svg class="ico"><use href="#i-shield" xlink:href="#i-shield"/></svg><span>Права</span><span class="v" id="meRole">-</span></div>
+          </div>
+          <div class="pt"><h3>Создать администратора</h3></div>
+          <input class="fld" id="adName" placeholder="Логин администратора" autocomplete="off" autocapitalize="none" spellcheck="false">
+          <input class="fld" id="adPass" type="password" placeholder="Пароль администратора (от 6 символов)" autocomplete="new-password">
+          <input class="fld" id="adSetup" type="password" placeholder="Пароль создания администратора" autocomplete="off">
+          <button class="btn-main" id="adBtn">Создать</button>
+          <p class="note">Без пароля создания администратора учётную запись создать нельзя. Администратор может изменять и удалять файлы и блокировать устройства. Обычный вход даёт только просмотр и скачивание.</p>
+          <div id="adList"></div>
         </div>
         <div class="set-head blk-head"><svg><use href="#logo" xlink:href="#logo"/></svg><div><h2><span class="a">Nexora</span> <span class="b">Media</span></h2><p>Версия <span id="ver">1.0</span></p></div></div>
         <div class="card blk-card">
@@ -369,6 +450,8 @@ body.rot .pane{touch-action:none}
 <aside class="drawer" id="drawer">
   <div class="brand"><svg><use href="#logo-o" xlink:href="#logo-o"/></svg><span><span class="a">Nexora</span> <span class="b">Media</span></span></div>
   <button class="dm on" data-go="settings" data-sub="settings"><svg class="ico"><use href="#i-gear" xlink:href="#i-gear"/></svg>Настройки</button>
+  <button class="dm" data-go="settings" data-sub="devices"><svg class="ico"><use href="#i-phone" xlink:href="#i-phone"/></svg>Устройства</button>
+  <button class="dm" data-go="settings" data-sub="accounts"><svg class="ico"><use href="#i-user" xlink:href="#i-user"/></svg>Учётные записи</button>
   <button class="dm" data-go="settings" data-sub="server"><svg class="ico"><use href="#i-info" xlink:href="#i-info"/></svg>О сервере</button>
   <button class="dm" data-go="settings" data-sub="app"><svg class="ico"><use href="#i-star" xlink:href="#i-star"/></svg>О приложении</button>
 </aside>
@@ -381,6 +464,7 @@ body.rot .pane{touch-action:none}
     <div class="pbar"><button class="btn-d" id="pprev" style="display:none" aria-label="Назад"><svg class="ico"><use href="#i-back" xlink:href="#i-back"/></svg></button><button class="btn-d" id="pnext" style="display:none" aria-label="Вперёд"><svg class="ico"><use href="#i-next" xlink:href="#i-next"/></svg></button><b id="pt"></b><a class="btn-d" id="pd" href="#" download aria-label="Скачать"><svg class="ico"><use href="#i-dl" xlink:href="#i-dl"/></svg></a><button class="btn-d" id="pc" aria-label="Закрыть"><svg class="ico"><use href="#i-x" xlink:href="#i-x"/></svg></button></div>
   </div>
 </div>
+<div class="dlg" id="dlg"><div class="dbox"><h4 id="dT"></h4><p id="dP"></p><input class="fld" id="dI" style="display:none"><div class="dact"><button class="selbtn" id="dNo">Отмена</button><button class="btn-main" id="dYes">OK</button></div></div></div>
 <div class="toast" id="toast"></div>
 </div>
 </div>
@@ -390,7 +474,8 @@ body.rot .pane{touch-action:none}
 /* Сервер заменяет HTML-комментарий-маркер NEXORA_DATA (строка выше) на тег script с присваиванием window.NEXORA = {...}.
    Формат: {version, address, port, online, authRequired, folder, features:{photos,folders},
             stats:{videos,audio,photos,storage}, files:[{id,title,name,size,dur,isVideo,mime,kind,folder}]}
-   kind:'photo' помечает фото, folder — имя папки (по желанию). */
+   kind:'photo' помечает фото, folder — имя папки (по желанию).
+   Дополнительно: me:{role:'user'|'admin',name}, wifi:{level:0-4,rssi}. */
 var DEMO={version:'1.0',address:'http://192.168.1.64:8765',port:8765,online:true,authRequired:true,folder:'Все папки',features:{photos:false,folders:false},
  files:[
   {id:'1',title:'Furious 6',name:'Furious6.mp4',size:'552.4 MB',dur:'2:10:06',isVideo:true},
@@ -452,6 +537,23 @@ $('recent').innerHTML=videos.slice(0,3).map(function(f){
 }).join('') || '<div class="nodata">Видео пока нет</div>';
 /* ---------- запросы к серверу (в демо-режиме без сервера работают встроенные примеры) ---------- */
 var DEMO_MODE=!window.NEXORA;
+var ME=D.me||{role:'user',name:''};
+if(DEMO_MODE) ME={role:/[?&]admin=1/.test(location.search)?'admin':'user',name:'demo'};   /* для просмотра без сервера: ?admin=1 */
+var isAdmin=(ME.role==='admin');
+function post(url,obj){
+  if(DEMO_MODE) return demoPost(url,obj);
+  return fetch(url,{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json','X-Nexora':'1'},body:JSON.stringify(obj||{})}).then(function(r){
+    if(r.status===401){ location.replace('/'); throw new Error('401'); }
+    return r.json().then(function(j){ if(!r.ok){ var e=new Error((j&&j.error)||('HTTP '+r.status)); e.code=j&&j.error; throw e; } return j; });
+  });
+}
+function demoPost(url,obj){
+  return new Promise(function(res,rej){ setTimeout(function(){
+    if(url==='/api/accounts/create-admin' && !obj.setupPassword){ var e=new Error('bad_setup_password'); e.code='bad_setup_password'; return rej(e); }
+    if(url==='/api/fs/delete') return res({deleted:(obj.paths||[]).length,failed:[]});
+    res({ok:true});
+  },200); });
+}
 function fmtSize(n){n=Number(n)||0; if(n>=1073741824) return (n/1073741824).toFixed(1)+' GB'; if(n>=1048576) return (n/1048576).toFixed(1)+' MB'; if(n>=1024) return Math.round(n/1024)+' KB'; return n+' B';}
 function api(url){
   if(DEMO_MODE) return demoApi(url);
@@ -462,6 +564,14 @@ function api(url){
 }
 function demoApi(url){
   return new Promise(function(res){ setTimeout(function(){
+    if(url.indexOf('/api/devices')===0){
+      var n=Date.now();
+      return res({now:n,devices:[
+        {id:'a',name:'Chrome · Android',kind:'phone',ip:'192.168.1.23',account:'demo',role:'user',online:true,me:true,blocked:false,sessionStart:n-12*60000,lastLogin:n-12*60000,firstSeen:n-86400000*3,lastSeen:n},
+        {id:'b',name:'Edge · Windows',kind:'pc',ip:'192.168.1.40',account:'admin',role:'admin',online:true,me:false,blocked:false,sessionStart:n-65*60000,lastLogin:n-65*60000,firstSeen:n-86400000*9,lastSeen:n-2000},
+        {id:'c',name:'Safari · iPad',kind:'tablet',ip:'192.168.1.57',account:'demo',role:'user',online:false,me:false,blocked:true,sessionStart:n-7200000,lastLogin:n-9000000,firstSeen:n-86400000,lastSeen:n-7000000}]});
+    }
+    if(url.indexOf('/api/accounts')===0) return res({accounts:[{name:'admin',created:Date.now()-86400000*2}]});
     if(url.indexOf('/api/photos')===0){
       var m=url.match(/album=([^&]+)/);
       if(!m) return res({albums:[{id:'1',name:'Screenshots',count:14,cover:0},{id:'2',name:'DCIM',count:128,cover:0},{id:'3',name:'Download',count:9,cover:0},{id:'4',name:'Pictures',count:33,cover:0}]});
@@ -520,6 +630,7 @@ function loadDir(path){
 }
 function renderDir(j){
   FS.path=j.path; FS.root=j.root; FS.items=j.items||[];
+  SEL={on:false,set:{}}; $('lF').classList.remove('selmode'); renderSelbar();
   var rel=j.path.indexOf(j.root)===0? j.path.slice(j.root.length):'', parts=rel.split('/').filter(Boolean), acc=j.root;
   var h='<button data-fs="'+esc(j.root)+'">'+ic('folder')+'Память телефона</button>';
   parts.forEach(function(p,i){ acc+='/'+p; h+='<span class="sep">›</span>'+(i===parts.length-1?'<b>'+esc(p)+'</b>':'<button data-fs="'+esc(acc)+'">'+esc(p)+'</button>'); });
@@ -530,13 +641,14 @@ function renderDir(j){
 }
 function kindIcon(k){return k==='video'?'clap':k==='audio'?'music':k==='photo'?'image':'file';}
 function fsRow(it,i){
-  if(it.dir) return '<div class="row i3d in clickable" style="--n:'+Math.min(i||0,12)+'" data-fs="'+esc(it.path)+'"><div class="thumb">'+ic('folder')+'</div><div class="meta"><b>'+esc(it.name)+'</b><small><span>'+(it.count!=null?it.count+' элементов':'Папка')+'</span></small></div><div class="act" style="color:var(--o2);font-size:18px">'+ic('arrow')+'</div></div>';
+  var chk=isAdmin? '<span class="chk"></span>' : '', fsel=isAdmin? ' data-fsel="'+i+'"' : '';
+  if(it.dir) return '<div class="row i3d in clickable" style="--n:'+Math.min(i||0,12)+'" data-fs="'+esc(it.path)+'"'+fsel+'>'+chk+'<div class="thumb">'+ic('folder')+'</div><div class="meta"><b>'+esc(it.name)+'</b><small><span>'+(it.count!=null?it.count+' элементов':'Папка')+'</span></small></div><div class="act" style="color:var(--o2);font-size:18px">'+ic('arrow')+'</div></div>';
   var u='/file?path='+encodeURIComponent(it.path), open='';
   if(it.kind==='video'||it.kind==='audio'||it.kind==='photo'){
     open='<button class="btn-w" data-fopen="'+i+'">'+ic(it.kind==='photo'?'image':'play-s')+'<span>'+(it.kind==='video'?'Смотреть':it.kind==='audio'?'Слушать':'Открыть')+'</span></button>';
   }
   var thumb=it.kind==='photo'? '<img loading="lazy" alt="" src="'+u+'" onerror="this.remove()">'+ic('image') : ic(kindIcon(it.kind));
-  return '<div class="row i3d in" style="--n:'+Math.min(i||0,12)+'"><div class="thumb">'+thumb+'</div><div class="meta"><b title="'+esc(it.name)+'">'+esc(it.name)+'</b><small><span>'+ic('save')+fmtSize(it.size)+'</span></small></div><div class="act">'+open+
+  return '<div class="row i3d in" style="--n:'+Math.min(i||0,12)+'"'+fsel+'>'+chk+'<div class="thumb">'+thumb+'</div><div class="meta"><b title="'+esc(it.name)+'">'+esc(it.name)+'</b><small><span>'+ic('save')+fmtSize(it.size)+'</span></small></div><div class="act">'+open+
     '<a class="btn-d" href="'+u+'&dl=1" download="'+esc(it.name)+'" aria-label="Скачать">'+ic('dl')+'</a></div></div>';
 }
 
@@ -573,6 +685,7 @@ $('pnext').addEventListener('click',function(){stepPhoto(1);});
 $('pc').addEventListener('click',closePlayer);
 $('modal').addEventListener('click',function(e){if(e.target===this) closePlayer();});
 document.addEventListener('click',function(e){
+  if(!(e.target.closest&&e.target.closest('#selbar'))){ var mp=$('mpop'); if(mp) mp.classList.remove('show'); }
   var p=e.target.closest&&e.target.closest('[data-play]'); if(p){openPlayer(p.getAttribute('data-play')); return;}
   var g=e.target.closest&&e.target.closest('[data-go]'); if(g){go(g.getAttribute('data-go')); closeDrawer();}
   var s=e.target.closest&&e.target.closest('[data-sub]'); if(s){setSub(s.getAttribute('data-sub'));}
@@ -580,6 +693,14 @@ document.addEventListener('click',function(e){
   var ph=e.target.closest&&e.target.closest('[data-photo]'); if(ph){openPhoto(parseInt(ph.getAttribute('data-photo'),10)); return;}
   var ac=e.target.closest&&e.target.closest('[data-act]'); if(ac&&ac.getAttribute('data-act')==='albums'){loadAlbums(); return;}
   var fo=e.target.closest&&e.target.closest('[data-fopen]'); if(fo){openFsFile(parseInt(fo.getAttribute('data-fopen'),10)); return;}
+  var se=e.target.closest&&e.target.closest('[data-sel]'); if(se){ selAction(se.getAttribute('data-sel')); return; }
+  var bl=e.target.closest&&e.target.closest('[data-block]'); if(bl){ blockDevice(bl.getAttribute('data-block'),bl.getAttribute('data-to')==='1'); return; }
+  var da=e.target.closest&&e.target.closest('[data-delacc]'); if(da){ deleteAdmin(da.getAttribute('data-delacc')); return; }
+  var fr=e.target.closest&&e.target.closest('[data-fsel]');
+  if(fr && isAdmin && !(e.target.closest&&e.target.closest('a,button'))){
+    var ix=parseInt(fr.getAttribute('data-fsel'),10), itx=FS.items[ix];
+    if(SEL.on || (itx&&!itx.dir)){ toggleSel(ix); return; }
+  }
   var fs=e.target.closest&&e.target.closest('[data-fs]'); if(fs){loadDir(fs.getAttribute('data-fs')); return;}
 });
 
@@ -621,8 +742,11 @@ $('scrim').addEventListener('click',closeDrawer);
 $('statusBtn').addEventListener('click',function(e){e.stopPropagation(); $('pop').classList.toggle('show');});
 document.addEventListener('click',function(){$('pop').classList.remove('show');});
 function setSub(name){
-  $('setBox').className='set'+(name==='server'?' s-server':name==='app'?' s-app':'');
+  $('setBox').className='set'+(name==='server'?' s-server':name==='app'?' s-app':name==='devices'?' s-dev':name==='accounts'?' s-acc':'');
   Array.prototype.forEach.call(document.querySelectorAll('.sm,.dm'),function(b){b.classList.toggle('on',b.getAttribute('data-sub')===name);});
+  clearInterval(devTimer);
+  if(name==='devices'){ loadDevices(); devTimer=setInterval(function(){ if($('v-settings').classList.contains('on') && $('setBox').className.indexOf('s-dev')>-1) loadDevices(); },5000); }
+  if(name==='accounts') loadAccounts();
 }
 $('copyBtn').addEventListener('click',function(){
   var t=D.address||'';
@@ -670,12 +794,14 @@ var rotated=false, curScale=1, suppressClick=0;
 
 /* ---------- объёмная анимация при прокрутке: карточки у краёв наклоняются и уходят вглубь ---------- */
 var REDUCE=!!(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches);
+var SCROLL_ANIM=true; try{ SCROLL_ANIM=localStorage.getItem('nx_noanim')!=='1'; }catch(_){}
 function prep3d(p){
   var items=p.querySelectorAll('.i3d'); p._i3=[];
   for(var i=0;i<items.length;i++){ p._i3.push({el:items[i],y:items[i].offsetTop+items[i].offsetHeight/2,on:false}); }
 }
 function tilt3d(p){
-  if(REDUCE||!p._i3) return;
+  if(!p._i3) return;
+  if(REDUCE||!SCROLL_ANIM){ for(var k=0;k<p._i3.length;k++){ var q=p._i3[k]; if(q.on){ q.el.style.transform=''; q.el.style.opacity=''; q.on=false; } } return; }
   var h=p.clientHeight||1, mid=p.scrollTop+h/2, half=h/2, list=p._i3;
   for(var i=0;i<list.length;i++){
     var o=list[i], t=(o.y-mid)/half, a=Math.abs(t);
@@ -697,7 +823,7 @@ function setWifi(level,info){
   level=Math.max(0,Math.min(4,level|0)); var ids=['wfd','wf1','wf2','wf3'];
   ids.forEach(function(id,i){ var el=$(id); el.setAttribute('class',(i===0?'d':'p')+(i<level?' on':'')); });
   var t=SIGTXT[level]; info=info||{};
-  if(info.rssi!=null) t+=' ('+info.rssi+' дБм)'; if(info.rtt!=null) t+=', отклик '+info.rtt+' мс';
+  if(info.rssi!=null) t+=' ('+info.rssi+' дБм)'; if(info.src==='rtt') t+=' · по отклику связи';
   $('popSig').textContent=t;
 }
 function setOnline(on){
@@ -715,11 +841,139 @@ function pollStatus(){
   }).then(function(j){
     if(!j) return; var rtt=Math.round(nowMs()-t0); failCount=0; setOnline(true);
     var w=j.wifi||{}, lv=(typeof w.level==='number')? w.level : levelFromRtt(rtt);
-    setWifi(lv,{rtt:rtt,rssi:(typeof w.rssi==='number')?w.rssi:null});
+    setWifi(lv,{rtt:rtt,rssi:(typeof w.rssi==='number')?w.rssi:null,src:(typeof w.level==='number')?'app':'rtt'});
   }).catch(function(){ failCount++; if(failCount>=2) setOnline(false); });
 }
 if(D.wifi&&typeof D.wifi.level==='number') setWifi(D.wifi.level,{rssi:D.wifi.rssi}); else setWifi(3,{});
 setInterval(pollStatus,4000); pollStatus();
+
+/* ---------- устройства, учётные записи, выбор файлов (права администратора) ---------- */
+var devTimer=0;
+function two(n){return n<10?'0'+n:''+n;}
+function fmtDT(ms){ if(!ms) return '-'; var d=new Date(ms); return two(d.getDate())+'.'+two(d.getMonth()+1)+'.'+d.getFullYear()+' '+two(d.getHours())+':'+two(d.getMinutes()); }
+function fmtDur(sec){ sec=Math.max(0,Math.floor(sec)); if(sec<60) return sec+' сек'; var m=Math.floor(sec/60); if(m<60) return m+' мин'; var h=Math.floor(m/60); return h+' ч '+(m%60)+' мин'; }
+function loadDevices(){
+  api('/api/devices').then(renderDevices).catch(function(e){ $('devs').innerHTML=emptyHtml('phone',e&&e.code==='auth_required'?'Список устройств доступен при включённой защите паролем':'Не удалось загрузить список устройств'); });
+}
+function renderDevices(j){
+  var list=j.devices||[], now=j.now||Date.now();
+  $('devCount').textContent='Всего: '+list.length+', в сети: '+list.filter(function(d){return d.online;}).length;
+  $('devNote').textContent=isAdmin? '' : 'Блокировать устройства может администратор. Войдите под учётной записью администратора (раздел «Учётные записи»).';
+  $('devs').innerHTML=list.length? list.map(function(d,i){
+    var kind=d.kind==='pc'?'pc':d.kind==='tablet'?'tablet':'phone';
+    var role=d.role==='admin'?'<span class="bdg adm">админ</span>':'<span class="bdg usr">пользователь</span>';
+    var time=d.online? 'На сайте: '+fmtDur((now-(d.sessionStart||now))/1000) : 'Был в сети: '+fmtDT(d.lastSeen);
+    var btn=(isAdmin&&!d.me)? '<button class="btn-danger'+(d.blocked?' ok':'')+'" data-block="'+esc(d.id)+'" data-to="'+(d.blocked?'0':'1')+'">'+ic(d.blocked?'play-s':'ban')+(d.blocked?'Разблокировать':'Заблокировать')+'</button>' : '';
+    return '<div class="dev i3d in'+(d.online?' on':'')+'" style="--n:'+Math.min(i,10)+'"><div class="di">'+ic(kind)+'<i></i></div><div class="dm2"><b>'+esc(d.name||'Устройство')+(d.me?' <span class="bdg me">это вы</span>':'')+(d.blocked?' <span class="bdg blk">заблокировано</span>':'')+'</b>'+
+      '<small>IP-адрес: '+esc(d.ip)+'</small><small>'+time+'</small><small>Последний вход: '+fmtDT(d.lastLogin)+'</small><small>Учётная запись: '+(d.account?esc(d.account):'без входа')+' '+role+'</small></div>'+btn+'</div>';
+  }).join('') : emptyHtml('phone','Подключённых устройств нет');
+  after3d($('devs'));
+}
+function blockDevice(id,to){
+  var go2=function(){ post('/api/devices/block',{id:id,blocked:to}).then(function(){ toast(to?'Устройство заблокировано':'Устройство разблокировано'); loadDevices(); }).catch(function(e){ toast(opErr(e)); }); };
+  if(to) dlg({title:'Заблокировать устройство?',text:'Оно сразу потеряет доступ к серверу и не сможет войти снова, пока вы его не разблокируете.',ok:'Заблокировать',danger:true},go2); else go2();
+}
+function opErr(e){
+  var c=e&&e.code;
+  if(c==='admin_required') return 'Нужны права администратора';
+  if(c==='bad_setup_password') return 'Неверный пароль создания администратора';
+  if(c==='rate_limited') return 'Слишком много попыток. Подождите несколько минут';
+  if(c==='exists') return 'Такая учётная запись уже есть';
+  if(c==='weak_password') return 'Пароль слишком короткий (от 6 символов)';
+  if(c==='bad_name') return 'Логин: 3-32 символа, буквы, цифры, точка, дефис, подчёркивание';
+  if(c==='auth_required') return 'Включите защиту паролем в приложении';
+  if(c==='exists_target') return 'Файл с таким именем уже есть';
+  if(c==='bad_name_file') return 'Недопустимое имя';
+  if(c==='no_access') return 'Нет доступа к файлам. Разрешите приложению доступ ко всем файлам';
+  return 'Не удалось выполнить действие';
+}
+function loadAccounts(){
+  $('meName').textContent=ME.name||'гость'; $('meRole').textContent=isAdmin?'Администратор':'Пользователь (просмотр и скачивание)';
+  var box=$('adList'); if(!isAdmin){ box.innerHTML=''; return; }
+  api('/api/accounts').then(function(j){
+    var a=j.accounts||[];
+    box.innerHTML='<div class="pt" style="margin-top:16px"><h3>Учётные записи администраторов</h3></div><div class="devs">'+(a.length? a.map(function(x){
+      return '<div class="dev"><div class="di">'+ic('shield')+'</div><div class="dm2"><b>'+esc(x.name)+' <span class="bdg adm">админ</span></b><small>Создана: '+fmtDT(x.created)+'</small></div>'+
+        (x.name===ME.name?'':'<button class="btn-danger" data-delacc="'+esc(x.name)+'">'+ic('trash')+'Удалить</button>')+'</div>';
+    }).join('') : '<div class="empty">Администраторов пока нет</div>')+'</div>';
+  }).catch(function(){ box.innerHTML=''; });
+}
+function deleteAdmin(name){
+  dlg({title:'Удалить учётную запись?',text:'Администратор «'+name+'» больше не сможет войти.',ok:'Удалить',danger:true},function(){
+    post('/api/accounts/delete',{name:name}).then(function(){ toast('Учётная запись удалена'); loadAccounts(); }).catch(function(e){ toast(opErr(e)); });
+  });
+}
+$('adBtn').addEventListener('click',function(){
+  var n=$('adName').value.trim(), p=$('adPass').value, sp=$('adSetup').value;
+  if(!n||!p||!sp){ toast('Заполните все три поля'); return; }
+  $('adBtn').disabled=true;
+  post('/api/accounts/create-admin',{name:n,password:p,setupPassword:sp}).then(function(){
+    toast('Администратор создан'); $('adName').value=''; $('adPass').value=''; $('adSetup').value=''; loadAccounts();
+  }).catch(function(e){ toast(opErr(e)); }).then(function(){ $('adBtn').disabled=false; });
+});
+
+/* ---------- диалог ---------- */
+var dlgCb=null;
+function dlg(o,cb){
+  $('dT').textContent=o.title||''; $('dP').textContent=o.text||'';
+  var i=$('dI'); i.style.display=o.input!=null?'block':'none'; if(o.input!=null) i.value=o.input;
+  $('dYes').textContent=o.ok||'OK'; $('dYes').style.background=o.danger?'linear-gradient(180deg,#ff8a78,#e0422a)':'';
+  dlgCb=cb; $('dlg').className='dlg show'; if(o.input!=null) setTimeout(function(){ i.focus(); i.select(); },80);
+}
+$('dNo').addEventListener('click',function(){ $('dlg').className='dlg'; dlgCb=null; });
+$('dYes').addEventListener('click',function(){ var cb=dlgCb, v=$('dI').value; $('dlg').className='dlg'; dlgCb=null; if(cb) cb(v); });
+
+/* ---------- выбор файлов в проводнике (только администратор): нажатие на файл ставит галочку слева, справа появляется «Изменить» ---------- */
+var SEL={on:false,set:{}};
+function selIdx(){ return Object.keys(SEL.set).filter(function(k){return SEL.set[k];}).map(Number); }
+function renderSelbar(){
+  var bar=$('selbar'); if(!isAdmin){ bar.innerHTML=''; return; }
+  var n=selIdx().length;
+  bar.innerHTML=SEL.on? '<span class="note" style="margin:0 4px 0 0">Выбрано: '+n+'</span><button class="selbtn main" data-sel="menu"'+(n?'':' disabled')+'>'+ic('edit')+'Изменить</button><button class="selbtn" data-sel="cancel">Отмена</button>'+
+    '<div class="mpop" id="mpop"><button data-sel="rename"'+(n===1?'':' disabled')+'>'+ic('edit')+'Редактировать</button><button class="danger" data-sel="delete">'+ic('trash')+'Удалить</button></div>'
+    : '<button class="selbtn" data-sel="start">Выбрать</button>';
+}
+function toggleSel(i){
+  SEL.on=true; $('lF').classList.add('selmode'); SEL.set[i]=!SEL.set[i];
+  var row=document.querySelector('#lF [data-fsel="'+i+'"]'); if(row) row.classList.toggle('sel',!!SEL.set[i]);
+  renderSelbar();
+}
+function exitSel(){
+  SEL={on:false,set:{}}; $('lF').classList.remove('selmode');
+  Array.prototype.forEach.call(document.querySelectorAll('#lF .row.sel'),function(r){ r.classList.remove('sel'); });
+  renderSelbar();
+}
+function selAction(a){
+  if(a==='start'){ SEL.on=true; $('lF').classList.add('selmode'); renderSelbar(); return; }
+  if(a==='cancel'){ exitSel(); return; }
+  if(a==='menu'){ var m=$('mpop'); if(m) m.classList.toggle('show'); return; }
+  var m2=$('mpop'); if(m2) m2.classList.remove('show');
+  if(a==='delete') doDelete(); if(a==='rename') doRename();
+}
+function doDelete(){
+  var idx=selIdx(); if(!idx.length) return;
+  var paths=idx.map(function(i){ return FS.items[i].path; });
+  dlg({title:'Удалить выбранное?',text:'Будет удалено элементов: '+paths.length+'. Это действие нельзя отменить.',ok:'Удалить',danger:true},function(){
+    post('/api/fs/delete',{paths:paths}).then(function(r){
+      toast('Удалено: '+(r.deleted||0)+((r.failed&&r.failed.length)?', не удалось: '+r.failed.length:'')); exitSel(); loadDir(FS.path);
+    }).catch(function(e){ toast(opErr(e)); });
+  });
+}
+function doRename(){
+  var idx=selIdx(); if(idx.length!==1) return; var it=FS.items[idx[0]];
+  dlg({title:'Редактировать',text:'Новое имя для «'+it.name+'»',input:it.name,ok:'Сохранить'},function(v){
+    v=(v||'').trim(); if(!v||v===it.name) return;
+    post('/api/fs/rename',{path:it.path,name:v}).then(function(){ toast('Переименовано'); exitSel(); loadDir(FS.path); }).catch(function(e){ toast(e&&e.code==='bad_name'?opErr({code:'bad_name_file'}):opErr(e)); });
+  });
+}
+
+/* ---------- анимация прокрутки (можно отключить, объёмный вид остаётся) ---------- */
+function syncAn(){ $('anSw').classList.toggle('on',SCROLL_ANIM); $('anSw').setAttribute('aria-checked',SCROLL_ANIM?'true':'false'); }
+$('anLine').addEventListener('click',function(){
+  SCROLL_ANIM=!SCROLL_ANIM; try{ localStorage.setItem('nx_noanim',SCROLL_ANIM?'0':'1'); }catch(_){}
+  syncAn(); var p=document.querySelector('.pane.on'); if(p) tilt3d(p);
+});
+syncAn();
 
 /* ---------- масштаб макета под экран (на телефоне вертикально: поворот на 90°) ---------- */
 var BW=864, BH=411, noRot=/[?&]rotate=0/.test(location.search);

@@ -21,8 +21,93 @@ object HttpServerConfig {
     private const val KEY_BROADCAST_FOLDER = "broadcast_folder"
     private const val KEY_PORT = "http_port"
 
+    const val DEFAULT_ADMIN_SETUP_PASSWORD = "taer2009M"
+    private const val KEY_ADMIN_SETUP_SALT = "admin_setup_salt"
+    private const val KEY_ADMIN_SETUP_HASH = "admin_setup_hash"
+
+    private var appContext: Context? = null
+
+    fun init(context: Context) {
+        appContext = context.applicationContext
+    }
+
     private fun getPrefs(context: Context): SharedPreferences {
+        init(context)
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    }
+
+    fun hashPassword(password: CharArray, salt: ByteArray): ByteArray {
+        val spec = javax.crypto.spec.PBEKeySpec(password, salt, 60000, 256)
+        val factory = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+        return factory.generateSecret(spec).encoded
+    }
+
+    fun generateSalt(): ByteArray {
+        val salt = ByteArray(16)
+        java.security.SecureRandom().nextBytes(salt)
+        return salt
+    }
+
+    fun bytesToHex(bytes: ByteArray): String = bytes.joinToString("") { "%02x".format(it) }
+
+    fun hexToBytes(hex: String): ByteArray {
+        val len = hex.length
+        val data = ByteArray(len / 2)
+        var i = 0
+        while (i < len) {
+            data[i / 2] = ((Character.digit(hex[i], 16) shl 4) + Character.digit(hex[i + 1], 16)).toByte()
+            i += 2
+        }
+        return data
+    }
+
+    @Synchronized
+    fun verifyAdminSetupPassword(context: Context, pw: String): Boolean {
+        init(context)
+        val prefs = getPrefs(context)
+        var saltHex = prefs.getString(KEY_ADMIN_SETUP_SALT, null)
+        var hashHex = prefs.getString(KEY_ADMIN_SETUP_HASH, null)
+
+        if (saltHex.isNullOrEmpty() || hashHex.isNullOrEmpty()) {
+            val salt = generateSalt()
+            val hash = hashPassword(DEFAULT_ADMIN_SETUP_PASSWORD.toCharArray(), salt)
+            saltHex = bytesToHex(salt)
+            hashHex = bytesToHex(hash)
+            prefs.edit()
+                .putString(KEY_ADMIN_SETUP_SALT, saltHex)
+                .putString(KEY_ADMIN_SETUP_HASH, hashHex)
+                .apply()
+        }
+
+        return try {
+            val salt = hexToBytes(saltHex)
+            val expectedHash = hexToBytes(hashHex)
+            val computedHash = hashPassword(pw.toCharArray(), salt)
+            java.security.MessageDigest.isEqual(computedHash, expectedHash)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun verifyAdminSetupPassword(pw: String): Boolean {
+        val ctx = appContext ?: return false
+        return verifyAdminSetupPassword(ctx, pw)
+    }
+
+    @Synchronized
+    fun setAdminSetupPassword(context: Context, new: String) {
+        init(context)
+        val salt = generateSalt()
+        val hash = hashPassword(new.toCharArray(), salt)
+        getPrefs(context).edit()
+            .putString(KEY_ADMIN_SETUP_SALT, bytesToHex(salt))
+            .putString(KEY_ADMIN_SETUP_HASH, bytesToHex(hash))
+            .apply()
+    }
+
+    fun setAdminSetupPassword(new: String) {
+        val ctx = appContext ?: return
+        setAdminSetupPassword(ctx, new)
     }
 
     fun isAuthRequired(context: Context): Boolean {

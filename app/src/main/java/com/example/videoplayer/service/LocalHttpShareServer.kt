@@ -7,6 +7,7 @@ import android.database.Cursor
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
+import android.media.MediaScannerConnection
 import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Build
@@ -17,6 +18,8 @@ import android.text.format.Formatter
 import android.util.Base64
 import android.util.Log
 import android.util.Size
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.*
 import java.net.*
 import java.util.Collections
@@ -36,11 +39,92 @@ data class HttpMediaFile(
     val directFile: File?
 )
 
+data class SessionInfo(
+    val token: String,
+    val username: String,
+    val role: String, // "admin" or "user"
+    val deviceId: String
+)
+
+data class AuthResult(
+    val username: String,
+    val role: String
+)
+
+data class RequestAuth(
+    val isAuthorized: Boolean,
+    val username: String,
+    val role: String,
+    val sessionToken: String?
+)
+
+data class AdminAccount(
+    val name: String,
+    val salt: String,
+    val hash: String,
+    val role: String = "admin",
+    val created: Long
+)
+
+data class DeviceRecord(
+    val id: String,
+    var ip: String,
+    var ua: String,
+    var account: String,
+    var role: String,
+    val firstSeen: Long,
+    var lastLogin: Long,
+    var lastSeen: Long,
+    var sessionStart: Long,
+    var blocked: Boolean
+)
+
+data class WifiSignal(val level: Int?, val rssi: Int?)
+
+class RateLimiter(private val maxFailures: Int, private val windowMs: Long) {
+    private val attempts = ConcurrentHashMap<String, MutableList<Long>>()
+
+    fun isRateLimited(ip: String): Boolean {
+        val now = System.currentTimeMillis()
+        val list = attempts[ip] ?: return false
+        synchronized(list) {
+            list.removeAll { now - it > windowMs }
+            return list.size >= maxFailures
+        }
+    }
+
+    fun recordFailure(ip: String) {
+        val now = System.currentTimeMillis()
+        val list = attempts.computeIfAbsent(ip) { Collections.synchronizedList(mutableListOf()) }
+        synchronized(list) {
+            list.removeAll { now - it > windowMs }
+            list.add(now)
+        }
+    }
+
+    fun recordSuccess(ip: String) {
+        attempts.remove(ip)
+    }
+}
+
 object LocalHttpShareServer {
     private const val TAG = "LocalHttpShareServer"
     const val DEFAULT_PORT = 8765
 
-    private val activeSessions = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
+    private val activeSessions = ConcurrentHashMap<String, SessionInfo>()
+    private val loginRateLimiter = RateLimiter(maxFailures = 10, windowMs = 5 * 60 * 1000L)
+    private val setupPasswordRateLimiter = RateLimiter(maxFailures = 5, windowMs = 10 * 60 * 1000L)
+
+    private val devices = ConcurrentHashMap<String, DeviceRecord>()
+    @Volatile private var devicesLoaded = false
+    @Volatile private var lastDevicesSaveTime = 0L
+
+    @Volatile private var wifiLevel: Int? = null
+    @Volatile private var wifiRssi: Int? = null
+    @Volatile private var wifiMeasurementTime: Long = 0L
+    @Volatile private var wifiPollerRunning = false
+    private var wifiThread: Thread? = null
+
     private var requestedManageStorageOnce = false
 
     fun clearSessions() {
@@ -63,6 +147,8 @@ object LocalHttpShareServer {
             return true
         }
         stop()
+
+        loadDevicesIfNeeded(context)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
             if (!requestedManageStorageOnce) {
@@ -109,6 +195,8 @@ object LocalHttpShareServer {
             isRunning = true
             lastErrorMessage = null
 
+            startWifiPoller(context)
+
             threadPool.execute {
                 acceptClientsLoop(socket, context.applicationContext)
             }
@@ -127,6 +215,7 @@ object LocalHttpShareServer {
     @Synchronized
     fun stop() {
         isRunning = false
+        stopWifiPoller()
         clearSessions()
         try {
             serverSocket?.close()
@@ -150,6 +239,63 @@ object LocalHttpShareServer {
         }
     }
 
+    private fun startWifiPoller(context: Context) {
+        stopWifiPoller()
+        wifiPollerRunning = true
+        wifiThread = Thread({
+            val appContext = context.applicationContext
+            while (wifiPollerRunning && isRunning) {
+                try {
+                    val wm = appContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+                    val info = wm?.connectionInfo
+                    if (info != null) {
+                        val rssi = info.rssi
+                        if (info.networkId == -1 || rssi <= -127) {
+                            wifiLevel = null
+                            wifiRssi = null
+                        } else {
+                            @Suppress("DEPRECATION")
+                            val lvl = WifiManager.calculateSignalLevel(rssi, 5).coerceIn(0, 4)
+                            wifiLevel = lvl
+                            wifiRssi = rssi
+                        }
+                    } else {
+                        wifiLevel = null
+                        wifiRssi = null
+                    }
+                    wifiMeasurementTime = System.currentTimeMillis()
+                } catch (_: Exception) {
+                    wifiLevel = null
+                    wifiRssi = null
+                }
+                try {
+                    Thread.sleep(4000L)
+                } catch (_: InterruptedException) {
+                    break
+                }
+            }
+        }, "Nexora-WifiPoller").apply {
+            isDaemon = true
+            start()
+        }
+    }
+
+    private fun stopWifiPoller() {
+        wifiPollerRunning = false
+        wifiThread?.interrupt()
+        wifiThread = null
+    }
+
+    private fun getWifiSignal(): WifiSignal {
+        val now = System.currentTimeMillis()
+        val isStale = (now - wifiMeasurementTime) > 12000L
+        return if (isStale) {
+            WifiSignal(level = null, rssi = null)
+        } else {
+            WifiSignal(level = wifiLevel, rssi = wifiRssi)
+        }
+    }
+
     private fun acceptClientsLoop(socket: ServerSocket, context: Context) {
         while (isRunning && !socket.isClosed) {
             try {
@@ -168,6 +314,7 @@ object LocalHttpShareServer {
     private fun handleClient(client: Socket, context: Context) {
         try {
             client.soTimeout = 30000
+            val clientIp = client.inetAddress?.hostAddress ?: "127.0.0.1"
             val rawInput = client.getInputStream()
             val input = BufferedReader(InputStreamReader(rawInput, Charsets.UTF_8))
             val output = BufferedOutputStream(client.getOutputStream())
@@ -176,7 +323,7 @@ object LocalHttpShareServer {
             val parts = requestLine.split(" ")
             if (parts.size < 2) return
 
-            val method = parts[0]
+            val method = parts[0].uppercase()
             val pathWithQuery = parts[1]
             val rawPath = pathWithQuery.substringBefore("?")
             val queryString = if (pathWithQuery.contains("?")) pathWithQuery.substringAfter("?") else ""
@@ -186,6 +333,13 @@ object LocalHttpShareServer {
             var authHeader: String? = null
             var rangeHeader: String? = null
             var cookieHeader: String? = null
+            var contentLengthHeader: Long? = null
+            var xNexoraHeader: String? = null
+            var originHeader: String? = null
+            var hostHeader: String? = null
+            var userAgentHeader: String? = null
+            var acceptHeader: String? = null
+
             var line: String? = input.readLine()
             while (!line.isNullOrBlank()) {
                 val lower = line.lowercase()
@@ -195,102 +349,143 @@ object LocalHttpShareServer {
                     rangeHeader = line.substringAfter(":").trim()
                 } else if (lower.startsWith("cookie:")) {
                     cookieHeader = line.substringAfter(":").trim()
+                } else if (lower.startsWith("content-length:")) {
+                    contentLengthHeader = line.substringAfter(":").trim().toLongOrNull()
+                } else if (lower.startsWith("x-nexora:")) {
+                    xNexoraHeader = line.substringAfter(":").trim()
+                } else if (lower.startsWith("origin:")) {
+                    originHeader = line.substringAfter(":").trim()
+                } else if (lower.startsWith("host:")) {
+                    hostHeader = line.substringAfter(":").trim()
+                } else if (lower.startsWith("user-agent:")) {
+                    userAgentHeader = line.substringAfter(":").trim()
+                } else if (lower.startsWith("accept:")) {
+                    acceptHeader = line.substringAfter(":").trim()
                 }
                 line = input.readLine()
             }
 
-            if (method.equals("GET", ignoreCase = true) || method.equals("HEAD", ignoreCase = true)) {
-                val isHead = method.equals("HEAD", ignoreCase = true)
-                val authRequired = HttpServerConfig.isAuthRequired(context)
-                val authorized = !authRequired || isAuthorized(cookieHeader, authHeader, context)
+            val userAgent = userAgentHeader ?: ""
+            val existingDevId = extractCookie(cookieHeader, "nx_dev")
+            val clientDevId = if (existingDevId.isNullOrBlank()) UUID.randomUUID().toString() else existingDevId
+            val needDevCookie = if (existingDevId.isNullOrBlank()) clientDevId else null
+
+            // Check if device or IP is blocked
+            if (isDeviceOrIpBlocked(context, clientDevId, clientIp)) {
+                val isHtml = acceptHeader?.contains("text/html") == true ||
+                        decodedPath == "/" || decodedPath == "/index.html" || decodedPath == "/login"
+                sendBlockedResponse(output, isHtml, needDevCookie)
+                return
+            }
+
+            val authRequired = HttpServerConfig.isAuthRequired(context)
+            val sessionToken = extractCookie(cookieHeader, "nx_session")
+            val reqAuth = resolveRequestAuth(sessionToken, authHeader, authRequired, context)
+
+            // Touch device if authorized
+            if (reqAuth.isAuthorized) {
+                touchDevice(context, clientDevId, clientIp, userAgent, reqAuth.username, reqAuth.role, isLogin = false)
+            }
+
+            if (method == "GET" || method == "HEAD") {
+                val isHead = method == "HEAD"
 
                 when {
                     decodedPath == "/api/login" -> {
-                        val isValid = !authRequired || checkBasicAuth(authHeader, context)
-                        if (isValid) {
-                            val sessionToken = UUID.randomUUID().toString().replace("-", "")
-                            activeSessions.add(sessionToken)
-                            val json = "{\"ok\":true}".toByteArray(Charsets.UTF_8)
-                            val headers = "HTTP/1.1 200 OK\r\n" +
-                                    "Content-Type: application/json; charset=UTF-8\r\n" +
-                                    "Set-Cookie: nx_session=$sessionToken; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400\r\n" +
-                                    "Content-Length: ${json.size}\r\n" +
-                                    "Connection: close\r\n\r\n"
-                            output.write(headers.toByteArray(Charsets.UTF_8))
-                            if (!isHead) output.write(json)
-                            output.flush()
+                        if (loginRateLimiter.isRateLimited(clientIp)) {
+                            sendResponse(
+                                output, 429, "application/json; charset=UTF-8",
+                                "{\"error\":\"rate_limited\"}".toByteArray(Charsets.UTF_8),
+                                isHead = isHead,
+                                extraHeaders = listOf("Cache-Control: no-store"),
+                                needDevCookie = needDevCookie
+                            )
+                            return
+                        }
+
+                        val authResult = if (!authRequired) {
+                            AuthResult(username = HttpServerConfig.getUsername(context), role = "user")
                         } else {
+                            checkCredentials(authHeader, context)
+                        }
+
+                        if (authResult != null) {
+                            loginRateLimiter.recordSuccess(clientIp)
+                            val token = UUID.randomUUID().toString().replace("-", "")
+                            activeSessions[token] = SessionInfo(
+                                token = token,
+                                username = authResult.username,
+                                role = authResult.role,
+                                deviceId = clientDevId
+                            )
+                            touchDevice(context, clientDevId, clientIp, userAgent, authResult.username, authResult.role, isLogin = true)
+
+                            val json = "{\"ok\":true,\"role\":${jsonEscape(authResult.role)},\"name\":${jsonEscape(authResult.username)}}".toByteArray(Charsets.UTF_8)
+                            val headers = mutableListOf(
+                                "Set-Cookie: nx_session=$token; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400",
+                                "Cache-Control: no-store"
+                            )
+                            sendResponse(output, 200, "application/json; charset=UTF-8", json, isHead = isHead, extraHeaders = headers, needDevCookie = needDevCookie)
+                        } else {
+                            loginRateLimiter.recordFailure(clientIp)
                             val json = "{\"ok\":false}".toByteArray(Charsets.UTF_8)
-                            val headers = "HTTP/1.1 401 Unauthorized\r\n" +
-                                    "Content-Type: application/json; charset=UTF-8\r\n" +
-                                    "Content-Length: ${json.size}\r\n" +
-                                    "Connection: close\r\n\r\n"
-                            output.write(headers.toByteArray(Charsets.UTF_8))
-                            if (!isHead) output.write(json)
-                            output.flush()
+                            sendResponse(output, 401, "application/json; charset=UTF-8", json, isHead = isHead, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
                         }
                     }
                     decodedPath == "/logout" -> {
-                        val token = extractCookie(cookieHeader, "nx_session")
-                        if (!token.isNullOrEmpty()) {
-                            activeSessions.remove(token)
+                        if (!sessionToken.isNullOrEmpty()) {
+                            activeSessions.remove(sessionToken)
                         }
-                        val headers = "HTTP/1.1 302 Found\r\n" +
-                                "Location: /\r\n" +
-                                "Set-Cookie: nx_session=; Path=/; Max-Age=0\r\n" +
-                                "Content-Length: 0\r\n" +
-                                "Connection: close\r\n\r\n"
-                        output.write(headers.toByteArray(Charsets.UTF_8))
-                        output.flush()
+                        sendRedirect(output, "/", needDevCookie = needDevCookie, extraHeaders = listOf("Set-Cookie: nx_session=; Path=/; Max-Age=0"))
                     }
                     decodedPath == "/login" -> {
-                        if (!authRequired || authorized) {
-                            sendRedirect(output, "/")
+                        if (!authRequired || reqAuth.isAuthorized) {
+                            sendRedirect(output, "/", needDevCookie = needDevCookie)
                         } else {
-                            sendHtmlLogin(output, context, isHead)
+                            sendHtmlLogin(output, context, isHead, needDevCookie)
                         }
                     }
                     decodedPath == "/" || decodedPath == "/index.html" -> {
-                        if (authRequired && !authorized) {
-                            sendHtmlLogin(output, context, isHead)
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            sendHtmlLogin(output, context, isHead, needDevCookie)
                         } else {
                             val mediaList = loadMediaList(context)
-                            sendHtmlIndex(output, mediaList, context, isHead)
+                            sendHtmlIndex(output, mediaList, context, isHead, reqAuth, needDevCookie)
                         }
                     }
                     decodedPath == "/stream" || decodedPath.startsWith("/stream/") -> {
-                        if (authRequired && !authorized) {
-                            send401WithAuth(output)
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            send401WithAuth(output, needDevCookie)
                         } else {
                             val idParam = extractQueryParam(queryString, "id")
                                 ?: decodedPath.removePrefix("/stream/").removePrefix("/")
-                            serveMediaContent(output, idParam, rangeHeader, context, asDownload = false, isHead = isHead)
+                            serveMediaContent(output, idParam, rangeHeader, context, asDownload = false, isHead = isHead, needDevCookie = needDevCookie)
                         }
                     }
                     decodedPath == "/download" || decodedPath.startsWith("/download/") -> {
-                        if (authRequired && !authorized) {
-                            send401WithAuth(output)
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            send401WithAuth(output, needDevCookie)
                         } else {
                             val idParam = extractQueryParam(queryString, "id")
                                 ?: decodedPath.removePrefix("/download/").removePrefix("/")
-                            serveMediaContent(output, idParam, rangeHeader, context, asDownload = true, isHead = isHead)
+                            serveMediaContent(output, idParam, rangeHeader, context, asDownload = true, isHead = isHead, needDevCookie = needDevCookie)
                         }
                     }
                     decodedPath == "/thumb" || decodedPath.startsWith("/thumb/") -> {
-                        if (authRequired && !authorized) {
-                            send401WithoutAuth(output)
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
                         } else {
                             val idParam = extractQueryParam(queryString, "id")
                                 ?: decodedPath.removePrefix("/thumb/").removePrefix("/")
-                            serveThumbnail(output, idParam, context, isHead)
+                            serveThumbnail(output, idParam, context, isHead, needDevCookie)
                         }
                     }
                     decodedPath == "/api/photos" -> {
-                        if (authRequired && !authorized) {
-                            send401WithoutAuth(output)
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
                         } else {
                             val albumParam = extractQueryParam(queryString, "album")
-                            serveApiPhotos(output, albumParam, context, isHead)
+                            serveApiPhotos(output, albumParam, context, isHead, needDevCookie)
                         }
                     }
                     decodedPath == "/photo" -> {
@@ -298,62 +493,181 @@ object LocalHttpShareServer {
                         val idParam = extractQueryParam(queryString, "id")
                         val isDl = extractQueryParam(queryString, "dl") == "1"
                         if (isThumb) {
-                            if (authRequired && !authorized) {
-                                send401WithoutAuth(output)
+                            if (authRequired && !reqAuth.isAuthorized) {
+                                send401WithoutAuth(output, needDevCookie)
                             } else {
-                                servePhotoThumbnail(output, idParam, context, isHead)
+                                servePhotoThumbnail(output, idParam, context, isHead, needDevCookie)
                             }
                         } else {
-                            if (authRequired && !authorized) {
-                                send401WithAuth(output)
+                            if (authRequired && !reqAuth.isAuthorized) {
+                                send401WithAuth(output, needDevCookie)
                             } else {
-                                servePhotoOriginal(output, idParam, isDl, context, isHead)
+                                servePhotoOriginal(output, idParam, isDl, context, isHead, needDevCookie)
                             }
                         }
                     }
                     decodedPath == "/api/fs" -> {
-                        if (!HttpServerConfig.isAuthRequired(context)) {
-                            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"auth_required\"}".toByteArray(Charsets.UTF_8), isHead)
-                        } else if (!authorized) {
-                            send401WithoutAuth(output)
+                        if (!authRequired) {
+                            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"auth_required\"}".toByteArray(Charsets.UTF_8), isHead, needDevCookie = needDevCookie)
+                        } else if (!reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
                         } else {
                             val pathParam = extractQueryParam(queryString, "path")
-                            serveApiFs(output, pathParam, context, isHead)
+                            serveApiFs(output, pathParam, context, isHead, needDevCookie)
                         }
                     }
                     decodedPath == "/file" -> {
-                        if (!HttpServerConfig.isAuthRequired(context)) {
-                            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"auth_required\"}".toByteArray(Charsets.UTF_8), isHead)
-                        } else if (!authorized) {
-                            send401WithAuth(output)
+                        if (!authRequired) {
+                            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"auth_required\"}".toByteArray(Charsets.UTF_8), isHead, needDevCookie = needDevCookie)
+                        } else if (!reqAuth.isAuthorized) {
+                            send401WithAuth(output, needDevCookie)
                         } else {
                             val pathParam = extractQueryParam(queryString, "path")
                             val isDl = extractQueryParam(queryString, "dl") == "1"
-                            serveFsFile(output, pathParam, rangeHeader, isDl, context, isHead)
+                            serveFsFile(output, pathParam, rangeHeader, isDl, context, isHead, needDevCookie)
                         }
                     }
                     decodedPath == "/api/status" -> {
-                        if (authRequired && !authorized) {
-                            send401WithoutAuth(output)
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
                         } else {
-                            serveApiStatus(output, context, isHead)
+                            serveApiStatus(output, reqAuth, isHead, needDevCookie)
+                        }
+                    }
+                    decodedPath == "/api/devices" -> {
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
+                        } else {
+                            serveApiDevices(output, context, clientDevId, isHead, needDevCookie)
+                        }
+                    }
+                    decodedPath == "/api/accounts" -> {
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
+                        } else if (reqAuth.role != "admin") {
+                            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"admin_required\"}".toByteArray(Charsets.UTF_8), isHead, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        } else {
+                            serveApiAccounts(output, context, isHead, needDevCookie)
                         }
                     }
                     decodedPath.startsWith("/api/") -> {
-                        if (authRequired && !authorized) {
-                            send401WithoutAuth(output)
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
                         } else {
-                            sendResponse(output, 404, "application/json; charset=UTF-8", "{\"error\":\"not_found\"}".toByteArray(Charsets.UTF_8), isHead)
+                            sendResponse(output, 404, "application/json; charset=UTF-8", "{\"error\":\"not_found\"}".toByteArray(Charsets.UTF_8), isHead, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
                         }
                     }
                     else -> {
                         val notFound = "404 Not Found"
-                        sendResponse(output, 404, "text/plain; charset=UTF-8", notFound.toByteArray(Charsets.UTF_8), isHead)
+                        sendResponse(output, 404, "text/plain; charset=UTF-8", notFound.toByteArray(Charsets.UTF_8), isHead, needDevCookie = needDevCookie)
+                    }
+                }
+            } else if (method == "POST") {
+                // Must check X-Nexora header
+                if (xNexoraHeader != "1") {
+                    sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"bad_request\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                    return
+                }
+
+                // If Origin header is present, it must match Host
+                if (!originHeader.isNullOrBlank()) {
+                    val originHost = originHeader
+                        .removePrefix("http://")
+                        .removePrefix("https://")
+                        .substringBefore("/")
+                        .trim()
+                    val hostValue = (hostHeader ?: "").trim()
+                    if (originHost.isNotEmpty() && hostValue.isNotEmpty() && !originHost.equals(hostValue, ignoreCase = true)) {
+                        sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"bad_request\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        return
+                    }
+                }
+
+                val contentLength = (contentLengthHeader ?: 0L).toInt()
+                if (contentLength > 64 * 1024) {
+                    sendResponse(output, 413, "application/json; charset=UTF-8", "{\"error\":\"bad_request\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                    return
+                }
+
+                val bodyChars = CharArray(contentLength)
+                var readTotal = 0
+                while (readTotal < contentLength) {
+                    val r = input.read(bodyChars, readTotal, contentLength - readTotal)
+                    if (r == -1) break
+                    readTotal += r
+                }
+                val bodyString = String(bodyChars, 0, readTotal)
+                val bodyJson = try {
+                    JSONObject(bodyString)
+                } catch (_: Exception) {
+                    JSONObject()
+                }
+
+                when (decodedPath) {
+                    "/api/accounts/create-admin" -> {
+                        if (!authRequired) {
+                            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"auth_required\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        } else if (!reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
+                        } else {
+                            handleCreateAdmin(output, context, bodyJson, clientIp, needDevCookie)
+                        }
+                    }
+                    "/api/accounts/delete" -> {
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
+                        } else if (reqAuth.role != "admin") {
+                            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"admin_required\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        } else {
+                            handleDeleteAdmin(output, context, bodyJson, reqAuth.username, needDevCookie)
+                        }
+                    }
+                    "/api/devices/block" -> {
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
+                        } else if (reqAuth.role != "admin") {
+                            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"admin_required\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        } else {
+                            handleBlockDevice(output, context, bodyJson, clientDevId, needDevCookie)
+                        }
+                    }
+                    "/api/fs/delete" -> {
+                        if (!authRequired) {
+                            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"auth_required\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        } else if (!reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
+                        } else if (reqAuth.role != "admin") {
+                            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"admin_required\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        } else {
+                            handleFsDelete(output, context, bodyJson, needDevCookie)
+                        }
+                    }
+                    "/api/fs/rename" -> {
+                        if (!authRequired) {
+                            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"auth_required\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        } else if (!reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
+                        } else if (reqAuth.role != "admin") {
+                            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"admin_required\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        } else {
+                            handleFsRename(output, context, bodyJson, needDevCookie)
+                        }
+                    }
+                    else -> {
+                        if (decodedPath.startsWith("/api/")) {
+                            if (authRequired && !reqAuth.isAuthorized) {
+                                send401WithoutAuth(output, needDevCookie)
+                            } else {
+                                sendResponse(output, 404, "application/json; charset=UTF-8", "{\"error\":\"not_found\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                            }
+                        } else {
+                            sendResponse(output, 404, "text/plain; charset=UTF-8", "404 Not Found".toByteArray(Charsets.UTF_8), needDevCookie = needDevCookie)
+                        }
                     }
                 }
             } else {
                 val methodNotAllowed = "405 Method Not Allowed"
-                sendResponse(output, 405, "text/plain; charset=UTF-8", methodNotAllowed.toByteArray(Charsets.UTF_8))
+                sendResponse(output, 405, "text/plain; charset=UTF-8", methodNotAllowed.toByteArray(Charsets.UTF_8), needDevCookie = needDevCookie)
             }
         } catch (e: Exception) {
             Log.w(TAG, "Error handling client connection: ${e.message}")
@@ -362,12 +676,511 @@ object LocalHttpShareServer {
         }
     }
 
-    private fun isAuthorized(cookieHeader: String?, authHeader: String?, context: Context): Boolean {
-        val token = extractCookie(cookieHeader, "nx_session")
-        if (!token.isNullOrEmpty() && activeSessions.contains(token)) {
-            return true
+    private fun resolveRequestAuth(
+        sessionToken: String?,
+        authHeader: String?,
+        authRequired: Boolean,
+        context: Context
+    ): RequestAuth {
+        if (!authRequired) {
+            if (!sessionToken.isNullOrEmpty()) {
+                val s = activeSessions[sessionToken]
+                if (s != null) {
+                    return RequestAuth(isAuthorized = true, username = s.username, role = s.role, sessionToken = s.token)
+                }
+            }
+            return RequestAuth(isAuthorized = true, username = "гость", role = "user", sessionToken = null)
         }
-        return checkBasicAuth(authHeader, context)
+
+        if (!sessionToken.isNullOrEmpty()) {
+            val s = activeSessions[sessionToken]
+            if (s != null) {
+                return RequestAuth(isAuthorized = true, username = s.username, role = s.role, sessionToken = s.token)
+            }
+        }
+
+        val cred = checkCredentials(authHeader, context)
+        if (cred != null) {
+            return RequestAuth(isAuthorized = true, username = cred.username, role = cred.role, sessionToken = null)
+        }
+
+        return RequestAuth(isAuthorized = false, username = "", role = "user", sessionToken = null)
+    }
+
+    private fun checkCredentials(authHeader: String?, context: Context): AuthResult? {
+        if (authHeader == null || !authHeader.startsWith("Basic ", ignoreCase = true)) {
+            return null
+        }
+        val encoded = authHeader.substringAfter("Basic ").trim()
+        val decoded = try {
+            String(Base64.decode(encoded, Base64.DEFAULT), Charsets.UTF_8)
+        } catch (_: Exception) {
+            return null
+        }
+        val colonIndex = decoded.indexOf(':')
+        if (colonIndex == -1) return null
+        val user = decoded.substring(0, colonIndex).trim()
+        val pass = decoded.substring(colonIndex + 1)
+
+        // 1. Check admin accounts first
+        val admin = findAdmin(context, user)
+        if (admin != null) {
+            val salt = HttpServerConfig.hexToBytes(admin.salt)
+            val expectedHash = HttpServerConfig.hexToBytes(admin.hash)
+            val computedHash = HttpServerConfig.hashPassword(pass.toCharArray(), salt)
+            if (java.security.MessageDigest.isEqual(computedHash, expectedHash)) {
+                return AuthResult(username = admin.name, role = "admin")
+            }
+            return null
+        }
+
+        // 2. Check regular user
+        val expectedUser = HttpServerConfig.getUsername(context)
+        val expectedPass = HttpServerConfig.getPassword(context)
+        if (user == expectedUser && pass == expectedPass) {
+            return AuthResult(username = expectedUser, role = "user")
+        }
+
+        return null
+    }
+
+    private fun getAdminAccounts(context: Context): MutableList<AdminAccount> {
+        val prefs = context.getSharedPreferences("http_accounts", Context.MODE_PRIVATE)
+        val jsonStr = prefs.getString("accounts", "[]") ?: "[]"
+        val list = mutableListOf<AdminAccount>()
+        try {
+            val arr = JSONArray(jsonStr)
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                list.add(
+                    AdminAccount(
+                        name = obj.getString("name"),
+                        salt = obj.getString("salt"),
+                        hash = obj.getString("hash"),
+                        role = obj.optString("role", "admin"),
+                        created = obj.optLong("created", System.currentTimeMillis())
+                    )
+                )
+            }
+        } catch (_: Exception) {}
+        return list
+    }
+
+    private fun saveAdminAccounts(context: Context, list: List<AdminAccount>) {
+        val arr = JSONArray()
+        for (a in list) {
+            val obj = JSONObject()
+            obj.put("name", a.name)
+            obj.put("salt", a.salt)
+            obj.put("hash", a.hash)
+            obj.put("role", a.role)
+            obj.put("created", a.created)
+            arr.put(obj)
+        }
+        context.getSharedPreferences("http_accounts", Context.MODE_PRIVATE)
+            .edit()
+            .putString("accounts", arr.toString())
+            .apply()
+    }
+
+    private fun findAdmin(context: Context, name: String): AdminAccount? {
+        val trimmed = name.trim()
+        return getAdminAccounts(context).find { it.name.equals(trimmed, ignoreCase = true) }
+    }
+
+    private fun handleCreateAdmin(
+        output: OutputStream,
+        context: Context,
+        body: JSONObject,
+        clientIp: String,
+        needDevCookie: String?
+    ) {
+        val name = body.optString("name", "").trim()
+        val password = body.optString("password", "")
+        val setupPassword = body.optString("setupPassword", "")
+
+        if (setupPasswordRateLimiter.isRateLimited(clientIp)) {
+            sendResponse(output, 429, "application/json; charset=UTF-8", "{\"error\":\"rate_limited\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+
+        if (!HttpServerConfig.verifyAdminSetupPassword(context, setupPassword)) {
+            setupPasswordRateLimiter.recordFailure(clientIp)
+            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"bad_setup_password\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+
+        val nameRegex = Regex("^[A-Za-z0-9._-]{3,32}$")
+        if (!name.matches(nameRegex)) {
+            sendResponse(output, 400, "application/json; charset=UTF-8", "{\"error\":\"bad_name\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+
+        if (password.length < 6) {
+            sendResponse(output, 400, "application/json; charset=UTF-8", "{\"error\":\"weak_password\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+
+        val existingUser = HttpServerConfig.getUsername(context)
+        if (name.equals(existingUser, ignoreCase = true) || findAdmin(context, name) != null) {
+            sendResponse(output, 409, "application/json; charset=UTF-8", "{\"error\":\"exists\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+
+        setupPasswordRateLimiter.recordSuccess(clientIp)
+        val salt = HttpServerConfig.generateSalt()
+        val hash = HttpServerConfig.hashPassword(password.toCharArray(), salt)
+        val list = getAdminAccounts(context)
+        list.add(
+            AdminAccount(
+                name = name,
+                salt = HttpServerConfig.bytesToHex(salt),
+                hash = HttpServerConfig.bytesToHex(hash),
+                role = "admin",
+                created = System.currentTimeMillis()
+            )
+        )
+        saveAdminAccounts(context, list)
+
+        sendResponse(output, 200, "application/json; charset=UTF-8", "{\"ok\":true}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+    }
+
+    private fun handleDeleteAdmin(
+        output: OutputStream,
+        context: Context,
+        body: JSONObject,
+        currentUsername: String,
+        needDevCookie: String?
+    ) {
+        val name = body.optString("name", "").trim()
+        if (name.equals(currentUsername, ignoreCase = true)) {
+            sendResponse(output, 400, "application/json; charset=UTF-8", "{\"error\":\"self\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+
+        val list = getAdminAccounts(context)
+        val removed = list.removeAll { it.name.equals(name, ignoreCase = true) }
+        if (removed) {
+            saveAdminAccounts(context, list)
+            // Close sessions of this user
+            activeSessions.values.filter { it.username.equals(name, ignoreCase = true) }.forEach {
+                activeSessions.remove(it.token)
+            }
+        }
+
+        sendResponse(output, 200, "application/json; charset=UTF-8", "{\"ok\":true}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+    }
+
+    private fun handleBlockDevice(
+        output: OutputStream,
+        context: Context,
+        body: JSONObject,
+        clientDevId: String,
+        needDevCookie: String?
+    ) {
+        val targetId = body.optString("id", "").trim()
+        val targetBlocked = body.optBoolean("blocked", false)
+
+        if (targetId == clientDevId) {
+            sendResponse(output, 400, "application/json; charset=UTF-8", "{\"error\":\"self\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+
+        loadDevicesIfNeeded(context)
+        val dev = devices[targetId]
+        if (dev != null) {
+            dev.blocked = targetBlocked
+            saveDevicesToDisk(context, force = true)
+            if (targetBlocked) {
+                activeSessions.values.filter { it.deviceId == targetId }.forEach {
+                    activeSessions.remove(it.token)
+                }
+            }
+        }
+
+        sendResponse(output, 200, "application/json; charset=UTF-8", "{\"ok\":true}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+    }
+
+    private fun handleFsDelete(
+        output: OutputStream,
+        context: Context,
+        body: JSONObject,
+        needDevCookie: String?
+    ) {
+        val pathsArray = body.optJSONArray("paths") ?: JSONArray()
+        val pathsList = mutableListOf<String>()
+        val maxPaths = minOf(pathsArray.length(), 200)
+        for (i in 0 until maxPaths) {
+            pathsList.add(pathsArray.optString(i))
+        }
+
+        val canonicalRoot = try {
+            Environment.getExternalStorageDirectory().canonicalFile
+        } catch (_: Exception) {
+            File("/storage/emulated/0").canonicalFile
+        }
+        val canonicalRootPath = canonicalRoot.canonicalPath
+        val androidDirPath = File(canonicalRoot, "Android").canonicalPath
+
+        var deletedCount = 0
+        val failedList = mutableListOf<String>()
+        val scannedPaths = mutableListOf<String>()
+
+        for (p in pathsList) {
+            val f = try { File(p).canonicalFile } catch (_: Exception) { null }
+            if (f == null) {
+                failedList.add(p)
+                continue
+            }
+            val cp = f.canonicalPath
+            val isUnderRoot = cp != canonicalRootPath && cp.startsWith(canonicalRootPath + File.separator)
+            val isAndroid = cp == androidDirPath || cp.startsWith(androidDirPath + File.separator)
+            if (!isUnderRoot || isAndroid || !f.exists()) {
+                failedList.add(p)
+                continue
+            }
+            val ok = f.deleteRecursively()
+            if (ok) {
+                deletedCount++
+                scannedPaths.add(f.absolutePath)
+            } else {
+                failedList.add(p)
+            }
+        }
+
+        if (scannedPaths.isNotEmpty()) {
+            try {
+                MediaScannerConnection.scanFile(context, scannedPaths.toTypedArray(), null, null)
+            } catch (_: Exception) {}
+        }
+
+        val resp = "{\"deleted\":$deletedCount,\"failed\":[${failedList.joinToString(",") { jsonEscape(it) }}]}"
+        sendResponse(output, 200, "application/json; charset=UTF-8", resp.toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+    }
+
+    private fun handleFsRename(
+        output: OutputStream,
+        context: Context,
+        body: JSONObject,
+        needDevCookie: String?
+    ) {
+        val path = body.optString("path", "").trim()
+        val name = body.optString("name", "").trim()
+
+        if (name.isEmpty() || name.length > 120 || name.contains('/') || name.contains('\\') || name.contains('\u0000') || name == "." || name == "..") {
+            sendResponse(output, 400, "application/json; charset=UTF-8", "{\"error\":\"bad_name\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+
+        val canonicalRoot = try {
+            Environment.getExternalStorageDirectory().canonicalFile
+        } catch (_: Exception) {
+            File("/storage/emulated/0").canonicalFile
+        }
+        val canonicalRootPath = canonicalRoot.canonicalPath
+        val androidDirPath = File(canonicalRoot, "Android").canonicalPath
+
+        val srcFile = try { File(path).canonicalFile } catch (_: Exception) { null }
+        if (srcFile == null || !srcFile.exists()) {
+            sendResponse(output, 404, "application/json; charset=UTF-8", "{\"error\":\"not_found\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+
+        val srcPath = srcFile.canonicalPath
+        val isUnderRoot = srcPath != canonicalRootPath && srcPath.startsWith(canonicalRootPath + File.separator)
+        val isAndroid = srcPath == androidDirPath || srcPath.startsWith(androidDirPath + File.separator)
+        if (!isUnderRoot || isAndroid) {
+            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"forbidden\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+
+        val parentDir = srcFile.parentFile
+        if (parentDir == null) {
+            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"forbidden\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+
+        val destFile = File(parentDir, name).canonicalFile
+        val destPath = destFile.canonicalPath
+        if (destFile.exists()) {
+            sendResponse(output, 409, "application/json; charset=UTF-8", "{\"error\":\"exists_target\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+
+        val renamed = srcFile.renameTo(destFile)
+        if (!renamed) {
+            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"no_access\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+
+        try {
+            MediaScannerConnection.scanFile(context, arrayOf(srcFile.absolutePath, destFile.absolutePath), null, null)
+        } catch (_: Exception) {}
+
+        val resp = "{\"ok\":true,\"path\":${jsonEscape(destPath)}}"
+        sendResponse(output, 200, "application/json; charset=UTF-8", resp.toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+    }
+
+    private fun loadDevicesIfNeeded(context: Context) {
+        if (devicesLoaded) return
+        synchronized(devices) {
+            if (devicesLoaded) return
+            val prefs = context.getSharedPreferences("http_devices", Context.MODE_PRIVATE)
+            val jsonStr = prefs.getString("devices_json", "[]") ?: "[]"
+            try {
+                val arr = JSONArray(jsonStr)
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    val rec = DeviceRecord(
+                        id = obj.getString("id"),
+                        ip = obj.optString("ip", ""),
+                        ua = obj.optString("ua", ""),
+                        account = obj.optString("account", ""),
+                        role = obj.optString("role", "user"),
+                        firstSeen = obj.optLong("firstSeen", System.currentTimeMillis()),
+                        lastLogin = obj.optLong("lastLogin", System.currentTimeMillis()),
+                        lastSeen = obj.optLong("lastSeen", System.currentTimeMillis()),
+                        sessionStart = obj.optLong("sessionStart", System.currentTimeMillis()),
+                        blocked = obj.optBoolean("blocked", false)
+                    )
+                    devices[rec.id] = rec
+                }
+            } catch (_: Exception) {}
+            devicesLoaded = true
+        }
+    }
+
+    private fun saveDevicesToDisk(context: Context, force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!force && now - lastDevicesSaveTime < 30000L) {
+            return
+        }
+        lastDevicesSaveTime = now
+        // Cleanup: remove unblocked devices older than 30 days
+        val thirtyDaysAgo = now - (30L * 24 * 60 * 60 * 1000L)
+        devices.entries.removeIf { !it.value.blocked && it.value.lastSeen < thirtyDaysAgo }
+
+        // Max 100 devices
+        if (devices.size > 100) {
+            val unblocked = devices.values.filter { !it.blocked }.sortedBy { it.lastSeen }
+            val toRemoveCount = devices.size - 100
+            for (i in 0 until minOf(toRemoveCount, unblocked.size)) {
+                devices.remove(unblocked[i].id)
+            }
+        }
+
+        val arr = JSONArray()
+        for (d in devices.values) {
+            val obj = JSONObject()
+            obj.put("id", d.id)
+            obj.put("ip", d.ip)
+            obj.put("ua", d.ua)
+            obj.put("account", d.account)
+            obj.put("role", d.role)
+            obj.put("firstSeen", d.firstSeen)
+            obj.put("lastLogin", d.lastLogin)
+            obj.put("lastSeen", d.lastSeen)
+            obj.put("sessionStart", d.sessionStart)
+            obj.put("blocked", d.blocked)
+            arr.put(obj)
+        }
+        context.getSharedPreferences("http_devices", Context.MODE_PRIVATE)
+            .edit()
+            .putString("devices_json", arr.toString())
+            .apply()
+    }
+
+    private fun isDeviceOrIpBlocked(context: Context, devId: String, ip: String): Boolean {
+        loadDevicesIfNeeded(context)
+        val dev = devices[devId]
+        if (dev?.blocked == true) return true
+        if (ip.isNotBlank() && ip != "127.0.0.1" && ip != "unknown") {
+            if (devices.values.any { it.blocked && it.ip == ip }) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun touchDevice(
+        context: Context,
+        devId: String,
+        ip: String,
+        ua: String,
+        account: String?,
+        role: String?,
+        isLogin: Boolean = false
+    ) {
+        loadDevicesIfNeeded(context)
+        val now = System.currentTimeMillis()
+        val rec = devices.computeIfAbsent(devId) { id ->
+            DeviceRecord(
+                id = id,
+                ip = ip,
+                ua = ua,
+                account = account ?: "",
+                role = role ?: "user",
+                firstSeen = now,
+                lastLogin = now,
+                lastSeen = now,
+                sessionStart = now,
+                blocked = false
+            )
+        }
+        synchronized(rec) {
+            if (now - rec.lastSeen > 2 * 60 * 1000L) {
+                rec.sessionStart = now
+            }
+            if (isLogin) {
+                rec.lastLogin = now
+                if (!account.isNullOrBlank()) rec.account = account
+                if (!role.isNullOrBlank()) rec.role = role
+            }
+            if (isLogin || now - rec.lastSeen >= 5000L) {
+                rec.lastSeen = now
+                if (ip.isNotBlank()) rec.ip = ip
+                if (ua.isNotBlank()) rec.ua = ua
+            }
+        }
+        saveDevicesToDisk(context, force = isLogin)
+    }
+
+    private fun parseBrowserAndOs(ua: String): String {
+        val browser = when {
+            ua.contains("SamsungBrowser", ignoreCase = true) -> "Samsung Internet"
+            ua.contains("Edg/", ignoreCase = true) || ua.contains("Edge/", ignoreCase = true) -> "Edge"
+            ua.contains("OPR/", ignoreCase = true) || ua.contains("Opera", ignoreCase = true) -> "Opera"
+            ua.contains("Chrome", ignoreCase = true) || ua.contains("CriOS", ignoreCase = true) -> "Chrome"
+            ua.contains("Firefox", ignoreCase = true) || ua.contains("FxiOS", ignoreCase = true) -> "Firefox"
+            ua.contains("Safari", ignoreCase = true) && !ua.contains("Chrome", ignoreCase = true) -> "Safari"
+            else -> null
+        }
+        val os = when {
+            ua.contains("CrOS", ignoreCase = true) -> "ChromeOS"
+            ua.contains("Android", ignoreCase = true) -> "Android"
+            ua.contains("iPhone", ignoreCase = true) || ua.contains("iPad", ignoreCase = true) || ua.contains("iPod", ignoreCase = true) -> "iOS"
+            ua.contains("Windows", ignoreCase = true) -> "Windows"
+            ua.contains("Macintosh", ignoreCase = true) || ua.contains("Mac OS", ignoreCase = true) -> "macOS"
+            ua.contains("Linux", ignoreCase = true) -> "Linux"
+            else -> null
+        }
+        return when {
+            browser != null && os != null -> "$browser · $os"
+            browser != null -> browser
+            os != null -> os
+            else -> "Устройство"
+        }
+    }
+
+    private fun parseDeviceKind(ua: String): String {
+        val isIpad = ua.contains("iPad", ignoreCase = true)
+        val isAndroid = ua.contains("Android", ignoreCase = true)
+        val hasMobile = ua.contains("Mobile", ignoreCase = true) || ua.contains("Mobi", ignoreCase = true) || ua.contains("iPhone", ignoreCase = true)
+        return when {
+            isIpad || (isAndroid && !hasMobile) -> "tablet"
+            hasMobile -> "phone"
+            else -> "pc"
+        }
     }
 
     private fun extractCookie(cookieHeader: String?, cookieName: String): String? {
@@ -382,56 +1195,72 @@ object LocalHttpShareServer {
         return null
     }
 
-    private fun sendRedirect(output: OutputStream, location: String) {
-        val header = "HTTP/1.1 302 Found\r\n" +
-                "Location: $location\r\n" +
-                "Content-Length: 0\r\n" +
-                "Connection: close\r\n\r\n"
-        output.write(header.toByteArray(Charsets.UTF_8))
+    private fun sendRedirect(
+        output: OutputStream,
+        location: String,
+        needDevCookie: String? = null,
+        extraHeaders: List<String> = emptyList()
+    ) {
+        val sb = StringBuilder("HTTP/1.1 302 Found\r\n")
+        sb.append("Location: $location\r\n")
+        if (needDevCookie != null) {
+            sb.append("Set-Cookie: nx_dev=$needDevCookie; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly\r\n")
+        }
+        for (h in extraHeaders) {
+            sb.append(h).append("\r\n")
+        }
+        sb.append("Content-Length: 0\r\n")
+        sb.append("Connection: close\r\n\r\n")
+        output.write(sb.toString().toByteArray(Charsets.UTF_8))
         output.flush()
     }
 
-    private fun send401WithAuth(output: OutputStream) {
+    private fun send401WithAuth(output: OutputStream, needDevCookie: String? = null) {
         val body = "401 Unauthorized\r\n".toByteArray(Charsets.UTF_8)
-        val header = "HTTP/1.1 401 Unauthorized\r\n" +
-                "WWW-Authenticate: Basic realm=\"Nexora Media\"\r\n" +
-                "Content-Type: text/plain; charset=UTF-8\r\n" +
-                "Content-Length: ${body.size}\r\n" +
-                "Connection: close\r\n\r\n"
-        output.write(header.toByteArray(Charsets.UTF_8))
+        val sb = StringBuilder("HTTP/1.1 401 Unauthorized\r\n")
+        sb.append("WWW-Authenticate: Basic realm=\"Nexora Media\"\r\n")
+        sb.append("Content-Type: text/plain; charset=UTF-8\r\n")
+        sb.append("Content-Length: ${body.size}\r\n")
+        if (needDevCookie != null) {
+            sb.append("Set-Cookie: nx_dev=$needDevCookie; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly\r\n")
+        }
+        sb.append("Connection: close\r\n\r\n")
+        output.write(sb.toString().toByteArray(Charsets.UTF_8))
         output.write(body)
         output.flush()
     }
 
-    private fun send401WithoutAuth(output: OutputStream) {
+    private fun send401WithoutAuth(output: OutputStream, needDevCookie: String? = null) {
         val body = "401 Unauthorized\r\n".toByteArray(Charsets.UTF_8)
-        val header = "HTTP/1.1 401 Unauthorized\r\n" +
-                "Content-Type: text/plain; charset=UTF-8\r\n" +
-                "Content-Length: ${body.size}\r\n" +
-                "Connection: close\r\n\r\n"
-        output.write(header.toByteArray(Charsets.UTF_8))
+        val sb = StringBuilder("HTTP/1.1 401 Unauthorized\r\n")
+        sb.append("Content-Type: text/plain; charset=UTF-8\r\n")
+        sb.append("Content-Length: ${body.size}\r\n")
+        if (needDevCookie != null) {
+            sb.append("Set-Cookie: nx_dev=$needDevCookie; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly\r\n")
+        }
+        sb.append("Connection: close\r\n\r\n")
+        output.write(sb.toString().toByteArray(Charsets.UTF_8))
         output.write(body)
         output.flush()
     }
 
-    private fun checkBasicAuth(authHeader: String?, context: Context): Boolean {
-        if (authHeader == null || !authHeader.startsWith("Basic ", ignoreCase = true)) {
-            return false
+    private fun sendBlockedResponse(output: OutputStream, isHtml: Boolean, needDevCookie: String?) {
+        if (isHtml) {
+            val html = """
+                <!DOCTYPE html>
+                <html lang="ru">
+                <head><meta charset="utf-8"><title>Доступ запрещён</title></head>
+                <body style="background:#080604; color:#ff8a78; font-family:sans-serif; text-align:center; padding:50px;">
+                    <h2>Доступ запрещён</h2>
+                    <p>Устройство заблокировано администратором.</p>
+                </body>
+                </html>
+            """.trimIndent().toByteArray(Charsets.UTF_8)
+            sendResponse(output, 403, "text/html; charset=UTF-8", html, needDevCookie = needDevCookie)
+        } else {
+            val json = "{\"error\":\"blocked\"}".toByteArray(Charsets.UTF_8)
+            sendResponse(output, 403, "application/json; charset=UTF-8", json, needDevCookie = needDevCookie, extraHeaders = listOf("Cache-Control: no-store"))
         }
-        val encoded = authHeader.substringAfter("Basic ").trim()
-        val decoded = try {
-            String(Base64.decode(encoded, Base64.DEFAULT), Charsets.UTF_8)
-        } catch (_: Exception) {
-            return false
-        }
-        val expectedUser = HttpServerConfig.getUsername(context)
-        val expectedPass = HttpServerConfig.getPassword(context)
-
-        val colonIndex = decoded.indexOf(':')
-        if (colonIndex == -1) return false
-        val user = decoded.substring(0, colonIndex)
-        val pass = decoded.substring(colonIndex + 1)
-        return user == expectedUser && pass == expectedPass
     }
 
     private fun extractQueryParam(query: String, paramName: String): String? {
@@ -453,7 +1282,6 @@ object LocalHttpShareServer {
         val folderSetting = HttpServerConfig.getBroadcastFolder(context)
         val specificDir = HttpServerConfig.getFolderDirectory(context, folderSetting)
 
-        // If specific folder is chosen, scan that folder directly
         if (specificDir != null && specificDir.exists()) {
             specificDir.walkTopDown().maxDepth(3).filter { it.isFile }.forEach { file ->
                 val ext = file.extension.lowercase()
@@ -486,7 +1314,6 @@ object LocalHttpShareServer {
                 }
             }
         } else {
-            // ALL Media: Query MediaStore Video
             try {
                 val videoProjection = arrayOf(
                     MediaStore.Video.Media._ID,
@@ -543,7 +1370,6 @@ object LocalHttpShareServer {
                 Log.w(TAG, "Error querying MediaStore Video: ${e.message}")
             }
 
-            // Query MediaStore Audio
             try {
                 val audioProjection = arrayOf(
                     MediaStore.Audio.Media._ID,
@@ -600,7 +1426,6 @@ object LocalHttpShareServer {
                 Log.w(TAG, "Error querying MediaStore Audio: ${e.message}")
             }
 
-            // Also include any files in the dedicated app share directory
             val shareDir = File(context.getExternalFilesDir(null), "http_share")
             if (shareDir.exists()) {
                 shareDir.listFiles()?.filter { it.isFile }?.forEach { f ->
@@ -632,14 +1457,15 @@ object LocalHttpShareServer {
         rangeHeader: String?,
         context: Context,
         asDownload: Boolean,
-        isHead: Boolean
+        isHead: Boolean,
+        needDevCookie: String? = null
     ) {
         val mediaList = loadMediaList(context)
         val item = mediaList.find { it.id == mediaId || it.fileName == mediaId }
 
         if (item == null) {
             val msg = "Медиафайл не найден"
-            sendResponse(output, 404, "text/plain; charset=UTF-8", msg.toByteArray(Charsets.UTF_8), isHead)
+            sendResponse(output, 404, "text/plain; charset=UTF-8", msg.toByteArray(Charsets.UTF_8), isHead, needDevCookie = needDevCookie)
             return
         }
 
@@ -671,7 +1497,6 @@ object LocalHttpShareServer {
         }
 
         val contentLength = if (totalLength > 0) (endByte - startByte + 1).coerceAtLeast(0) else -1L
-
         val status = if (isPartial && totalLength > 0) "206 Partial Content" else "200 OK"
         val mime = item.mimeType
         val disposition = if (asDownload) "attachment; filename=\"${item.fileName.replace("\"", "\\\"")}\"" else "inline"
@@ -681,6 +1506,10 @@ object LocalHttpShareServer {
             .append("Content-Type: $mime\r\n")
             .append("Accept-Ranges: bytes\r\n")
             .append("Content-Disposition: $disposition\r\n")
+
+        if (needDevCookie != null) {
+            headerBuilder.append("Set-Cookie: nx_dev=$needDevCookie; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly\r\n")
+        }
 
         if (totalLength > 0) {
             headerBuilder.append("Content-Length: $contentLength\r\n")
@@ -695,7 +1524,6 @@ object LocalHttpShareServer {
 
         if (isHead) return
 
-        // Stream content
         var inputStream: InputStream? = null
         try {
             inputStream = if (item.directFile != null && item.directFile.exists()) {
@@ -726,7 +1554,6 @@ object LocalHttpShareServer {
             }
             output.flush()
         } catch (_: Exception) {
-            // Client socket disconnect or video seek abort - standard behavior
         } finally {
             try { inputStream?.close() } catch (_: Exception) {}
         }
@@ -736,7 +1563,8 @@ object LocalHttpShareServer {
         output: OutputStream,
         mediaId: String,
         context: Context,
-        isHead: Boolean
+        isHead: Boolean,
+        needDevCookie: String? = null
     ) {
         val safeFileName = mediaId.replace(Regex("[^a-zA-Z0-9._-]"), "_") + ".jpg"
         val thumbsDir = File(context.cacheDir, "http_thumbs")
@@ -745,12 +1573,15 @@ object LocalHttpShareServer {
         if (cachedFile.exists() && cachedFile.length() > 0) {
             try {
                 val bytes = cachedFile.readBytes()
-                val header = "HTTP/1.1 200 OK\r\n" +
-                        "Content-Type: image/jpeg\r\n" +
-                        "Content-Length: ${bytes.size}\r\n" +
-                        "Cache-Control: max-age=86400\r\n" +
-                        "Connection: close\r\n\r\n"
-                output.write(header.toByteArray(Charsets.UTF_8))
+                val header = StringBuilder("HTTP/1.1 200 OK\r\n")
+                    .append("Content-Type: image/jpeg\r\n")
+                    .append("Content-Length: ${bytes.size}\r\n")
+                    .append("Cache-Control: max-age=86400\r\n")
+                if (needDevCookie != null) {
+                    header.append("Set-Cookie: nx_dev=$needDevCookie; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly\r\n")
+                }
+                header.append("Connection: close\r\n\r\n")
+                output.write(header.toString().toByteArray(Charsets.UTF_8))
                 if (!isHead) output.write(bytes)
                 output.flush()
                 return
@@ -764,19 +1595,12 @@ object LocalHttpShareServer {
 
         if (item == null || !item.isVideo) {
             val notFound = "Thumbnail not found".toByteArray(Charsets.UTF_8)
-            val header = "HTTP/1.1 404 Not Found\r\n" +
-                    "Content-Type: text/plain; charset=UTF-8\r\n" +
-                    "Content-Length: ${notFound.size}\r\n" +
-                    "Connection: close\r\n\r\n"
-            output.write(header.toByteArray(Charsets.UTF_8))
-            if (!isHead) output.write(notFound)
-            output.flush()
+            sendResponse(output, 404, "text/plain; charset=UTF-8", notFound, isHead, needDevCookie = needDevCookie)
             return
         }
 
         var bitmap: Bitmap? = null
 
-        // 1. Android 10+ (API 29+) loadThumbnail
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && item.contentUri != null) {
             try {
                 bitmap = context.contentResolver.loadThumbnail(item.contentUri, Size(480, 270), null)
@@ -785,7 +1609,6 @@ object LocalHttpShareServer {
             }
         }
 
-        // 2. Older versions MediaStore.Video.Thumbnails.getThumbnail if id is numeric
         if (bitmap == null && item.contentUri != null) {
             val numericId = item.id.removePrefix("vid_").toLongOrNull()
             if (numericId != null) {
@@ -803,7 +1626,6 @@ object LocalHttpShareServer {
             }
         }
 
-        // 3. Fallback: MediaMetadataRetriever
         if (bitmap == null) {
             val retriever = MediaMetadataRetriever()
             try {
@@ -827,13 +1649,7 @@ object LocalHttpShareServer {
 
         if (bitmap == null) {
             val notFound = "Thumbnail generation failed".toByteArray(Charsets.UTF_8)
-            val header = "HTTP/1.1 404 Not Found\r\n" +
-                    "Content-Type: text/plain; charset=UTF-8\r\n" +
-                    "Content-Length: ${notFound.size}\r\n" +
-                    "Connection: close\r\n\r\n"
-            output.write(header.toByteArray(Charsets.UTF_8))
-            if (!isHead) output.write(notFound)
-            output.flush()
+            sendResponse(output, 404, "text/plain; charset=UTF-8", notFound, isHead, needDevCookie = needDevCookie)
             return
         }
 
@@ -848,19 +1664,27 @@ object LocalHttpShareServer {
             Log.w(TAG, "Failed writing thumb cache: ${e.message}")
         }
 
-        val header = "HTTP/1.1 200 OK\r\n" +
-                "Content-Type: image/jpeg\r\n" +
-                "Content-Length: ${bytes.size}\r\n" +
-                "Cache-Control: max-age=86400\r\n" +
-                "Connection: close\r\n\r\n"
-        output.write(header.toByteArray(Charsets.UTF_8))
+        val header = StringBuilder("HTTP/1.1 200 OK\r\n")
+            .append("Content-Type: image/jpeg\r\n")
+            .append("Content-Length: ${bytes.size}\r\n")
+            .append("Cache-Control: max-age=86400\r\n")
+        if (needDevCookie != null) {
+            header.append("Set-Cookie: nx_dev=$needDevCookie; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly\r\n")
+        }
+        header.append("Connection: close\r\n\r\n")
+        output.write(header.toString().toByteArray(Charsets.UTF_8))
         if (!isHead) output.write(bytes)
         output.flush()
     }
 
-    private fun serveApiPhotos(output: OutputStream, albumParam: String?, context: Context, isHead: Boolean) {
+    private fun serveApiPhotos(
+        output: OutputStream,
+        albumParam: String?,
+        context: Context,
+        isHead: Boolean,
+        needDevCookie: String? = null
+    ) {
         if (albumParam.isNullOrBlank()) {
-            // Group by MediaStore.Images BUCKET_ID, sorted by latest date DESC
             val projection = arrayOf(
                 MediaStore.Images.Media._ID,
                 MediaStore.Images.Media.BUCKET_ID,
@@ -928,9 +1752,8 @@ object LocalHttpShareServer {
             }
             json.append("]}")
             val bytes = json.toString().toByteArray(Charsets.UTF_8)
-            sendResponse(output, 200, "application/json; charset=UTF-8", bytes, isHead)
+            sendResponse(output, 200, "application/json; charset=UTF-8", bytes, isHead, needDevCookie = needDevCookie)
         } else {
-            // Photos inside single album
             val projection = arrayOf(
                 MediaStore.Images.Media._ID,
                 MediaStore.Images.Media.DISPLAY_NAME,
@@ -980,7 +1803,7 @@ object LocalHttpShareServer {
 
             json.append("]}")
             val bytes = json.toString().toByteArray(Charsets.UTF_8)
-            sendResponse(output, 200, "application/json; charset=UTF-8", bytes, isHead)
+            sendResponse(output, 200, "application/json; charset=UTF-8", bytes, isHead, needDevCookie = needDevCookie)
         }
     }
 
@@ -989,11 +1812,12 @@ object LocalHttpShareServer {
         idParam: String?,
         isDl: Boolean,
         context: Context,
-        isHead: Boolean
+        isHead: Boolean,
+        needDevCookie: String? = null
     ) {
         val id = idParam?.toLongOrNull()
         if (id == null) {
-            sendResponse(output, 404, "text/plain; charset=UTF-8", "Photo not found".toByteArray(Charsets.UTF_8), isHead)
+            sendResponse(output, 404, "text/plain; charset=UTF-8", "Photo not found".toByteArray(Charsets.UTF_8), isHead, needDevCookie = needDevCookie)
             return
         }
 
@@ -1028,7 +1852,7 @@ object LocalHttpShareServer {
         }
 
         if (inputStream == null) {
-            sendResponse(output, 404, "text/plain; charset=UTF-8", "Photo not found".toByteArray(Charsets.UTF_8), isHead)
+            sendResponse(output, 404, "text/plain; charset=UTF-8", "Photo not found".toByteArray(Charsets.UTF_8), isHead, needDevCookie = needDevCookie)
             return
         }
 
@@ -1038,6 +1862,9 @@ object LocalHttpShareServer {
             .append("Content-Type: $mimeType\r\n")
             .append("Content-Disposition: $disposition\r\n")
             .append("Cache-Control: max-age=3600\r\n")
+        if (needDevCookie != null) {
+            headerBuilder.append("Set-Cookie: nx_dev=$needDevCookie; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly\r\n")
+        }
         if (fileSize > 0) {
             headerBuilder.append("Content-Length: $fileSize\r\n")
         }
@@ -1067,11 +1894,12 @@ object LocalHttpShareServer {
         output: OutputStream,
         idParam: String?,
         context: Context,
-        isHead: Boolean
+        isHead: Boolean,
+        needDevCookie: String? = null
     ) {
         val id = idParam?.toLongOrNull()
         if (id == null) {
-            sendResponse(output, 404, "text/plain; charset=UTF-8", "Photo thumbnail not found".toByteArray(Charsets.UTF_8), isHead)
+            sendResponse(output, 404, "text/plain; charset=UTF-8", "Photo thumbnail not found".toByteArray(Charsets.UTF_8), isHead, needDevCookie = needDevCookie)
             return
         }
 
@@ -1082,12 +1910,15 @@ object LocalHttpShareServer {
         if (cachedFile.exists() && cachedFile.length() > 0) {
             try {
                 val bytes = cachedFile.readBytes()
-                val header = "HTTP/1.1 200 OK\r\n" +
-                        "Content-Type: image/jpeg\r\n" +
-                        "Content-Length: ${bytes.size}\r\n" +
-                        "Cache-Control: max-age=86400\r\n" +
-                        "Connection: close\r\n\r\n"
-                output.write(header.toByteArray(Charsets.UTF_8))
+                val header = StringBuilder("HTTP/1.1 200 OK\r\n")
+                    .append("Content-Type: image/jpeg\r\n")
+                    .append("Content-Length: ${bytes.size}\r\n")
+                    .append("Cache-Control: max-age=86400\r\n")
+                if (needDevCookie != null) {
+                    header.append("Set-Cookie: nx_dev=$needDevCookie; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly\r\n")
+                }
+                header.append("Connection: close\r\n\r\n")
+                output.write(header.toString().toByteArray(Charsets.UTF_8))
                 if (!isHead) output.write(bytes)
                 output.flush()
                 return
@@ -1140,7 +1971,7 @@ object LocalHttpShareServer {
         }
 
         if (bitmap == null) {
-            sendResponse(output, 404, "text/plain; charset=UTF-8", "Photo thumbnail not found".toByteArray(Charsets.UTF_8), isHead)
+            sendResponse(output, 404, "text/plain; charset=UTF-8", "Photo thumbnail not found".toByteArray(Charsets.UTF_8), isHead, needDevCookie = needDevCookie)
             return
         }
 
@@ -1153,17 +1984,26 @@ object LocalHttpShareServer {
             cachedFile.writeBytes(bytes)
         } catch (_: Exception) {}
 
-        val header = "HTTP/1.1 200 OK\r\n" +
-                "Content-Type: image/jpeg\r\n" +
-                "Content-Length: ${bytes.size}\r\n" +
-                "Cache-Control: max-age=86400\r\n" +
-                "Connection: close\r\n\r\n"
-        output.write(header.toByteArray(Charsets.UTF_8))
+        val header = StringBuilder("HTTP/1.1 200 OK\r\n")
+            .append("Content-Type: image/jpeg\r\n")
+            .append("Content-Length: ${bytes.size}\r\n")
+            .append("Cache-Control: max-age=86400\r\n")
+        if (needDevCookie != null) {
+            header.append("Set-Cookie: nx_dev=$needDevCookie; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly\r\n")
+        }
+        header.append("Connection: close\r\n\r\n")
+        output.write(header.toString().toByteArray(Charsets.UTF_8))
         if (!isHead) output.write(bytes)
         output.flush()
     }
 
-    private fun serveApiFs(output: OutputStream, pathParam: String?, context: Context, isHead: Boolean) {
+    private fun serveApiFs(
+        output: OutputStream,
+        pathParam: String?,
+        context: Context,
+        isHead: Boolean,
+        needDevCookie: String? = null
+    ) {
         val canonicalRoot = try {
             Environment.getExternalStorageDirectory().canonicalFile
         } catch (_: Exception) {
@@ -1174,26 +2014,26 @@ object LocalHttpShareServer {
         val targetFile = try {
             if (pathParam.isNullOrBlank()) canonicalRoot else File(pathParam).canonicalFile
         } catch (_: Exception) {
-            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"forbidden\"}".toByteArray(Charsets.UTF_8), isHead)
+            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"forbidden\"}".toByteArray(Charsets.UTF_8), isHead, needDevCookie = needDevCookie)
             return
         }
         val targetPath = targetFile.canonicalPath
 
         val isUnderRoot = targetPath == canonicalRootPath || targetPath.startsWith(canonicalRootPath + File.separator)
         if (!isUnderRoot) {
-            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"forbidden\"}".toByteArray(Charsets.UTF_8), isHead)
+            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"forbidden\"}".toByteArray(Charsets.UTF_8), isHead, needDevCookie = needDevCookie)
             return
         }
 
         val androidDir = File(canonicalRoot, "Android").canonicalPath
         val isAndroidDir = targetPath == androidDir || targetPath.startsWith(androidDir + File.separator)
         if (isAndroidDir) {
-            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"forbidden\"}".toByteArray(Charsets.UTF_8), isHead)
+            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"forbidden\"}".toByteArray(Charsets.UTF_8), isHead, needDevCookie = needDevCookie)
             return
         }
 
         if (!targetFile.exists() || !targetFile.isDirectory) {
-            sendResponse(output, 404, "application/json; charset=UTF-8", "{\"error\":\"not_found\"}".toByteArray(Charsets.UTF_8), isHead)
+            sendResponse(output, 404, "application/json; charset=UTF-8", "{\"error\":\"not_found\"}".toByteArray(Charsets.UTF_8), isHead, needDevCookie = needDevCookie)
             return
         }
 
@@ -1203,7 +2043,7 @@ object LocalHttpShareServer {
             null
         }
         if (fileList == null) {
-            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"no_access\"}".toByteArray(Charsets.UTF_8), isHead)
+            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"no_access\"}".toByteArray(Charsets.UTF_8), isHead, needDevCookie = needDevCookie)
             return
         }
 
@@ -1246,7 +2086,7 @@ object LocalHttpShareServer {
         json.append("]")
         json.append("}")
 
-        sendResponse(output, 200, "application/json; charset=UTF-8", json.toString().toByteArray(Charsets.UTF_8), isHead)
+        sendResponse(output, 200, "application/json; charset=UTF-8", json.toString().toByteArray(Charsets.UTF_8), isHead, needDevCookie = needDevCookie)
     }
 
     private fun serveFsFile(
@@ -1255,10 +2095,11 @@ object LocalHttpShareServer {
         rangeHeader: String?,
         isDl: Boolean,
         context: Context,
-        isHead: Boolean
+        isHead: Boolean,
+        needDevCookie: String? = null
     ) {
         if (pathParam.isNullOrBlank()) {
-            sendResponse(output, 404, "text/plain; charset=UTF-8", "Path missing".toByteArray(Charsets.UTF_8), isHead)
+            sendResponse(output, 404, "text/plain; charset=UTF-8", "Path missing".toByteArray(Charsets.UTF_8), needDevCookie = needDevCookie)
             return
         }
         val canonicalRoot = try {
@@ -1271,26 +2112,26 @@ object LocalHttpShareServer {
         val targetFile = try {
             File(pathParam).canonicalFile
         } catch (_: Exception) {
-            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"forbidden\"}".toByteArray(Charsets.UTF_8), isHead)
+            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"forbidden\"}".toByteArray(Charsets.UTF_8), needDevCookie = needDevCookie)
             return
         }
         val targetPath = targetFile.canonicalPath
 
         val isUnderRoot = targetPath == canonicalRootPath || targetPath.startsWith(canonicalRootPath + File.separator)
         if (!isUnderRoot) {
-            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"forbidden\"}".toByteArray(Charsets.UTF_8), isHead)
+            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"forbidden\"}".toByteArray(Charsets.UTF_8), needDevCookie = needDevCookie)
             return
         }
 
         val androidDir = File(canonicalRoot, "Android").canonicalPath
         val isAndroidDir = targetPath == androidDir || targetPath.startsWith(androidDir + File.separator)
         if (isAndroidDir) {
-            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"forbidden\"}".toByteArray(Charsets.UTF_8), isHead)
+            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"forbidden\"}".toByteArray(Charsets.UTF_8), needDevCookie = needDevCookie)
             return
         }
 
         if (!targetFile.exists() || !targetFile.isFile) {
-            sendResponse(output, 404, "text/plain; charset=UTF-8", "File not found".toByteArray(Charsets.UTF_8), isHead)
+            sendResponse(output, 404, "text/plain; charset=UTF-8", "File not found".toByteArray(Charsets.UTF_8), needDevCookie = needDevCookie)
             return
         }
 
@@ -1324,6 +2165,10 @@ object LocalHttpShareServer {
             .append("Content-Type: $mime\r\n")
             .append("Accept-Ranges: bytes\r\n")
             .append("Content-Disposition: $disposition\r\n")
+
+        if (needDevCookie != null) {
+            headerBuilder.append("Set-Cookie: nx_dev=$needDevCookie; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly\r\n")
+        }
 
         if (totalLength > 0) {
             headerBuilder.append("Content-Length: $contentLength\r\n")
@@ -1365,7 +2210,95 @@ object LocalHttpShareServer {
         }
     }
 
-    private fun sendHtmlIndex(output: OutputStream, files: List<HttpMediaFile>, context: Context, isHead: Boolean) {
+    private fun serveApiStatus(
+        output: OutputStream,
+        reqAuth: RequestAuth,
+        isHead: Boolean,
+        needDevCookie: String? = null
+    ) {
+        val signal = getWifiSignal()
+        val timeMs = System.currentTimeMillis()
+        val wifiJson = if (signal.level != null) {
+            "{\"level\":${signal.level},\"rssi\":${signal.rssi}}"
+        } else {
+            "{\"level\":null,\"rssi\":null}"
+        }
+        val meJson = "{\"role\":${jsonEscape(reqAuth.role)},\"name\":${jsonEscape(reqAuth.username)}}"
+        val json = "{\"ok\":true,\"online\":true,\"time\":$timeMs,\"wifi\":$wifiJson,\"me\":$meJson}"
+        val data = json.toByteArray(Charsets.UTF_8)
+        sendResponse(output, 200, "application/json; charset=UTF-8", data, isHead = isHead, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+    }
+
+    private fun serveApiDevices(
+        output: OutputStream,
+        context: Context,
+        clientDevId: String,
+        isHead: Boolean,
+        needDevCookie: String? = null
+    ) {
+        loadDevicesIfNeeded(context)
+        val now = System.currentTimeMillis()
+        val sorted = devices.values.sortedWith(
+            compareByDescending<DeviceRecord> { (now - it.lastSeen) <= 15000L }
+                .thenByDescending { it.lastSeen }
+        )
+        val sb = StringBuilder("{\"now\":$now,\"devices\":[")
+        sorted.forEachIndexed { i, d ->
+            val online = (now - d.lastSeen) <= 15000L
+            val isMe = (d.id == clientDevId)
+            val name = parseBrowserAndOs(d.ua)
+            val kind = parseDeviceKind(d.ua)
+            sb.append("{")
+            sb.append("\"id\":${jsonEscape(d.id)},")
+            sb.append("\"name\":${jsonEscape(name)},")
+            sb.append("\"kind\":${jsonEscape(kind)},")
+            sb.append("\"ip\":${jsonEscape(d.ip)},")
+            sb.append("\"ua\":${jsonEscape(d.ua)},")
+            sb.append("\"account\":${jsonEscape(d.account)},")
+            sb.append("\"role\":${jsonEscape(d.role)},")
+            sb.append("\"online\":$online,")
+            sb.append("\"me\":$isMe,")
+            sb.append("\"blocked\":${d.blocked},")
+            sb.append("\"sessionStart\":${d.sessionStart},")
+            sb.append("\"lastLogin\":${d.lastLogin},")
+            sb.append("\"firstSeen\":${d.firstSeen},")
+            sb.append("\"lastSeen\":${d.lastSeen}")
+            sb.append("}")
+            if (i < sorted.size - 1) sb.append(",")
+        }
+        sb.append("]}")
+        val data = sb.toString().toByteArray(Charsets.UTF_8)
+        sendResponse(output, 200, "application/json; charset=UTF-8", data, isHead = isHead, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+    }
+
+    private fun serveApiAccounts(
+        output: OutputStream,
+        context: Context,
+        isHead: Boolean,
+        needDevCookie: String? = null
+    ) {
+        val list = getAdminAccounts(context)
+        val sb = StringBuilder("{\"accounts\":[")
+        list.forEachIndexed { i, a ->
+            sb.append("{")
+            sb.append("\"name\":${jsonEscape(a.name)},")
+            sb.append("\"created\":${a.created}")
+            sb.append("}")
+            if (i < list.size - 1) sb.append(",")
+        }
+        sb.append("]}")
+        val data = sb.toString().toByteArray(Charsets.UTF_8)
+        sendResponse(output, 200, "application/json; charset=UTF-8", data, isHead = isHead, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+    }
+
+    private fun sendHtmlIndex(
+        output: OutputStream,
+        files: List<HttpMediaFile>,
+        context: Context,
+        isHead: Boolean,
+        reqAuth: RequestAuth,
+        needDevCookie: String? = null
+    ) {
         val totalVideos = files.count { it.isVideo }
         val totalAudio = files.count { !it.isVideo }
         val totalPhotos = getPhotoCount(context)
@@ -1402,6 +2335,14 @@ object LocalHttpShareServer {
         }
         filesJson.append("]")
 
+        val wifiSignal = getWifiSignal()
+        val wifiJson = if (wifiSignal.level != null) {
+            "{\"level\":${wifiSignal.level},\"rssi\":${wifiSignal.rssi}}"
+        } else {
+            "{\"level\":null,\"rssi\":null}"
+        }
+        val meJson = "{\"role\":${jsonEscape(reqAuth.role)},\"name\":${jsonEscape(reqAuth.username)}}"
+
         val jsonBuilder = StringBuilder("{")
         jsonBuilder.append("\"version\":${jsonEscape(versionName)},")
         jsonBuilder.append("\"address\":${jsonEscape(getServerUrl(context))},")
@@ -1410,13 +2351,8 @@ object LocalHttpShareServer {
         jsonBuilder.append("\"authRequired\":${HttpServerConfig.isAuthRequired(context)},")
         jsonBuilder.append("\"folder\":${jsonEscape(folderSetting.title)},")
         jsonBuilder.append("\"features\":{\"photos\":true,\"folders\":true},")
-        val wifiSignal = getWifiSignal(context)
-        val wifiJson = if (wifiSignal.level != null) {
-            "{\"level\":${wifiSignal.level},\"rssi\":${wifiSignal.rssi}}"
-        } else {
-            "{\"level\":null,\"rssi\":null}"
-        }
         jsonBuilder.append("\"wifi\":$wifiJson,")
+        jsonBuilder.append("\"me\":$meJson,")
         jsonBuilder.append("\"stats\":{")
         jsonBuilder.append("\"videos\":$totalVideos,")
         jsonBuilder.append("\"audio\":$totalAudio,")
@@ -1442,19 +2378,27 @@ object LocalHttpShareServer {
         }
 
         val data = html.toByteArray(Charsets.UTF_8)
-        val header = "HTTP/1.1 200 OK\r\n" +
-                "Content-Type: text/html; charset=UTF-8\r\n" +
-                "Content-Length: ${data.size}\r\n" +
-                "Connection: close\r\n\r\n"
+        val sb = StringBuilder("HTTP/1.1 200 OK\r\n")
+            .append("Content-Type: text/html; charset=UTF-8\r\n")
+            .append("Content-Length: ${data.size}\r\n")
+        if (needDevCookie != null) {
+            sb.append("Set-Cookie: nx_dev=$needDevCookie; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly\r\n")
+        }
+        sb.append("Connection: close\r\n\r\n")
 
-        output.write(header.toByteArray(Charsets.UTF_8))
+        output.write(sb.toString().toByteArray(Charsets.UTF_8))
         if (!isHead) {
             output.write(data)
         }
         output.flush()
     }
 
-    private fun sendHtmlLogin(output: OutputStream, context: Context, isHead: Boolean) {
+    private fun sendHtmlLogin(
+        output: OutputStream,
+        context: Context,
+        isHead: Boolean,
+        needDevCookie: String? = null
+    ) {
         val rawHtml = try {
             context.assets.open("web/login.html").bufferedReader(Charsets.UTF_8).use { it.readText() }
         } catch (e: Exception) {
@@ -1464,12 +2408,15 @@ object LocalHttpShareServer {
 
         val html = rawHtml ?: fallbackLoginHtml()
         val data = html.toByteArray(Charsets.UTF_8)
-        val header = "HTTP/1.1 200 OK\r\n" +
-                "Content-Type: text/html; charset=UTF-8\r\n" +
-                "Content-Length: ${data.size}\r\n" +
-                "Connection: close\r\n\r\n"
+        val sb = StringBuilder("HTTP/1.1 200 OK\r\n")
+            .append("Content-Type: text/html; charset=UTF-8\r\n")
+            .append("Content-Length: ${data.size}\r\n")
+        if (needDevCookie != null) {
+            sb.append("Set-Cookie: nx_dev=$needDevCookie; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly\r\n")
+        }
+        sb.append("Connection: close\r\n\r\n")
 
-        output.write(header.toByteArray(Charsets.UTF_8))
+        output.write(sb.toString().toByteArray(Charsets.UTF_8))
         if (!isHead) {
             output.write(data)
         }
@@ -1510,138 +2457,11 @@ object LocalHttpShareServer {
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Nexora Web Streamer & Share</title>
-    <style>
-        :root { --neon: #ff8a00; --bg: #0d0d0d; --card: #191c24; --text: #f0f0f0; --accent: #ff9500; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); padding: 16px; margin: 0; line-height: 1.5; }
-        .container { max-width: 900px; margin: 0 auto; }
-        .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,138,0,0.25); padding-bottom: 14px; margin-bottom: 16px; }
-        .logo { font-size: 22px; font-weight: 800; color: var(--neon); letter-spacing: 0.5px; }
-        .badge { background: rgba(255,138,0,0.15); border: 1px solid var(--neon); color: var(--neon); padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
-        .player-container { background: #000; border-radius: 18px; overflow: hidden; border: 1px solid rgba(255,138,0,0.4); box-shadow: 0 10px 30px rgba(0,0,0,0.8); margin-bottom: 20px; }
-        video, audio { width: 100%; display: block; max-height: 480px; outline: none; background: #000; }
-        .player-bar { padding: 12px 18px; background: var(--card); display: flex; align-items: center; justify-content: space-between; border-top: 1px solid rgba(255,255,255,0.06); }
-        .now-playing-title { font-weight: 700; color: #fff; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%; }
-        .search-box { width: 100%; box-sizing: border-box; background: var(--card); border: 1px solid rgba(255,255,255,0.15); padding: 12px 16px; border-radius: 12px; color: #fff; font-size: 14px; outline: none; margin-bottom: 12px; transition: border 0.2s; }
-        .search-box:focus { border-color: var(--neon); }
-        .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
-        .tab-btn { background: var(--card); color: #aaa; border: 1px solid rgba(255,255,255,0.08); padding: 8px 14px; border-radius: 10px; cursor: pointer; font-size: 13px; font-weight: 600; }
-        .tab-btn.active { background: var(--neon); color: #000; border-color: var(--neon); }
-        .file-list { display: flex; flex-direction: column; gap: 10px; }
-        .file-item { background: var(--card); border-radius: 14px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; border: 1px solid rgba(255,255,255,0.05); transition: background 0.2s, transform 0.1s; }
-        .file-item:hover { background: #222632; border-color: rgba(255,138,0,0.3); }
-        .file-info { display: flex; align-items: center; gap: 12px; overflow: hidden; }
-        .file-icon { font-size: 24px; min-width: 32px; }
-        .file-meta { overflow: hidden; }
-        .file-name { font-weight: 600; font-size: 14px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .file-sub { font-size: 11px; color: #888; display: flex; gap: 10px; margin-top: 2px; }
-        .actions { display: flex; gap: 8px; flex-shrink: 0; }
-        .btn-stream { background: var(--neon); color: #000; border: none; padding: 7px 14px; border-radius: 8px; font-weight: 700; font-size: 12px; cursor: pointer; }
-        .btn-download { background: rgba(255,255,255,0.08); color: #fff; border: 1px solid rgba(255,255,255,0.15); padding: 7px 12px; border-radius: 8px; font-weight: 600; font-size: 12px; text-decoration: none; display: inline-flex; align-items: center; }
-        .btn-download:hover { background: rgba(255,255,255,0.18); }
-        .empty { text-align: center; color: #777; padding: 40px 10px; }
-    </style>
 </head>
-<body>
-    <div class="container">
-        <div class="header">
-            <div>
-                <div class="logo">⚡ Nexora Media Server</div>
-                <div style="font-size:11px; color:#aaa;">Вещание: ${'$'}{folderSetting.title} • Порт $currentPort</div>
-            </div>
-            <div class="badge">Видео: $totalVideos | Аудио: $totalAudio</div>
-        </div>
-        <div class="player-container" id="playerWrap">
-            <video id="webVideoPlayer" controls playsinline preload="metadata" style="display:none;"></video>
-            <audio id="webAudioPlayer" controls style="display:none; padding:20px;"></audio>
-            <div class="player-bar" id="playerBar" style="display:none;">
-                <div class="now-playing-title" id="nowPlayingText">Готов к воспроизведению</div>
-                <div style="font-size:11px; color:var(--neon); font-weight:bold;">▶ ПРЯМОЙ ПОТОК (RANGE 206)</div>
-            </div>
-        </div>
-        <input type="text" id="searchInput" class="search-box" placeholder="🔍 Быстрый поиск видео или музыки..." oninput="filterMedia()">
-        <div class="tabs">
-            <button class="tab-btn active" id="tabAll" onclick="setTab('all')">Все (${'$'}{files.size})</button>
-            <button class="tab-btn" id="tabVideos" onclick="setTab('video')">🎬 Видео ($totalVideos)</button>
-            <button class="tab-btn" id="tabAudio" onclick="setTab('audio')">🎵 Аудио ($totalAudio)</button>
-        </div>
-        <div id="mediaList" class="file-list"></div>
-    </div>
-    <script>
-        const mediaData = $filesJson;
-        let currentTab = 'all';
-        function setTab(tab) {
-            currentTab = tab;
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            if (tab === 'all') document.getElementById('tabAll').classList.add('active');
-            if (tab === 'video') document.getElementById('tabVideos').classList.add('active');
-            if (tab === 'audio') document.getElementById('tabAudio').classList.add('active');
-            filterMedia();
-        }
-        function filterMedia() {
-            const query = document.getElementById('searchInput').value.toLowerCase().trim();
-            const list = document.getElementById('mediaList');
-            list.innerHTML = '';
-            const filtered = mediaData.filter(item => {
-                const matchesTab = currentTab === 'all' || (currentTab === 'video' && item.isVideo) || (currentTab === 'audio' && !item.isVideo);
-                const matchesQuery = !query || item.title.toLowerCase().includes(query) || item.name.toLowerCase().includes(query);
-                return matchesTab && matchesQuery;
-            });
-            if (filtered.length === 0) {
-                list.innerHTML = '<div class="empty">Файлы не найдены.</div>';
-                return;
-            }
-            filtered.forEach(item => {
-                const el = document.createElement('div');
-                el.className = 'file-item';
-                const icon = item.isVideo ? '🎬' : '🎵';
-                const playLabel = item.isVideo ? '▶ Смотреть' : '▶ Слушать';
-                const durBadge = item.dur ? `<span>⏱ ${'$'}{item.dur}</span>` : '';
-                el.innerHTML = `
-                    <div class="file-info">
-                        <div class="file-icon">${'$'}{icon}</div>
-                        <div class="file-meta">
-                            <div class="file-name" title="${'$'}{item.name}">${'$'}{item.title}</div>
-                            <div class="file-sub">
-                                <span>💾 ${'$'}{item.size}</span>
-                                ${'$'}{durBadge}
-                            </div>
-                        </div>
-                    </div>
-                    <div class="actions">
-                        <button class="btn-stream" onclick="playMedia('${'$'}{item.id}', '${'$'}{item.name.replace(/'/g, "\\'")}', ${'$'}{item.isVideo})">${'$'}{playLabel}</button>
-                        <a class="btn-download" href="/download?id=${'$'}{item.id}" download="${'$'}{item.name}">📥</a>
-                    </div>
-                `;
-                list.appendChild(el);
-            });
-        }
-        function playMedia(id, name, isVideo) {
-            const videoPlayer = document.getElementById('webVideoPlayer');
-            const audioPlayer = document.getElementById('webAudioPlayer');
-            const playerBar = document.getElementById('playerBar');
-            const nowPlaying = document.getElementById('nowPlayingText');
-            const streamUrl = '/stream?id=' + encodeURIComponent(id);
-            nowPlaying.innerText = (isVideo ? '🎬 ' : '🎵 ') + name;
-            playerBar.style.display = 'flex';
-            if (isVideo) {
-                audioPlayer.pause();
-                audioPlayer.style.display = 'none';
-                videoPlayer.style.display = 'block';
-                videoPlayer.src = streamUrl;
-                videoPlayer.load();
-                videoPlayer.play().catch(e => console.log('Autoplay blocked', e));
-            } else {
-                videoPlayer.pause();
-                videoPlayer.style.display = 'none';
-                audioPlayer.style.display = 'block';
-                audioPlayer.src = streamUrl;
-                audioPlayer.load();
-                audioPlayer.play().catch(e => console.log('Autoplay blocked', e));
-            }
-            document.getElementById('playerWrap').scrollIntoView({ behavior: 'smooth' });
-        }
-        filterMedia();
-    </script>
+<body style="background:#080604; color:#fff; font-family:sans-serif; padding:20px;">
+    <h1>Nexora Media Server</h1>
+    <p>Вещание: ${folderSetting.title} • Порт $currentPort</p>
+    <p>Видео: $totalVideos | Аудио: $totalAudio</p>
 </body>
 </html>
         """.trimIndent()
@@ -1742,21 +2562,36 @@ object LocalHttpShareServer {
         code: Int,
         contentType: String,
         data: ByteArray,
-        isHead: Boolean = false
+        isHead: Boolean = false,
+        extraHeaders: List<String> = emptyList(),
+        needDevCookie: String? = null
     ) {
         val statusText = when (code) {
             200 -> "OK"
+            206 -> "Partial Content"
+            302 -> "Found"
+            400 -> "Bad Request"
             401 -> "Unauthorized"
             403 -> "Forbidden"
             404 -> "Not Found"
             405 -> "Method Not Allowed"
+            409 -> "Conflict"
+            413 -> "Payload Too Large"
+            429 -> "Too Many Requests"
             else -> "Error"
         }
-        val header = "HTTP/1.1 $code $statusText\r\n" +
-                "Content-Type: $contentType\r\n" +
-                "Content-Length: ${data.size}\r\n" +
-                "Connection: close\r\n\r\n"
-        output.write(header.toByteArray(Charsets.UTF_8))
+        val header = StringBuilder("HTTP/1.1 $code $statusText\r\n")
+            .append("Content-Type: $contentType\r\n")
+            .append("Content-Length: ${data.size}\r\n")
+
+        if (needDevCookie != null) {
+            header.append("Set-Cookie: nx_dev=$needDevCookie; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly\r\n")
+        }
+        for (h in extraHeaders) {
+            header.append(h).append("\r\n")
+        }
+        header.append("Connection: close\r\n\r\n")
+        output.write(header.toString().toByteArray(Charsets.UTF_8))
         if (!isHead) {
             output.write(data)
         }
@@ -1790,65 +2625,5 @@ object LocalHttpShareServer {
         } catch (_: Throwable) {}
 
         return "127.0.0.1"
-    }
-
-    data class WifiSignal(val level: Int?, val rssi: Int?)
-
-    @Volatile
-    private var cachedWifiSignal: WifiSignal? = null
-    @Volatile
-    private var cachedWifiSignalTime: Long = 0L
-
-    @Synchronized
-    private fun getWifiSignal(context: Context): WifiSignal {
-        val now = System.currentTimeMillis()
-        val cached = cachedWifiSignal
-        if (cached != null && now - cachedWifiSignalTime < 1000L) {
-            return cached
-        }
-
-        var signal = WifiSignal(level = null, rssi = null)
-        try {
-            val wm = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
-            val info = wm?.connectionInfo
-            if (info != null) {
-                val rssi = info.rssi
-                if (info.networkId == -1 || rssi <= -127) {
-                    signal = WifiSignal(level = null, rssi = null)
-                } else {
-                    @Suppress("DEPRECATION")
-                    val level = WifiManager.calculateSignalLevel(rssi, 5)
-                    signal = WifiSignal(level = level.coerceIn(0, 4), rssi = rssi)
-                }
-            }
-        } catch (_: Exception) {
-            signal = WifiSignal(level = null, rssi = null)
-        }
-
-        cachedWifiSignal = signal
-        cachedWifiSignalTime = now
-        return signal
-    }
-
-    private fun serveApiStatus(output: OutputStream, context: Context, isHead: Boolean) {
-        val signal = getWifiSignal(context)
-        val timeMs = System.currentTimeMillis()
-        val wifiJson = if (signal.level != null) {
-            "{\"level\":${signal.level},\"rssi\":${signal.rssi}}"
-        } else {
-            "{\"level\":null,\"rssi\":null}"
-        }
-        val json = "{\"ok\":true,\"online\":true,\"time\":$timeMs,\"wifi\":$wifiJson}"
-        val data = json.toByteArray(Charsets.UTF_8)
-        val header = "HTTP/1.1 200 OK\r\n" +
-                "Content-Type: application/json; charset=UTF-8\r\n" +
-                "Cache-Control: no-store\r\n" +
-                "Content-Length: ${data.size}\r\n" +
-                "Connection: close\r\n\r\n"
-        output.write(header.toByteArray(Charsets.UTF_8))
-        if (!isHead) {
-            output.write(data)
-        }
-        output.flush()
     }
 }
