@@ -154,6 +154,52 @@ object HttpServerConfig {
         getPrefs(context).edit().putInt(KEY_PORT, port).apply()
     }
 
+    private const val KEY_PROTOCOL = "http_protocol"
+    private const val KEY_IP_MODE = "http_ip_mode"
+    private const val KEY_MANUAL_IP = "http_manual_ip"
+    private const val KEY_PORT_MODE = "http_port_mode"
+    private const val KEY_STRICT = "http_strict"
+
+    fun getProtocol(context: Context): String {
+        return getPrefs(context).getString(KEY_PROTOCOL, "http") ?: "http"
+    }
+
+    fun setProtocol(context: Context, protocol: String) {
+        getPrefs(context).edit().putString(KEY_PROTOCOL, if (protocol.equals("https", ignoreCase = true)) "https" else "http").apply()
+    }
+
+    fun getIpMode(context: Context): String {
+        return getPrefs(context).getString(KEY_IP_MODE, "auto") ?: "auto"
+    }
+
+    fun setIpMode(context: Context, mode: String) {
+        getPrefs(context).edit().putString(KEY_IP_MODE, if (mode == "manual") "manual" else "auto").apply()
+    }
+
+    fun getManualIp(context: Context): String {
+        return getPrefs(context).getString(KEY_MANUAL_IP, "") ?: ""
+    }
+
+    fun setManualIp(context: Context, ip: String) {
+        getPrefs(context).edit().putString(KEY_MANUAL_IP, ip.trim()).apply()
+    }
+
+    fun getPortMode(context: Context): String {
+        return getPrefs(context).getString(KEY_PORT_MODE, "auto") ?: "auto"
+    }
+
+    fun setPortMode(context: Context, mode: String) {
+        getPrefs(context).edit().putString(KEY_PORT_MODE, if (mode == "manual") "manual" else "auto").apply()
+    }
+
+    fun isStrict(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_STRICT, false)
+    }
+
+    fun setStrict(context: Context, strict: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_STRICT, strict).apply()
+    }
+
     fun getFolderDirectory(context: Context, folder: HttpBroadcastFolder): File? {
         return when (folder) {
             HttpBroadcastFolder.ALL -> null // uses full device scan (MediaStore + all public dirs)

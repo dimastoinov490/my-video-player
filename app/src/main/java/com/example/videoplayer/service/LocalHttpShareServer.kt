@@ -26,6 +26,7 @@ import java.util.Collections
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import javax.net.ssl.SSLServerSocket
 
 data class HttpMediaFile(
     val id: String,
@@ -37,6 +38,13 @@ data class HttpMediaFile(
     val isVideo: Boolean,
     val contentUri: Uri?,
     val directFile: File?
+)
+
+data class FileUploadMeta(
+    val name: String,
+    val mime: String,
+    val dur: Int,
+    val size: Long
 )
 
 data class SessionInfo(
@@ -77,7 +85,15 @@ data class DeviceRecord(
     var lastSeen: Long,
     var sessionStart: Long,
     var blocked: Boolean
-)
+) {
+    val name: String
+        get() = LocalHttpShareServer.parseBrowserAndOs(ua)
+    val kind: String
+        get() = LocalHttpShareServer.parseDeviceKind(ua)
+    fun isOnline(): Boolean = (System.currentTimeMillis() - lastSeen) <= 15000L
+}
+
+typealias DeviceSession = DeviceRecord
 
 data class WifiSignal(val level: Int?, val rssi: Int?)
 
@@ -139,6 +155,12 @@ object LocalHttpShareServer {
     var lastErrorMessage: String? = null
         private set
 
+    @Volatile
+    var currentBoundIp: String? = null
+        private set
+
+    val pendingUploads = ConcurrentHashMap<String, FileUploadMeta>()
+
     private val threadPool = Executors.newCachedThreadPool()
 
     @Synchronized
@@ -171,23 +193,72 @@ object LocalHttpShareServer {
         }
 
         return try {
-            val portsToTry = listOf(chosenPort, 8766, 8767, 8080, 0)
+            val protocol = HttpServerConfig.getProtocol(context)
+            val ipMode = HttpServerConfig.getIpMode(context)
+            val manualIp = HttpServerConfig.getManualIp(context)
+            val portMode = HttpServerConfig.getPortMode(context)
+            val configuredPort = HttpServerConfig.getPort(context)
+
+            val availableIps = getAvailableDeviceIps().map { it.second }.toSet()
+            val targetIp = if (ipMode == "manual" && manualIp.isNotBlank() && (availableIps.contains(manualIp) || manualIp == "127.0.0.1")) {
+                manualIp
+            } else {
+                localIpAddress(context)
+            }
+            currentBoundIp = targetIp
+
+            val bindAddr = if (ipMode == "manual" && manualIp.isNotBlank()) {
+                InetAddress.getByName(targetIp)
+            } else {
+                InetAddress.getByName("0.0.0.0")
+            }
+
+            val portsToTry = if (portMode == "manual" && configuredPort in 1024..65535) {
+                listOf(configuredPort)
+            } else {
+                listOf(chosenPort, 8765, 8766, 8767, 8080, 0)
+            }
+
             var socket: ServerSocket? = null
             var boundPort = chosenPort
 
-            for (p in portsToTry) {
-                try {
-                    val s = if (p == 0) ServerSocket(0) else ServerSocket(p, 50, InetAddress.getByName("0.0.0.0"))
-                    socket = s
-                    boundPort = s.localPort
-                    break
-                } catch (e: Exception) {
-                    Log.w(TAG, "Port $p unavailable, trying next: ${e.message}")
+            if (protocol.equals("https", ignoreCase = true)) {
+                val sslContext = CertificateManager.getOrCreateSslContext(context, targetIp)
+                val ssf = sslContext.serverSocketFactory
+                for (p in portsToTry) {
+                    try {
+                        val ss = (if (p == 0) ssf.createServerSocket(0, 50, bindAddr) else ssf.createServerSocket(p, 50, bindAddr)) as SSLServerSocket
+                        ss.enabledProtocols = arrayOf("TLSv1.3", "TLSv1.2")
+                        val supported = ss.supportedCipherSuites
+                        val aeadCiphers = supported.filter { c ->
+                            (c.contains("GCM") || c.contains("CHACHA20_POLY1305")) &&
+                            !c.contains("CBC") && !c.contains("RC4") && !c.contains("3DES") && !c.contains("NULL")
+                        }
+                        if (aeadCiphers.isNotEmpty()) {
+                            ss.enabledCipherSuites = aeadCiphers.toTypedArray()
+                        }
+                        socket = ss
+                        boundPort = ss.localPort
+                        break
+                    } catch (e: Exception) {
+                        Log.w(TAG, "HTTPS port $p unavailable: ${e.message}")
+                    }
+                }
+            } else {
+                for (p in portsToTry) {
+                    try {
+                        val s = if (p == 0) ServerSocket(0, 50, bindAddr) else ServerSocket(p, 50, bindAddr)
+                        socket = s
+                        boundPort = s.localPort
+                        break
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Port $p unavailable, trying next: ${e.message}")
+                    }
                 }
             }
 
             if (socket == null) {
-                throw IOException("Не удалось занять свободный сетевой порт")
+                throw IOException("Не удалось занять сетевой порт")
             }
 
             serverSocket = socket
@@ -201,10 +272,10 @@ object LocalHttpShareServer {
                 acceptClientsLoop(socket, context.applicationContext)
             }
 
-            Log.i(TAG, "HTTP Server running on 0.0.0.0:$boundPort")
+            Log.i(TAG, "$protocol Server running on $bindAddr:$boundPort")
             true
         } catch (e: Throwable) {
-            Log.e(TAG, "Failed to start HTTP server", e)
+            Log.e(TAG, "Failed to start server", e)
             lastErrorMessage = e.localizedMessage ?: e.javaClass.simpleName
             isRunning = false
             serverSocket = null
@@ -216,6 +287,7 @@ object LocalHttpShareServer {
     fun stop() {
         isRunning = false
         stopWifiPoller()
+        LanScanner.stopScan()
         clearSessions()
         try {
             serverSocket?.close()
@@ -228,7 +300,54 @@ object LocalHttpShareServer {
 
     fun isRunning(context: Context): Boolean = isRunning && serverSocket != null && !serverSocket!!.isClosed
 
-    fun getServerUrl(context: Context): String = "http://${localIpAddress(context)}:$currentPort"
+    fun getServerUrl(context: Context): String {
+        val proto = HttpServerConfig.getProtocol(context)
+        val ip = currentBoundIp ?: localIpAddress(context)
+        val port = currentPort
+        val isDefault = (proto == "http" && port == 80) || (proto == "https" && port == 443)
+        return if (isDefault) "$proto://$ip" else "$proto://$ip:$port"
+    }
+
+    fun getAvailableDeviceIps(): List<Pair<String, String>> {
+        val list = mutableListOf<Pair<String, String>>()
+        try {
+            val interfaces = NetworkInterface.getNetworkInterfaces() ?: return list
+            for (intf in interfaces) {
+                if (intf.isLoopback || !intf.isUp) continue
+                val name = intf.name.lowercase()
+                val label = when {
+                    name.startsWith("wlan") -> "Wi-Fi (${intf.name})"
+                    name.startsWith("ap") || name.startsWith("softap") -> "Точка доступа (${intf.name})"
+                    name.startsWith("eth") -> "Ethernet (${intf.name})"
+                    name.startsWith("rndis") || name.startsWith("usb") -> "USB-модем (${intf.name})"
+                    name.startsWith("p2p") -> "Wi-Fi Direct (${intf.name})"
+                    else -> "Сеть (${intf.name})"
+                }
+                for (addr in intf.inetAddresses) {
+                    if (!addr.isLoopbackAddress && addr is Inet4Address) {
+                        val ip = addr.hostAddress ?: continue
+                        if (!list.any { it.second == ip }) {
+                            list.add(Pair(label, ip))
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+        return list
+    }
+
+    fun getCandidatePorts(context: Context): List<Int> {
+        val candidateList = listOf(currentPort, 8765, 8080, 8000, 8888, 9000, 5000, 3000)
+        return candidateList.distinct().filter { it == currentPort || isPortAvailable(it) }
+    }
+
+    private fun isPortAvailable(port: Int): Boolean {
+        return try {
+            ServerSocket(port).use { true }
+        } catch (_: Exception) {
+            false
+        }
+    }
 
     fun getDownloadUrl(context: Context, file: File): String {
         return try {
@@ -311,15 +430,31 @@ object LocalHttpShareServer {
         }
     }
 
+    private fun readHttpHeaderLine(input: InputStream): String? {
+        val baos = ByteArrayOutputStream()
+        while (true) {
+            val b = input.read()
+            if (b == -1) {
+                if (baos.size() == 0) return null
+                break
+            }
+            if (b == '\n'.code) {
+                break
+            } else if (b != '\r'.code) {
+                baos.write(b)
+            }
+        }
+        return baos.toString(Charsets.UTF_8.name())
+    }
+
     private fun handleClient(client: Socket, context: Context) {
         try {
             client.soTimeout = 30000
             val clientIp = client.inetAddress?.hostAddress ?: "127.0.0.1"
             val rawInput = client.getInputStream()
-            val input = BufferedReader(InputStreamReader(rawInput, Charsets.UTF_8))
             val output = BufferedOutputStream(client.getOutputStream())
 
-            val requestLine = input.readLine() ?: return
+            val requestLine = readHttpHeaderLine(rawInput) ?: return
             val parts = requestLine.split(" ")
             if (parts.size < 2) return
 
@@ -340,7 +475,7 @@ object LocalHttpShareServer {
             var userAgentHeader: String? = null
             var acceptHeader: String? = null
 
-            var line: String? = input.readLine()
+            var line = readHttpHeaderLine(rawInput)
             while (!line.isNullOrBlank()) {
                 val lower = line.lowercase()
                 if (lower.startsWith("authorization:")) {
@@ -362,7 +497,7 @@ object LocalHttpShareServer {
                 } else if (lower.startsWith("accept:")) {
                     acceptHeader = line.substringAfter(":").trim()
                 }
-                line = input.readLine()
+                line = readHttpHeaderLine(rawInput)
             }
 
             val userAgent = userAgentHeader ?: ""
@@ -550,6 +685,74 @@ object LocalHttpShareServer {
                             serveApiAccounts(output, context, isHead, needDevCookie)
                         }
                     }
+                    decodedPath == "/cert.crt" -> {
+                        val certBytes = CertificateManager.getCertificateDer(context)
+                        if (certBytes != null) {
+                            val headers = listOf(
+                                "Content-Disposition: attachment; filename=\"nexora.crt\"",
+                                "Cache-Control: public, max-age=86400"
+                            )
+                            sendResponse(output, 200, "application/x-x509-ca-cert", certBytes, isHead, extraHeaders = headers, needDevCookie = needDevCookie)
+                        } else {
+                            sendResponse(output, 500, "text/plain", "Certificate not available".toByteArray(Charsets.UTF_8), isHead, needDevCookie = needDevCookie)
+                        }
+                    }
+                    decodedPath == "/api/net" -> {
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
+                        } else {
+                            serveApiNet(output, context, isHead, needDevCookie)
+                        }
+                    }
+                    decodedPath == "/api/lan/devices" -> {
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
+                        } else {
+                            val connectedIps = devices.values.map { it.ip }.toSet()
+                            val json = LanScanner.getScanResultJson(clientIp, currentBoundIp ?: localIpAddress(context), connectedIps)
+                            val data = json.toString().toByteArray(Charsets.UTF_8)
+                            sendResponse(output, 200, "application/json; charset=UTF-8", data, isHead = isHead, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        }
+                    }
+                    decodedPath == "/api/mail/peers" -> {
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
+                        } else {
+                            val blockedIds = devices.values.filter { it.blocked }.map { it.id }.toSet()
+                            val json = MailManager.getPeers(context, clientDevId, devices, blockedIds)
+                            val data = json.toString().toByteArray(Charsets.UTF_8)
+                            sendResponse(output, 200, "application/json; charset=UTF-8", data, isHead = isHead, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        }
+                    }
+                    decodedPath == "/api/mail/messages" -> {
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
+                        } else {
+                            val peerId = extractQueryParam(queryString, "peer") ?: ""
+                            val afterId = extractQueryParam(queryString, "after")?.toLongOrNull() ?: 0L
+                            val json = MailManager.getMessages(context, clientDevId, peerId, afterId)
+                            val data = json.toString().toByteArray(Charsets.UTF_8)
+                            sendResponse(output, 200, "application/json; charset=UTF-8", data, isHead = isHead, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        }
+                    }
+                    decodedPath == "/api/mail/file" -> {
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
+                        } else {
+                            val idParam = extractQueryParam(queryString, "id") ?: ""
+                            val isDl = extractQueryParam(queryString, "dl") == "1"
+                            val encFile = MailManager.getAttachmentFile(context, idParam)
+                            if (!encFile.exists()) {
+                                sendResponse(output, 404, "text/plain", "Not Found".toByteArray(Charsets.UTF_8), isHead, needDevCookie = needDevCookie)
+                            } else {
+                                val meta = MailManager.getAttachmentMeta(context, idParam)
+                                val fileName = meta?.first ?: "file"
+                                val fileSize = meta?.second ?: encFile.length()
+                                val mimeType = meta?.third ?: "application/octet-stream"
+                                serveMailFile(output, idParam, fileName, fileSize, mimeType, rangeHeader, isDl, context, isHead, needDevCookie)
+                            }
+                        }
+                    }
                     decodedPath.startsWith("/api/") -> {
                         if (authRequired && !reqAuth.isAuthorized) {
                             send401WithoutAuth(output, needDevCookie)
@@ -583,20 +786,78 @@ object LocalHttpShareServer {
                     }
                 }
 
+                if (decodedPath == "/api/mail/upload") {
+                    if (authRequired && !reqAuth.isAuthorized) {
+                        send401WithoutAuth(output, needDevCookie)
+                        return
+                    }
+                    if (isDeviceOrIpBlocked(context, clientDevId, clientIp)) {
+                        sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"blocked\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        return
+                    }
+                    if (!MailManager.checkUploadRateLimit(clientIp)) {
+                        sendResponse(output, 429, "application/json; charset=UTF-8", "{\"error\":\"rate_limited\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        return
+                    }
+                    val contentLen = contentLengthHeader ?: 0L
+                    if (contentLen > MailManager.MAX_FILE_SIZE) {
+                        sendResponse(output, 413, "application/json; charset=UTF-8", "{\"error\":\"too_large\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        return
+                    }
+                    if (!MailManager.checkQuota(context, contentLen)) {
+                        sendResponse(output, 400, "application/json; charset=UTF-8", "{\"error\":\"quota\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        return
+                    }
+
+                    val name = extractQueryParam(queryString, "name") ?: "file"
+                    val mime = extractQueryParam(queryString, "mime") ?: "application/octet-stream"
+                    val dur = extractQueryParam(queryString, "dur")?.toIntOrNull() ?: 0
+
+                    val boundedStream = object : InputStream() {
+                        private var remaining = contentLen
+                        override fun read(): Int {
+                            if (remaining <= 0) return -1
+                            val b = rawInput.read()
+                            if (b != -1) remaining--
+                            return b
+                        }
+                        override fun read(b: ByteArray, off: Int, len: Int): Int {
+                            if (remaining <= 0) return -1
+                            val toRead = minOf(len.toLong(), remaining).toInt()
+                            val r = rawInput.read(b, off, toRead)
+                            if (r != -1) remaining -= r
+                            return r
+                        }
+                    }
+
+                    try {
+                        val fileId = MailManager.saveAttachmentStream(context, boundedStream, contentLen)
+                        pendingUploads[fileId] = FileUploadMeta(name, mime, dur, contentLen)
+                        val resp = JSONObject()
+                        resp.put("fileId", fileId)
+                        val data = resp.toString().toByteArray(Charsets.UTF_8)
+                        sendResponse(output, 200, "application/json; charset=UTF-8", data, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                    } catch (e: Exception) {
+                        val err = if (e.message == "too_large") "too_large" else "upload_failed"
+                        sendResponse(output, 400, "application/json; charset=UTF-8", "{\"error\":\"$err\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                    }
+                    return
+                }
+
                 val contentLength = (contentLengthHeader ?: 0L).toInt()
                 if (contentLength > 64 * 1024) {
                     sendResponse(output, 413, "application/json; charset=UTF-8", "{\"error\":\"bad_request\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
                     return
                 }
 
-                val bodyChars = CharArray(contentLength)
+                val bodyBytes = ByteArray(contentLength)
                 var readTotal = 0
                 while (readTotal < contentLength) {
-                    val r = input.read(bodyChars, readTotal, contentLength - readTotal)
+                    val r = rawInput.read(bodyBytes, readTotal, contentLength - readTotal)
                     if (r == -1) break
                     readTotal += r
                 }
-                val bodyString = String(bodyChars, 0, readTotal)
+                val bodyString = String(bodyBytes, 0, readTotal, Charsets.UTF_8)
                 val bodyJson = try {
                     JSONObject(bodyString)
                 } catch (_: Exception) {
@@ -604,6 +865,68 @@ object LocalHttpShareServer {
                 }
 
                 when (decodedPath) {
+                    "/api/net" -> {
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
+                        } else if (reqAuth.role != "admin") {
+                            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"ok\":false,\"code\":\"admin_required\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        } else {
+                            handleNetPost(output, context, bodyJson, needDevCookie)
+                        }
+                    }
+                    "/api/lan/scan" -> {
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
+                        } else if (reqAuth.role != "admin") {
+                            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"admin_required\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        } else {
+                            val connectedIps = devices.values.map { it.ip }.toSet()
+                            LanScanner.startScan(context, currentBoundIp ?: localIpAddress(context), connectedIps)
+                            sendResponse(output, 200, "application/json; charset=UTF-8", "{\"ok\":true}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        }
+                    }
+                    "/api/mail/send" -> {
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
+                        } else {
+                            handleMailSend(output, context, bodyJson, clientDevId, clientIp, needDevCookie)
+                        }
+                    }
+                    "/api/mail/read" -> {
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
+                        } else {
+                            val peer = bodyJson.optString("peer")
+                            if (peer.isNotBlank()) {
+                                MailManager.markRead(context, clientDevId, peer)
+                            }
+                            sendResponse(output, 200, "application/json; charset=UTF-8", "{\"ok\":true}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        }
+                    }
+                    "/api/mail/delete" -> {
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
+                        } else {
+                            val msgId = bodyJson.optLong("id", 0L)
+                            val success = MailManager.deleteMessage(context, clientDevId, msgId, reqAuth.role == "admin")
+                            if (success) {
+                                sendResponse(output, 200, "application/json; charset=UTF-8", "{\"ok\":true}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                            } else {
+                                sendResponse(output, 403, "application/json; charset=UTF-8", "{\"ok\":false,\"error\":\"forbidden\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                            }
+                        }
+                    }
+                    "/api/mail/profile" -> {
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
+                        } else {
+                            val name = bodyJson.optString("name")
+                            if (name.isNotBlank()) {
+                                MailManager.saveProfile(context, clientDevId, name)
+                            }
+                            sendResponse(output, 200, "application/json; charset=UTF-8", "{\"ok\":true}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        }
+                    }
                     "/api/accounts/create-admin" -> {
                         if (!authRequired) {
                             sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"auth_required\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
@@ -1145,7 +1468,7 @@ object LocalHttpShareServer {
         saveDevicesToDisk(context, force = isLogin)
     }
 
-    private fun parseBrowserAndOs(ua: String): String {
+    fun parseBrowserAndOs(ua: String): String {
         val browser = when {
             ua.contains("SamsungBrowser", ignoreCase = true) -> "Samsung Internet"
             ua.contains("Edg/", ignoreCase = true) || ua.contains("Edge/", ignoreCase = true) -> "Edge"
@@ -1172,7 +1495,7 @@ object LocalHttpShareServer {
         }
     }
 
-    private fun parseDeviceKind(ua: String): String {
+    fun parseDeviceKind(ua: String): String {
         val isIpad = ua.contains("iPad", ignoreCase = true)
         val isAndroid = ua.contains("Android", ignoreCase = true)
         val hasMobile = ua.contains("Mobile", ignoreCase = true) || ua.contains("Mobi", ignoreCase = true) || ua.contains("iPhone", ignoreCase = true)
@@ -2557,6 +2880,258 @@ object LocalHttpShareServer {
         }
     }
 
+    private fun serveApiNet(
+        output: OutputStream,
+        context: Context,
+        isHead: Boolean,
+        needDevCookie: String? = null
+    ) {
+        val protocol = HttpServerConfig.getProtocol(context)
+        val ipMode = HttpServerConfig.getIpMode(context)
+        val manualIp = HttpServerConfig.getManualIp(context)
+        val curIp = if (ipMode == "manual" && manualIp.isNotBlank()) manualIp else (currentBoundIp ?: localIpAddress(context))
+        val portMode = HttpServerConfig.getPortMode(context)
+        val strict = HttpServerConfig.isStrict(context)
+
+        val ips = getAvailableDeviceIps()
+        val ipsJson = JSONArray()
+        for ((lbl, ip) in ips) {
+            val o = JSONObject()
+            o.put("label", lbl)
+            o.put("ip", ip)
+            ipsJson.put(o)
+        }
+
+        val ports = getCandidatePorts(context)
+        val portsJson = JSONArray()
+        for (p in ports) portsJson.put(p)
+
+        val certObj = JSONObject()
+        certObj.put("fingerprint", CertificateManager.getFingerprint(context))
+        certObj.put("expires", CertificateManager.getExpirationDate(context))
+
+        val root = JSONObject()
+        root.put("protocol", protocol)
+        root.put("ipMode", ipMode)
+        root.put("ip", curIp)
+        root.put("portMode", portMode)
+        root.put("port", currentPort)
+        root.put("strict", strict)
+        root.put("ips", ipsJson)
+        root.put("ports", portsJson)
+        root.put("cert", certObj)
+
+        val data = root.toString().toByteArray(Charsets.UTF_8)
+        sendResponse(output, 200, "application/json; charset=UTF-8", data, isHead = isHead, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+    }
+
+    private fun handleNetPost(
+        output: OutputStream,
+        context: Context,
+        bodyJson: JSONObject,
+        needDevCookie: String? = null
+    ) {
+        val proto = bodyJson.optString("protocol", "http").lowercase()
+        val ipVal = bodyJson.optString("ip", "auto")
+        val portVal = bodyJson.opt("port")
+        val strictVal = bodyJson.optBoolean("strict", false)
+
+        val portInt: Int? = when (portVal) {
+            is Number -> portVal.toInt()
+            is String -> if (portVal == "auto") null else portVal.toIntOrNull()
+            else -> null
+        }
+
+        val availableIps = getAvailableDeviceIps().map { it.second }.toSet()
+        if (ipVal != "auto" && !availableIps.contains(ipVal) && ipVal != "127.0.0.1") {
+            sendResponse(output, 400, "application/json; charset=UTF-8", "{\"ok\":false,\"code\":\"bad_ip\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+
+        if (portInt != null) {
+            if (portInt < 1024 || portInt > 65535) {
+                sendResponse(output, 400, "application/json; charset=UTF-8", "{\"ok\":false,\"code\":\"bad_port\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                return
+            }
+            if (portInt != currentPort && !isPortAvailable(portInt)) {
+                sendResponse(output, 400, "application/json; charset=UTF-8", "{\"ok\":false,\"code\":\"port_busy\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                return
+            }
+        }
+
+        HttpServerConfig.setProtocol(context, proto)
+        HttpServerConfig.setStrict(context, strictVal)
+        if (ipVal == "auto") {
+            HttpServerConfig.setIpMode(context, "auto")
+            HttpServerConfig.setManualIp(context, "")
+        } else {
+            HttpServerConfig.setIpMode(context, "manual")
+            HttpServerConfig.setManualIp(context, ipVal)
+        }
+
+        if (portInt == null) {
+            HttpServerConfig.setPortMode(context, "auto")
+        } else {
+            HttpServerConfig.setPortMode(context, "manual")
+            HttpServerConfig.setPort(context, portInt)
+        }
+
+        val targetIp = if (ipVal != "auto") ipVal else localIpAddress(context)
+        val targetPort = portInt ?: currentPort
+        val isDefault = (proto == "http" && targetPort == 80) || (proto == "https" && targetPort == 443)
+        val newUrl = if (isDefault) "$proto://$targetIp/" else "$proto://$targetIp:$targetPort/"
+
+        val resp = JSONObject()
+        resp.put("ok", true)
+        resp.put("url", newUrl)
+        val data = resp.toString().toByteArray(Charsets.UTF_8)
+        sendResponse(output, 200, "application/json; charset=UTF-8", data, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+
+        threadPool.execute {
+            try {
+                Thread.sleep(700)
+                start(context, targetPort)
+            } catch (_: Exception) {}
+        }
+    }
+
+    private fun handleMailSend(
+        output: OutputStream,
+        context: Context,
+        bodyJson: JSONObject,
+        clientDevId: String,
+        clientIp: String,
+        needDevCookie: String? = null
+    ) {
+        val toPeer = bodyJson.optString("to")
+        val kind = bodyJson.optString("kind", "text")
+        val text = bodyJson.optString("text", "")
+        val fileId = bodyJson.optString("fileId", "").ifBlank { null }
+
+        val peerDev = devices[toPeer]
+        if (peerDev?.blocked == true || isDeviceOrIpBlocked(context, clientDevId, clientIp)) {
+            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"ok\":false,\"error\":\"blocked\",\"code\":\"blocked\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+
+        var fileName: String? = null
+        var fileSize: Long? = null
+        var fileMime: String? = null
+        var fileDur: Int? = null
+
+        if (fileId != null) {
+            val meta = pendingUploads.remove(fileId)
+            if (meta != null) {
+                fileName = meta.name
+                fileSize = meta.size
+                fileMime = meta.mime
+                fileDur = meta.dur
+            } else {
+                val dbMeta = MailManager.getAttachmentMeta(context, fileId)
+                if (dbMeta != null) {
+                    fileName = dbMeta.first
+                    fileSize = dbMeta.second
+                    fileMime = dbMeta.third
+                } else {
+                    val f = MailManager.getAttachmentFile(context, fileId)
+                    if (f.exists()) {
+                        fileName = if (kind == "voice") "voice.webm" else "attachment"
+                        fileSize = f.length()
+                        fileMime = if (kind == "voice") "audio/webm" else "application/octet-stream"
+                    }
+                }
+            }
+        }
+
+        val msgId = MailManager.sendMessage(
+            context = context,
+            senderId = clientDevId,
+            recipientId = toPeer,
+            kind = kind,
+            text = text,
+            fileId = fileId,
+            fileName = fileName,
+            fileSize = fileSize,
+            fileMime = fileMime,
+            fileDur = fileDur
+        )
+
+        val resp = JSONObject()
+        resp.put("ok", true)
+        resp.put("id", msgId)
+        val data = resp.toString().toByteArray(Charsets.UTF_8)
+        sendResponse(output, 200, "application/json; charset=UTF-8", data, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+    }
+
+    private fun serveMailFile(
+        output: OutputStream,
+        fileId: String,
+        fileName: String,
+        fileSize: Long,
+        mimeType: String,
+        rangeHeader: String?,
+        isDl: Boolean,
+        context: Context,
+        isHead: Boolean,
+        needDevCookie: String? = null
+    ) {
+        var rangeStart: Long = 0
+        var rangeEnd: Long = fileSize - 1
+        var isPartial = false
+
+        if (!rangeHeader.isNullOrBlank() && rangeHeader.startsWith("bytes=")) {
+            val rangeSpec = rangeHeader.removePrefix("bytes=").trim()
+            val parts = rangeSpec.split("-")
+            try {
+                if (parts[0].isNotEmpty()) {
+                    rangeStart = parts[0].toLong()
+                }
+                if (parts.size > 1 && parts[1].isNotEmpty()) {
+                    rangeEnd = parts[1].toLong()
+                }
+                if (rangeEnd >= fileSize) {
+                    rangeEnd = fileSize - 1
+                }
+                if (rangeStart <= rangeEnd) {
+                    isPartial = true
+                }
+            } catch (_: Exception) {}
+        }
+
+        val contentLen = if (isPartial) (rangeEnd - rangeStart + 1) else fileSize
+        val code = if (isPartial) 206 else 200
+        val statusText = if (isPartial) "Partial Content" else "OK"
+
+        val header = StringBuilder("HTTP/1.1 $code $statusText\r\n")
+            .append("Content-Type: $mimeType\r\n")
+            .append("Accept-Ranges: bytes\r\n")
+            .append("Content-Length: $contentLen\r\n")
+
+        if (isPartial) {
+            header.append("Content-Range: bytes $rangeStart-$rangeEnd/$fileSize\r\n")
+        }
+
+        if (isDl) {
+            val encodedName = URLEncoder.encode(fileName, Charsets.UTF_8.name()).replace("+", "%20")
+            header.append("Content-Disposition: attachment; filename=\"$fileName\"; filename*=UTF-8''$encodedName\r\n")
+        } else {
+            header.append("Content-Disposition: inline\r\n")
+        }
+
+        if (needDevCookie != null) {
+            header.append("Set-Cookie: nx_dev=$needDevCookie; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly\r\n")
+        }
+
+        header.append("Connection: close\r\n\r\n")
+        output.write(header.toString().toByteArray(Charsets.UTF_8))
+        output.flush()
+
+        if (!isHead) {
+            MailManager.streamDecryptedAttachment(context, fileId, output, rangeStart, rangeEnd)
+            output.flush()
+        }
+    }
+
     private fun sendResponse(
         output: OutputStream,
         code: Int,
@@ -2580,15 +3155,28 @@ object LocalHttpShareServer {
             429 -> "Too Many Requests"
             else -> "Error"
         }
+        val isHttps = (serverSocket is SSLServerSocket)
+
         val header = StringBuilder("HTTP/1.1 $code $statusText\r\n")
             .append("Content-Type: $contentType\r\n")
             .append("Content-Length: ${data.size}\r\n")
 
+        if (isHttps) {
+            header.append("Strict-Transport-Security: max-age=31536000; includeSubDomains\r\n")
+            header.append("X-Content-Type-Options: nosniff\r\n")
+        }
+
         if (needDevCookie != null) {
-            header.append("Set-Cookie: nx_dev=$needDevCookie; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly\r\n")
+            val secureFlag = if (isHttps) "; Secure" else ""
+            header.append("Set-Cookie: nx_dev=$needDevCookie; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly$secureFlag\r\n")
         }
         for (h in extraHeaders) {
-            header.append(h).append("\r\n")
+            val finalH = if (isHttps && h.startsWith("Set-Cookie: nx_session=", ignoreCase = true) && !h.contains("Secure", ignoreCase = true)) {
+                "$h; Secure"
+            } else {
+                h
+            }
+            header.append(finalH).append("\r\n")
         }
         header.append("Connection: close\r\n\r\n")
         output.write(header.toString().toByteArray(Charsets.UTF_8))

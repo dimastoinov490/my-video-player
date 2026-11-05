@@ -53,8 +53,8 @@ a{color:inherit;text-decoration:none}
 /* ---------- разделы ---------- */
 .stage{position:relative;flex:1;min-height:0;z-index:2}
 .pane{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;opacity:0;pointer-events:none;transform:translateX(var(--tx,0px));
-  transition:opacity .38s ease,transform .55s cubic-bezier(.22,1,.36,1)}
-.pane.on{opacity:1;pointer-events:auto;transform:none}
+  visibility:hidden;transition:opacity .38s ease,transform .55s cubic-bezier(.22,1,.36,1),visibility 0s linear .55s}
+.pane.on{opacity:1;pointer-events:auto;transform:none;visibility:visible;transition-delay:0s,0s,0s}
 .pane::-webkit-scrollbar{width:6px}.pane::-webkit-scrollbar-thumb{background:rgba(255,138,0,.35);border-radius:4px}
 
 /* главная */
@@ -148,9 +148,8 @@ a{color:inherit;text-decoration:none}
 .glass{position:absolute;top:5px;left:0;height:55px;width:120px;border-radius:19px;z-index:1;pointer-events:none;
   border:1.2px solid rgba(255,150,30,.65);
   background:linear-gradient(180deg,rgba(255,170,60,.17),rgba(255,120,0,.05) 70%),rgba(20,10,4,.35);
-  -webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);
   box-shadow:0 0 16px rgba(255,120,0,.42),inset 0 0 14px rgba(255,138,0,.14),inset 0 1px 0 rgba(255,225,170,.30);
-  transition:transform .6s cubic-bezier(.34,1.32,.5,1),width .6s cubic-bezier(.34,1.32,.5,1)}
+  transition:transform .6s cubic-bezier(.34,1.32,.5,1),opacity .3s;will-change:transform}
 .glass:after{content:"";position:absolute;left:12%;right:12%;top:1px;height:42%;border-radius:18px 18px 40% 40%;background:linear-gradient(180deg,rgba(255,235,200,.16),transparent)}
 .glass.snap{transition:none}
 .tab{position:relative;z-index:2;flex:1;height:55px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--gray);transition:color .4s}
@@ -264,6 +263,65 @@ body.rot .pane{touch-action:none}
 .dbox h4{font-size:15px;margin-bottom:6px}.dbox p{font-size:12.5px;color:#d6cfc7;line-height:1.5;margin-bottom:12px;word-break:break-word}
 .dact{display:flex;justify-content:flex-end;gap:8px;margin-top:4px}
 
+/* ---------- v5: сегменты, списки выбора, письмо, инструменты, сеть ---------- */
+.sc{overflow-y:auto;overscroll-behavior:contain}
+body.rot .sc{touch-action:none}
+.seg{display:flex;gap:8px;padding:2px 0 12px}
+.segb{flex:1;min-height:32px;padding:0 10px;border-radius:12px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.04);color:#d6cfc7;font-size:12px;font-weight:600;transition:background .25s,color .25s,box-shadow .25s}
+.segb.on{background:linear-gradient(180deg,var(--o1),var(--o3));color:#1b0d02;border-color:var(--o2);box-shadow:0 5px 12px rgba(255,120,0,.3)}
+.segb:disabled{opacity:.5;cursor:default}
+.sel{height:32px;max-width:200px;border-radius:10px;border:1.2px solid rgba(255,138,0,.4);background:#150b05;color:#fff;font-size:12px;padding:0 8px;outline:none;font-family:inherit}
+.sel:disabled,.fld:disabled{opacity:.55}
+.kv .fld{width:92px;height:32px;margin:0 0 0 8px}
+.blk-net{display:none}
+.set.s-net .blk-net{display:block}
+.set.s-net .blk-head,.set.s-net .blk-card,.set.s-net .blk-thanks,.set.s-net .blk-set,.set.s-net .blk-dev,.set.s-net .blk-acc{display:none}
+.prog{height:5px;border-radius:3px;background:rgba(255,255,255,.1);overflow:hidden;margin:0 0 10px}
+.prog i{display:block;height:100%;width:0;background:linear-gradient(90deg,#00baf1,#606df7 55%,#a63ef6);transition:width .4s}
+/* письмо */
+.mail{display:flex;height:100%;padding:6px 26px 14px 22px}
+.mthreads{width:208px;flex:none;margin-right:12px;display:flex;flex-direction:column}
+.mt{display:flex;align-items:center;gap:10px;padding:8px 10px;margin-bottom:6px;border-radius:14px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);text-align:left;width:100%;transition:background .2s,border-color .2s}
+.mt:hover{border-color:rgba(255,138,0,.4)}
+.mt.on{background:linear-gradient(180deg,rgba(255,138,0,.22),rgba(255,138,0,.06));border-color:rgba(255,138,0,.7)}
+.mt .av{position:relative;flex:none;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:19px;color:var(--o2);background:rgba(255,138,0,.10);border:1px solid rgba(255,138,0,.38)}
+.mt .av i{position:absolute;right:-2px;bottom:-2px;width:10px;height:10px;border-radius:50%;background:#6b6560;border:2px solid #120a05}
+.mt .av.on i{background:var(--green)}
+.mt .tx{flex:1;min-width:0}.mt .tx b{display:block;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mt .tx small{display:block;font-size:10.5px;color:#b9aa9a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.mt .un{min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:linear-gradient(180deg,var(--o1),var(--o3));color:#1b0d02;font-size:10.5px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.mconv{flex:1;min-width:0;display:flex;flex-direction:column;border-radius:16px;border:1px solid rgba(255,255,255,.1);background:linear-gradient(150deg,rgba(255,255,255,.06),rgba(255,255,255,.015));overflow:hidden}
+.mhead{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.07)}
+.mhead b{font-size:13.5px}.mhead small{font-size:11px;color:#b9aa9a;flex:1}
+.mmsgs{flex:1;padding:10px 12px;display:flex;flex-direction:column;gap:7px}
+.mb{max-width:76%;padding:7px 11px;border-radius:14px 14px 14px 4px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);font-size:12.5px;line-height:1.45;align-self:flex-start;word-break:break-word}
+.mb.me{align-self:flex-end;border-radius:14px 14px 4px 14px;background:linear-gradient(180deg,rgba(255,138,0,.28),rgba(255,106,0,.14));border-color:rgba(255,138,0,.5)}
+.mb audio{display:block;height:34px;width:210px;max-width:100%}
+.mb small.mt2{display:block;margin-top:3px;font-size:10px;color:#b9aa9a}.mb small.mt2 a{color:var(--o1);cursor:pointer;margin-left:6px}
+.mfile{display:flex;align-items:center;gap:9px;color:#fff}.mfile .ico{font-size:20px;color:var(--o2)}.mfile span{display:block;min-width:0}.mfile b{display:block;font-size:12.5px}.mfile small{font-size:10.5px;color:#b9aa9a}
+.mcomp{display:flex;align-items:center;gap:7px;padding:8px 10px;border-top:1px solid rgba(255,255,255,.07)}
+.mcomp .fld{margin:0;flex:1;height:34px}
+#mMic.rec{border-color:#ff6b4a;color:#ff8a78;background:rgba(255,80,50,.18)}
+.mprog{font-size:11px;color:var(--o1);padding:0 12px 6px;min-height:0}
+/* инструменты */
+.tool{display:none}.tool.on{display:block}
+.tcard{display:flex;flex-direction:column;align-items:center;gap:12px;padding:14px;border-radius:18px;border:1px solid rgba(255,255,255,.1);border-top-color:rgba(255,255,255,.24);border-bottom-color:rgba(0,0,0,.55);
+  background:linear-gradient(180deg,rgba(255,255,255,.09),rgba(255,255,255,.028) 46%,rgba(0,0,0,.26));box-shadow:0 11px 16px -7px rgba(0,0,0,.75),inset 0 1px 0 rgba(255,255,255,.16)}
+.tdisp{font-size:52px;font-weight:700;letter-spacing:2px;font-variant-numeric:tabular-nums;line-height:1;text-shadow:0 0 18px rgba(255,138,0,.4)}
+.trow{display:flex;gap:9px;align-items:center;flex-wrap:wrap;justify-content:center}
+.trow .fld{width:70px;margin:0;text-align:center}
+.tbtn{height:34px;padding:0 18px;border-radius:17px;border:1.2px solid var(--o2);background:rgba(255,138,0,.10);color:var(--o1);font-size:13px;font-weight:700}
+.tbtn.main{background:linear-gradient(180deg,var(--o1),var(--o3));color:#1b0d02;border:0;box-shadow:0 6px 14px rgba(255,120,0,.3)}
+.laps{width:100%;max-height:92px;font-size:12px;color:#d6cfc7}.laps div{display:flex;justify-content:space-between;padding:3px 8px;border-bottom:1px solid rgba(255,255,255,.06)}
+.calc{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;width:100%;max-width:330px}
+.calc button{height:29px;border-radius:11px;border:1px solid rgba(255,255,255,.12);border-top-color:rgba(255,255,255,.28);border-bottom-color:rgba(0,0,0,.6);background:linear-gradient(180deg,rgba(255,255,255,.12),rgba(255,255,255,.03) 55%,rgba(0,0,0,.25));color:#fff;font-size:15px;font-weight:600;box-shadow:0 5px 8px -3px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.16)}
+.calc button:active{transform:translateY(1px);box-shadow:0 2px 4px -2px rgba(0,0,0,.7)}
+.calc button.op{color:var(--o1)}.calc button.eq{background:linear-gradient(180deg,var(--o1),var(--o3));color:#1b0d02;border:0}
+.cdisp{width:100%;max-width:330px;text-align:right;padding:6px 10px;border-radius:12px;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.08)}
+.cdisp small{display:block;min-height:15px;font-size:11.5px;color:#b9aa9a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cdisp b{display:block;font-size:22px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.drawer{overflow-y:auto}.dm{height:36px;margin-bottom:3px}
+
 /* ---------- боковое меню ---------- */
 .scrim{position:absolute;inset:0;z-index:40;background:rgba(0,0,0,.6);opacity:0;pointer-events:none;transition:opacity .3s}.scrim.show{opacity:1;pointer-events:auto}
 .drawer{position:absolute;left:0;top:0;bottom:0;width:230px;z-index:41;transform:translateX(-102%);transition:transform .45s cubic-bezier(.22,1,.36,1);background:linear-gradient(180deg,#120905,#080403);border-right:1px solid rgba(255,138,0,.4);padding:16px 12px}
@@ -338,6 +396,10 @@ body.rot .pane{touch-action:none}
   <symbol id="i-anim" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 12.500l9 5 9-5M3 16.500l9 5 9-5"/></symbol>
   <symbol id="i-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19.500 8.500a2.100 2.100 0 0 0-3-3L5 17z"/><path d="M14.500 7.500l3 3"/></symbol>
   <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></symbol>
+  <symbol id="i-attach" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11.500l-8.200 8.200a5 5 0 0 1-7.100-7.100l8.700-8.700a3.300 3.300 0 0 1 4.700 4.700L9.400 17.300a1.700 1.700 0 0 1-2.400-2.400l7.800-7.800"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5.500 11a6.500 6.500 0 0 0 13 0M12 17.500V21M8.500 21h7"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.500"/><path d="M3.500 7l8.500 6 8.500-6"/></symbol>
+  <symbol id="i-tools" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2.500"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.400" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></symbol>
 </defs></svg>
 
@@ -399,6 +461,7 @@ body.rot .pane{touch-action:none}
     <div class="set" id="setBox">
       <div class="sub">
         <button class="sm on" data-sub="settings"><svg class="ico"><use href="#i-gear" xlink:href="#i-gear"/></svg>Настройки</button>
+        <button class="sm" data-sub="net"><svg class="ico"><use href="#i-globe" xlink:href="#i-globe"/></svg>Сеть</button>
         <button class="sm" data-sub="devices"><svg class="ico"><use href="#i-phone" xlink:href="#i-phone"/></svg>Устройства</button>
         <button class="sm" data-sub="accounts"><svg class="ico"><use href="#i-user" xlink:href="#i-user"/></svg>Учётные записи</button>
         <button class="sm" data-sub="server"><svg class="ico"><use href="#i-info" xlink:href="#i-info"/></svg>О сервере</button>
@@ -408,11 +471,35 @@ body.rot .pane{touch-action:none}
         <div class="card blk-set">
           <div class="kv" id="fsLine" style="cursor:pointer"><svg class="ico"><use href="#i-full" xlink:href="#i-full"/></svg><div class="kt"><b>Полный экран</b><small>Скрыть строку состояния и кнопки навигации</small></div><button class="sw" id="fsSw" role="switch" aria-checked="false" aria-label="Полный экран"><i></i></button></div>
           <div class="kv" id="anLine" style="cursor:pointer"><svg class="ico"><use href="#i-anim" xlink:href="#i-anim"/></svg><div class="kt"><b>Анимация прокрутки</b><small>Наклон и отдаление карточек у краёв списка. Объёмный вид остаётся</small></div><button class="sw on" id="anSw" role="switch" aria-checked="true" aria-label="Анимация прокрутки"><i></i></button></div>
+          <div class="kv"><svg class="ico"><use href="#i-wifi" xlink:href="#i-wifi"/></svg><div class="kt"><b>Определение сигнала Wi-Fi</b><small>Откуда берётся уровень на значке вверху</small></div></div>
+          <div class="seg"><button class="segb on" id="sigApp" data-sig="app">Приложение · каждые 4 с</button><button class="segb" id="sigRtt" data-sig="rtt">По задержке связи</button></div>
+        </div>
+        <div class="blk-net">
+          <div class="pt"><h3>Сеть сервера</h3><small id="netState"></small></div>
+          <div class="card">
+            <div class="kv"><svg class="ico"><use href="#i-globe" xlink:href="#i-globe"/></svg><div class="kt"><b>Протокол</b><small>HTTPS шифрует весь обмен и нужен для голосовых сообщений</small></div></div>
+            <div class="seg"><button class="segb" data-netp="http" id="npHttp">HTTP</button><button class="segb" data-netp="https" id="npHttps">HTTPS</button></div>
+            <div class="kv"><svg class="ico"><use href="#i-link" xlink:href="#i-link"/></svg><div class="kt"><b>IP-адрес вещания</b><small>Сеть, в которой слушает сервер</small></div><select class="sel" id="netIp"></select></div>
+            <div class="kv"><svg class="ico"><use href="#i-db" xlink:href="#i-db"/></svg><div class="kt"><b>Порт</b><small>«Авто» берёт свободный из списка</small></div><select class="sel" id="netPort"></select><input class="fld" id="netPortC" type="number" min="1024" max="65535" placeholder="порт" style="display:none"></div>
+            <div class="kv" id="netStrictLine" style="cursor:pointer"><svg class="ico"><use href="#i-shield" xlink:href="#i-shield"/></svg><div class="kt"><b>Шифрование сигнала</b><small>Строгий режим: только HTTPS, TLS 1.2+, современные шифры, защищённые cookie, HTTP отключён</small></div><button class="sw" id="netStrict" role="switch" aria-checked="false" aria-label="Шифрование сигнала"><i></i></button></div>
+          </div>
+          <p class="note" id="netCert"></p>
+          <div style="display:flex;gap:10px;align-items:center;margin-top:8px"><button class="btn-main" id="netApply">Применить и перезапустить</button><span class="note" id="netNote" style="margin:0"></span></div>
         </div>
         <div class="blk-dev">
-          <div class="pt"><h3>Подключённые устройства</h3><small id="devCount"></small></div>
-          <div class="devs" id="devs"></div>
-          <p class="note" id="devNote"></p>
+          <div class="seg" style="padding:0 0 10px"><button class="segb on" data-dtab="srv">Подключены к серверу</button><button class="segb" data-dtab="lan">Все в локальной сети</button></div>
+          <div id="dSrv">
+            <div class="pt"><h3>Подключённые устройства</h3><small id="devCount"></small></div>
+            <div class="devs" id="devs"></div>
+            <p class="note" id="devNote"></p>
+          </div>
+          <div id="dLan" style="display:none">
+            <div class="pt"><h3>Сканер локальной сети</h3><button class="btn-main" id="lanBtn">Сканировать</button></div>
+            <div class="prog"><i id="lanProg"></i></div>
+            <p class="note" id="lanInfo" style="margin:0 2px 8px"></p>
+            <div class="devs" id="lanList"></div>
+            <p class="note">Сканер ищет устройства в той же Wi-Fi сети, что и телефон с сервером: проверяет адреса подсети и находит имена устройств. Запустить поиск может администратор.</p>
+          </div>
         </div>
         <div class="blk-acc">
           <div class="card" style="margin-bottom:12px">
@@ -442,16 +529,56 @@ body.rot .pane{touch-action:none}
       </div>
     </div>
   </div></section>
+  <!-- ПИСЬМО -->
+  <section class="pane" id="v-mail" style="overflow:hidden"><div class="mail">
+    <div class="mthreads sc" id="mThreads"></div>
+    <div class="mconv">
+      <div class="mhead"><b id="mTitle">Выберите собеседника</b><small id="mSub"></small><button class="selbtn" id="mName">Моё имя</button></div>
+      <div class="mmsgs sc" id="mMsgs"></div>
+      <div class="mprog" id="mProg"></div>
+      <div class="mcomp">
+        <button class="btn-d" id="mAttach" aria-label="Прикрепить файл"><svg class="ico"><use href="#i-attach" xlink:href="#i-attach"/></svg></button>
+        <button class="btn-d" id="mMic" aria-label="Голосовое сообщение"><svg class="ico"><use href="#i-mic" xlink:href="#i-mic"/></svg></button>
+        <input class="fld" id="mText" placeholder="Сообщение" maxlength="4000" autocomplete="off">
+        <button class="btn-main" id="mSend">Отправить</button>
+        <input type="file" id="mFile" style="display:none">
+      </div>
+    </div>
+  </div></section>
+
+  <!-- ИНСТРУМЕНТЫ -->
+  <section class="pane" id="v-tools"><div class="page">
+    <div class="head"><h2><svg class="ico"><use href="#i-tools" xlink:href="#i-tools"/></svg>Инструменты</h2>
+      <div class="seg" style="margin-left:auto;padding:0;width:340px"><button class="segb on" data-tool="timer">Таймер</button><button class="segb" data-tool="stopwatch">Секундомер</button><button class="segb" data-tool="calc">Калькулятор</button></div></div>
+    <div class="tool on" id="t-timer"><div class="tcard">
+      <div class="tdisp" id="tmDisp">00:00:00</div>
+      <div class="trow" id="tmInputs"><input class="fld" id="tmH" type="number" min="0" max="99" placeholder="ч"><input class="fld" id="tmM" type="number" min="0" max="59" placeholder="мин"><input class="fld" id="tmS" type="number" min="0" max="59" placeholder="сек"></div>
+      <div class="trow"><button class="tbtn" data-tp="60">1 мин</button><button class="tbtn" data-tp="300">5 мин</button><button class="tbtn" data-tp="600">10 мин</button><button class="tbtn" data-tp="900">15 мин</button></div>
+      <div class="trow"><button class="tbtn main" id="tmGo">Старт</button><button class="tbtn" id="tmReset">Сброс</button></div>
+    </div></div>
+    <div class="tool" id="t-stopwatch"><div class="tcard">
+      <div class="tdisp" id="swDisp">00:00.00</div>
+      <div class="trow"><button class="tbtn main" id="swGo">Старт</button><button class="tbtn" id="swLap">Круг</button><button class="tbtn" id="swReset">Сброс</button></div>
+      <div class="laps sc" id="swLaps"></div>
+    </div></div>
+    <div class="tool" id="t-calc"><div class="tcard">
+      <div class="cdisp"><small id="cExpr"></small><b id="cRes">0</b></div>
+      <div class="calc" id="calcPad"></div>
+    </div></div>
+  </div></section>
 </div>
 
 <nav class="nav" id="nav"><div class="glass snap" id="glass"></div></nav>
 
 <div class="scrim" id="scrim"></div>
-<aside class="drawer" id="drawer">
+<aside class="drawer sc" id="drawer">
   <div class="brand"><svg><use href="#logo-o" xlink:href="#logo-o"/></svg><span><span class="a">Nexora</span> <span class="b">Media</span></span></div>
   <button class="dm on" data-go="settings" data-sub="settings"><svg class="ico"><use href="#i-gear" xlink:href="#i-gear"/></svg>Настройки</button>
+  <button class="dm" data-go="settings" data-sub="net"><svg class="ico"><use href="#i-globe" xlink:href="#i-globe"/></svg>Сеть</button>
   <button class="dm" data-go="settings" data-sub="devices"><svg class="ico"><use href="#i-phone" xlink:href="#i-phone"/></svg>Устройства</button>
   <button class="dm" data-go="settings" data-sub="accounts"><svg class="ico"><use href="#i-user" xlink:href="#i-user"/></svg>Учётные записи</button>
+  <button class="dm" data-go="mail"><svg class="ico"><use href="#i-mail" xlink:href="#i-mail"/></svg>Письмо</button>
+  <button class="dm" data-go="tools"><svg class="ico"><use href="#i-tools" xlink:href="#i-tools"/></svg>Инструменты</button>
   <button class="dm" data-go="settings" data-sub="server"><svg class="ico"><use href="#i-info" xlink:href="#i-info"/></svg>О сервере</button>
   <button class="dm" data-go="settings" data-sub="app"><svg class="ico"><use href="#i-star" xlink:href="#i-star"/></svg>О приложении</button>
 </aside>
@@ -474,7 +601,7 @@ body.rot .pane{touch-action:none}
 /* Сервер заменяет HTML-комментарий-маркер NEXORA_DATA (строка выше) на тег script с присваиванием window.NEXORA = {...}.
    Формат: {version, address, port, online, authRequired, folder, features:{photos,folders},
             stats:{videos,audio,photos,storage}, files:[{id,title,name,size,dur,isVideo,mime,kind,folder}]}
-   kind:'photo' помечает фото, folder — имя папки (по желанию).
+   kind:'photo' помечает фото, folder — имя папки (по желанию). Новые разделы «Письмо», «Инструменты», «Сеть» и сканер сети общаются с сервером через /api/mail/*, /api/net, /api/lan/*.
    Дополнительно: me:{role:'user'|'admin',name}, wifi:{level:0-4,rssi}. */
 var DEMO={version:'1.0',address:'http://192.168.1.64:8765',port:8765,online:true,authRequired:true,folder:'Все папки',features:{photos:false,folders:false},
  files:[
@@ -571,6 +698,16 @@ function demoApi(url){
         {id:'b',name:'Edge · Windows',kind:'pc',ip:'192.168.1.40',account:'admin',role:'admin',online:true,me:false,blocked:false,sessionStart:n-65*60000,lastLogin:n-65*60000,firstSeen:n-86400000*9,lastSeen:n-2000},
         {id:'c',name:'Safari · iPad',kind:'tablet',ip:'192.168.1.57',account:'demo',role:'user',online:false,me:false,blocked:true,sessionStart:n-7200000,lastLogin:n-9000000,firstSeen:n-86400000,lastSeen:n-7000000}]});
     }
+    if(url.indexOf('/api/net')===0) return res({protocol:'http',ipMode:'auto',ip:'192.168.1.64',portMode:'auto',port:8765,strict:false,ips:[{label:'Wi-Fi (wlan0)',ip:'192.168.1.64'},{label:'Точка доступа (ap0)',ip:'192.168.43.1'}],ports:[8765,8080,8888,9000],cert:{fingerprint:'AB:12:CD:34:EF:56',expires:Date.now()+86400000*300}});
+    if(url.indexOf('/api/lan/devices')===0) return res({scanning:false,progress:100,finished:Date.now()-60000,subnet:'192.168.1.0/24',devices:[
+      {ip:'192.168.1.1',hostname:'Router',kind:'router',isGateway:true,rtt:2},
+      {ip:'192.168.1.64',hostname:'Этот телефон (сервер)',kind:'phone',isServer:true,rtt:1},
+      {ip:'192.168.1.23',hostname:'Pixel-7',kind:'phone',isMe:true,connected:true,rtt:6},
+      {ip:'192.168.1.40',hostname:'DESKTOP-4K2',kind:'pc',connected:true,rtt:3},
+      {ip:'192.168.1.88',hostname:'Smart-TV',vendor:'Samsung',kind:'other',rtt:14}]});
+    if(url.indexOf('/api/mail/peers')===0) return res({me:{id:'a',name:'Вы'},peers:[{id:'b',name:'Edge · Windows',kind:'pc',online:true,unread:2,last:{t:Date.now()-60000,kind:'text',preview:'Файл получил?'}},{id:'c',name:'Safari · iPad',kind:'tablet',online:false,unread:0,last:null}]});
+    if(url.indexOf('/api/mail/messages')===0){ var af=url.match(/after=(\d+)/); if(af&&Number(af[1])>0) return res({messages:[]});
+      return res({messages:[{id:1,mine:false,kind:'text',text:'Привет! Файл получил?',t:Date.now()-120000,read:true},{id:2,mine:true,kind:'text',text:'Да, спасибо',t:Date.now()-90000,read:true},{id:3,mine:false,kind:'file',text:'',t:Date.now()-60000,file:{id:'f',name:'Отчёт.pdf',size:1843200},read:true},{id:4,mine:false,kind:'voice',text:'',t:Date.now()-30000,file:{id:'v',name:'voice.webm',size:40000,dur:12},read:true}]}); }
     if(url.indexOf('/api/accounts')===0) return res({accounts:[{name:'admin',created:Date.now()-86400000*2}]});
     if(url.indexOf('/api/photos')===0){
       var m=url.match(/album=([^&]+)/);
@@ -693,6 +830,12 @@ document.addEventListener('click',function(e){
   var ph=e.target.closest&&e.target.closest('[data-photo]'); if(ph){openPhoto(parseInt(ph.getAttribute('data-photo'),10)); return;}
   var ac=e.target.closest&&e.target.closest('[data-act]'); if(ac&&ac.getAttribute('data-act')==='albums'){loadAlbums(); return;}
   var fo=e.target.closest&&e.target.closest('[data-fopen]'); if(fo){openFsFile(parseInt(fo.getAttribute('data-fopen'),10)); return;}
+  var dt=e.target.closest&&e.target.closest('[data-dtab]'); if(dt){ devTab(dt.getAttribute('data-dtab')); return; }
+  var sg=e.target.closest&&e.target.closest('[data-sig]'); if(sg){ setSigMode(sg.getAttribute('data-sig')); return; }
+  var np=e.target.closest&&e.target.closest('[data-netp]'); if(np){ setNetProto(np.getAttribute('data-netp')); return; }
+  var tl=e.target.closest&&e.target.closest('[data-tool]'); if(tl){ showTool(tl.getAttribute('data-tool')); return; }
+  var mpr=e.target.closest&&e.target.closest('[data-mpeer]'); if(mpr){ openPeer(mpr.getAttribute('data-mpeer')); return; }
+  var mdl=e.target.closest&&e.target.closest('[data-mdel]'); if(mdl){ delMsg(mdl.getAttribute('data-mdel')); return; }
   var se=e.target.closest&&e.target.closest('[data-sel]'); if(se){ selAction(se.getAttribute('data-sel')); return; }
   var bl=e.target.closest&&e.target.closest('[data-block]'); if(bl){ blockDevice(bl.getAttribute('data-block'),bl.getAttribute('data-to')==='1'); return; }
   var da=e.target.closest&&e.target.closest('[data-delacc]'); if(da){ deleteAdmin(da.getAttribute('data-delacc')); return; }
@@ -719,18 +862,22 @@ function moveGlass(i,instant){
   glass.style.width=w+'px'; glass.style.transform='translateX('+x+'px)';
   if(instant){ void glass.offsetWidth; glass.classList.remove('snap'); }
 }
+var ORDER=['home','videos','audio','photos','folders','settings','mail','tools'];
 function go(name){
-  var i=-1; TABS.forEach(function(t,k){ if(t[0]===name) i=k; }); if(i<0){ i=0; name='home'; }
-  cur=i;
-  Array.prototype.forEach.call(tabs(),function(b,k){ b.classList.toggle('on',k===i); });
-  TABS.forEach(function(t,k){
-    var p=$('v-'+t[0]); p.style.setProperty('--tx', k<i?'-34px':(k>i?'34px':'0px'));
-    p.classList.toggle('on',k===i); if(k===i) p.scrollTop=0;
+  var k=ORDER.indexOf(name); if(k<0){ name='home'; k=0; }
+  var ti=-1; TABS.forEach(function(t,n){ if(t[0]===name) ti=n; });
+  if(ti>=0) cur=ti;
+  Array.prototype.forEach.call(tabs(),function(b,n){ b.classList.toggle('on',n===ti); });
+  ORDER.forEach(function(nm,n){
+    var p=$('v-'+nm); p.style.setProperty('--tx', n<k?'-34px':(n>k?'34px':'0px'));
+    p.classList.toggle('on',n===k); if(n===k) p.scrollTop=0;
   });
-  moveGlass(i,false);
-  setTimeout(function(){ refresh3d($('v-'+name)); },120);
+  glass.style.opacity=(ti>=0)?'':'0';
+  if(ti>=0) moveGlass(ti,false);
+  var pp=$('v-'+name); tilt3d(pp); setTimeout(function(){ refresh3d(pp); },900);
   if(name==='photos') loadAlbums();
   if(name==='folders') loadDir(FS.path);
+  if(name==='mail') startMail(); else stopMail();
   if(location.hash!=='#'+name) history.replaceState(null,'','#'+name);
 }
 window.addEventListener('hashchange',function(){go(location.hash.slice(1)||'home');});
@@ -742,11 +889,13 @@ $('scrim').addEventListener('click',closeDrawer);
 $('statusBtn').addEventListener('click',function(e){e.stopPropagation(); $('pop').classList.toggle('show');});
 document.addEventListener('click',function(){$('pop').classList.remove('show');});
 function setSub(name){
-  $('setBox').className='set'+(name==='server'?' s-server':name==='app'?' s-app':name==='devices'?' s-dev':name==='accounts'?' s-acc':'');
-  Array.prototype.forEach.call(document.querySelectorAll('.sm,.dm'),function(b){b.classList.toggle('on',b.getAttribute('data-sub')===name);});
-  clearInterval(devTimer);
-  if(name==='devices'){ loadDevices(); devTimer=setInterval(function(){ if($('v-settings').classList.contains('on') && $('setBox').className.indexOf('s-dev')>-1) loadDevices(); },5000); }
+  var m={server:' s-server',app:' s-app',devices:' s-dev',accounts:' s-acc',net:' s-net'};
+  $('setBox').className='set'+(m[name]||'');
+  Array.prototype.forEach.call(document.querySelectorAll('.sm,.dm'),function(b){ b.classList.toggle('on',b.getAttribute('data-sub')===name); });
+  clearInterval(devTimer); clearTimeout(LAN.timer);
+  if(name==='devices') devTab(DEVTAB);
   if(name==='accounts') loadAccounts();
+  if(name==='net') loadNet();
 }
 $('copyBtn').addEventListener('click',function(){
   var t=D.address||'';
@@ -771,11 +920,11 @@ document.addEventListener('fullscreenchange',syncFs); document.addEventListener(
 var rotated=false, curScale=1, suppressClick=0;
 (function(){
   var st=null, raf=0;
-  function paneOf(t){ while(t&&t!==document){ if(t.classList&&t.classList.contains('pane')) return t; t=t.parentNode; } return null; }
+  function paneOf(t){ while(t&&t!==document){ if(t.classList&&(t.classList.contains('sc')||t.classList.contains('pane'))) return t; t=t.parentNode; } return null; }
   document.addEventListener('touchstart',function(e){
     cancelAnimationFrame(raf);
     if(!rotated||e.touches.length!==1){ st=null; return; }
-    var el=paneOf(e.target); if(!el||!el.classList.contains('on')){ st=null; return; }
+    var el=paneOf(e.target); if(!el||(el.classList.contains('pane')&&!el.classList.contains('on'))){ st=null; return; }
     var t=e.touches[0]; st={el:el,x:t.clientX,y:t.clientY,t:Date.now(),moved:false,v:0,sx:t.clientX,sy:t.clientY};
   },{passive:true});
   document.addEventListener('touchmove',function(e){
@@ -792,6 +941,7 @@ var rotated=false, curScale=1, suppressClick=0;
   document.addEventListener('click',function(e){ if(Date.now()<suppressClick){ e.stopPropagation(); e.preventDefault(); } },true);
 })();
 
+var SIGMODE='app'; try{ SIGMODE=localStorage.getItem('nx_sigmode')||'app'; }catch(_){}
 /* ---------- объёмная анимация при прокрутке: карточки у краёв наклоняются и уходят вглубь ---------- */
 var REDUCE=!!(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches);
 var SCROLL_ANIM=true; try{ SCROLL_ANIM=localStorage.getItem('nx_noanim')!=='1'; }catch(_){}
@@ -840,8 +990,8 @@ function pollStatus(){
     return r.json();
   }).then(function(j){
     if(!j) return; var rtt=Math.round(nowMs()-t0); failCount=0; setOnline(true);
-    var w=j.wifi||{}, lv=(typeof w.level==='number')? w.level : levelFromRtt(rtt);
-    setWifi(lv,{rtt:rtt,rssi:(typeof w.rssi==='number')?w.rssi:null,src:(typeof w.level==='number')?'app':'rtt'});
+    var w=j.wifi||{}, useApp=(SIGMODE==='app'&&typeof w.level==='number'), lv=useApp? w.level : levelFromRtt(rtt);
+    setWifi(lv,{rtt:rtt,rssi:(useApp&&typeof w.rssi==='number')?w.rssi:null,src:useApp?'app':'rtt'});
   }).catch(function(){ failCount++; if(failCount>=2) setOnline(false); });
 }
 if(D.wifi&&typeof D.wifi.level==='number') setWifi(D.wifi.level,{rssi:D.wifi.rssi}); else setWifi(3,{});
@@ -851,7 +1001,7 @@ setInterval(pollStatus,4000); pollStatus();
 var devTimer=0;
 function two(n){return n<10?'0'+n:''+n;}
 function fmtDT(ms){ if(!ms) return '-'; var d=new Date(ms); return two(d.getDate())+'.'+two(d.getMonth()+1)+'.'+d.getFullYear()+' '+two(d.getHours())+':'+two(d.getMinutes()); }
-function fmtDur(sec){ sec=Math.max(0,Math.floor(sec)); if(sec<60) return sec+' сек'; var m=Math.floor(sec/60); if(m<60) return m+' мин'; var h=Math.floor(m/60); return h+' ч '+(m%60)+' мин'; }
+function fmtDur(sec){ sec=Math.max(0,Math.floor(sec)); if(sec<60) return 'меньше минуты'; var m=Math.floor(sec/60); if(m<60) return m+' мин'; var h=Math.floor(m/60); return h+' ч '+(m%60)+' мин'; }
 function loadDevices(){
   api('/api/devices').then(renderDevices).catch(function(e){ $('devs').innerHTML=emptyHtml('phone',e&&e.code==='auth_required'?'Список устройств доступен при включённой защите паролем':'Не удалось загрузить список устройств'); });
 }
@@ -859,15 +1009,16 @@ function renderDevices(j){
   var list=j.devices||[], now=j.now||Date.now();
   $('devCount').textContent='Всего: '+list.length+', в сети: '+list.filter(function(d){return d.online;}).length;
   $('devNote').textContent=isAdmin? '' : 'Блокировать устройства может администратор. Войдите под учётной записью администратора (раздел «Учётные записи»).';
-  $('devs').innerHTML=list.length? list.map(function(d,i){
+  var first=!$('devs')._h;
+  var dhtml=list.length? list.map(function(d,i){
     var kind=d.kind==='pc'?'pc':d.kind==='tablet'?'tablet':'phone';
     var role=d.role==='admin'?'<span class="bdg adm">админ</span>':'<span class="bdg usr">пользователь</span>';
     var time=d.online? 'На сайте: '+fmtDur((now-(d.sessionStart||now))/1000) : 'Был в сети: '+fmtDT(d.lastSeen);
     var btn=(isAdmin&&!d.me)? '<button class="btn-danger'+(d.blocked?' ok':'')+'" data-block="'+esc(d.id)+'" data-to="'+(d.blocked?'0':'1')+'">'+ic(d.blocked?'play-s':'ban')+(d.blocked?'Разблокировать':'Заблокировать')+'</button>' : '';
-    return '<div class="dev i3d in'+(d.online?' on':'')+'" style="--n:'+Math.min(i,10)+'"><div class="di">'+ic(kind)+'<i></i></div><div class="dm2"><b>'+esc(d.name||'Устройство')+(d.me?' <span class="bdg me">это вы</span>':'')+(d.blocked?' <span class="bdg blk">заблокировано</span>':'')+'</b>'+
+    return '<div class="dev i3d'+(first?' in':'')+(d.online?' on':'')+'" style="--n:'+Math.min(i,10)+'"><div class="di">'+ic(kind)+'<i></i></div><div class="dm2"><b>'+esc(d.name||'Устройство')+(d.me?' <span class="bdg me">это вы</span>':'')+(d.blocked?' <span class="bdg blk">заблокировано</span>':'')+'</b>'+
       '<small>IP-адрес: '+esc(d.ip)+'</small><small>'+time+'</small><small>Последний вход: '+fmtDT(d.lastLogin)+'</small><small>Учётная запись: '+(d.account?esc(d.account):'без входа')+' '+role+'</small></div>'+btn+'</div>';
   }).join('') : emptyHtml('phone','Подключённых устройств нет');
-  after3d($('devs'));
+  if($('devs')._h!==dhtml){ $('devs').innerHTML=dhtml; $('devs')._h=dhtml; after3d($('devs')); }
 }
 function blockDevice(id,to){
   var go2=function(){ post('/api/devices/block',{id:id,blocked:to}).then(function(){ toast(to?'Устройство заблокировано':'Устройство разблокировано'); loadDevices(); }).catch(function(e){ toast(opErr(e)); }); };
@@ -917,7 +1068,7 @@ var dlgCb=null;
 function dlg(o,cb){
   $('dT').textContent=o.title||''; $('dP').textContent=o.text||'';
   var i=$('dI'); i.style.display=o.input!=null?'block':'none'; if(o.input!=null) i.value=o.input;
-  $('dYes').textContent=o.ok||'OK'; $('dYes').style.background=o.danger?'linear-gradient(180deg,#ff8a78,#e0422a)':'';
+  $('dNo').style.display=(o.cancel===false)?'none':''; $('dYes').textContent=o.ok||'OK'; $('dYes').style.background=o.danger?'linear-gradient(180deg,#ff8a78,#e0422a)':'';
   dlgCb=cb; $('dlg').className='dlg show'; if(o.input!=null) setTimeout(function(){ i.focus(); i.select(); },80);
 }
 $('dNo').addEventListener('click',function(){ $('dlg').className='dlg'; dlgCb=null; });
@@ -974,6 +1125,245 @@ $('anLine').addEventListener('click',function(){
   syncAn(); var p=document.querySelector('.pane.on'); if(p) tilt3d(p);
 });
 syncAn();
+
+/* ---------- v5: источник сигнала, вкладки устройств, сканер сети, настройки сети ---------- */
+var DEVTAB='srv', LAN={timer:0}, NET={}, NETSEL={proto:'http',strict:false};
+function setSigMode(m){ SIGMODE=m; try{ localStorage.setItem('nx_sigmode',m); }catch(_){} syncSig(); pollStatus(); }
+function syncSig(){ $('sigApp').classList.toggle('on',SIGMODE==='app'); $('sigRtt').classList.toggle('on',SIGMODE==='rtt'); }
+syncSig();
+function devTab(t){
+  DEVTAB=t;
+  Array.prototype.forEach.call(document.querySelectorAll('[data-dtab]'),function(b){ b.classList.toggle('on',b.getAttribute('data-dtab')===t); });
+  $('dSrv').style.display=(t==='srv')?'':'none'; $('dLan').style.display=(t==='lan')?'':'none';
+  clearInterval(devTimer); clearTimeout(LAN.timer);
+  if(t==='srv'){ loadDevices(); devTimer=setInterval(function(){ if($('v-settings').classList.contains('on') && $('setBox').className.indexOf('s-dev')>-1) loadDevices(); },8000); }
+  else loadLan();
+}
+function lanIcon(d){ return d.kind==='phone'?'phone':d.kind==='tablet'?'tablet':(d.kind==='router'?'wifi':'pc'); }
+function loadLan(){ api('/api/lan/devices').then(renderLan).catch(function(){ $('lanList').innerHTML=emptyHtml('phone','Сканер недоступен'); }); }
+function renderLan(j){
+  var list=j.devices||[], el=$('lanList');
+  $('lanProg').style.width=(j.scanning?(j.progress||0):(list.length?100:0))+'%';
+  $('lanInfo').textContent=j.scanning? ('Сканирование… '+(j.progress||0)+'%'+(j.subnet?' · '+j.subnet:'')) : (j.finished? ('Последнее сканирование: '+fmtDT(j.finished)+' · найдено: '+list.length+(j.subnet?' · '+j.subnet:'')) : 'Нажмите «Сканировать»');
+  var first=!el._h;
+  var html=list.length? list.map(function(d,i){
+    var badges=(d.isServer?' <span class="bdg me">сервер</span>':'')+(d.isMe?' <span class="bdg me">это вы</span>':'')+(d.isGateway?' <span class="bdg usr">роутер</span>':'')+(d.connected?' <span class="bdg adm">на сервере</span>':'');
+    return '<div class="dev i3d'+(first?' in':'')+' on" style="--n:'+Math.min(i,10)+'"><div class="di">'+ic(lanIcon(d))+'<i></i></div><div class="dm2"><b>'+esc(d.hostname||d.vendor||'Неизвестное устройство')+badges+'</b>'+
+      '<small>IP-адрес: '+esc(d.ip)+(d.mac?' · MAC: '+esc(d.mac):'')+'</small>'+(d.vendor&&d.hostname?'<small>Производитель: '+esc(d.vendor)+'</small>':'')+(d.rtt!=null?'<small>Отклик: '+d.rtt+' мс</small>':'')+'</div></div>';
+  }).join('') : emptyHtml('phone',j.scanning?'Идёт поиск устройств…':'Устройства ещё не найдены');
+  if(el._h!==html){ el.innerHTML=html; el._h=html; after3d(el); }
+  $('lanBtn').disabled=!!j.scanning||!isAdmin;
+  clearTimeout(LAN.timer); if(j.scanning && DEVTAB==='lan') LAN.timer=setTimeout(loadLan,1500);
+}
+$('lanBtn').addEventListener('click',function(){ post('/api/lan/scan',{}).then(function(){ loadLan(); }).catch(function(e){ toast(opErr(e)); }); });
+
+function loadNet(){ api('/api/net').then(function(j){ NET=j; renderNet(); }).catch(function(){ $('netNote').textContent='Не удалось загрузить настройки сети'; }); }
+function renderNet(){
+  var ipSel=$('netIp'); ipSel.innerHTML='<option value="auto">Авто</option>'+(NET.ips||[]).map(function(x){ return '<option value="'+esc(x.ip)+'">'+esc(x.label)+' · '+esc(x.ip)+'</option>'; }).join('');
+  ipSel.value=NET.ipMode==='auto'?'auto':NET.ip;
+  var ports=(NET.ports||[]).slice(); if(NET.port&&ports.indexOf(NET.port)<0) ports.unshift(NET.port);
+  $('netPort').innerHTML='<option value="auto">Авто (свободный)</option>'+ports.map(function(p){ return '<option value="'+p+'">'+p+'</option>'; }).join('')+'<option value="custom">Свой порт…</option>';
+  $('netPort').value=NET.portMode==='auto'?'auto':String(NET.port); $('netPortC').style.display='none';
+  NETSEL={proto:NET.protocol||'http',strict:!!NET.strict}; syncNetUi();
+  $('netState').textContent='Сейчас: '+String(NET.protocol||'http').toUpperCase()+' · '+(NET.ip||'')+':'+(NET.port||'');
+  $('netCert').innerHTML=(NET.protocol==='https'&&NET.cert)? 'Сертификат (самоподписанный) SHA-256: '+esc(NET.cert.fingerprint)+(NET.cert.expires?', действует до '+fmtDT(NET.cert.expires):'')+'. <a href="/cert.crt" style="color:var(--o1)">Скачать сертификат</a>. Браузер при первом входе предупредит о незнакомом сертификате: сверьте отпечаток и продолжите.' : 'Сейчас включён HTTP: трафик в сети не шифруется. Включите HTTPS, если нужны шифрование и голосовые сообщения.';
+  var dis=!isAdmin; ['netIp','netPort','netPortC','npHttp','npHttps','netApply'].forEach(function(id){ $(id).disabled=dis; });
+  $('netNote').textContent=dis?'Менять сеть может администратор':'';
+}
+function syncNetUi(){
+  $('npHttp').classList.toggle('on',NETSEL.proto==='http'); $('npHttps').classList.toggle('on',NETSEL.proto==='https');
+  $('npHttp').disabled=NETSEL.strict||!isAdmin; $('netStrict').classList.toggle('on',NETSEL.strict); $('netStrict').setAttribute('aria-checked',NETSEL.strict?'true':'false');
+}
+function setNetProto(p){ if(!isAdmin||(NETSEL.strict&&p==='http')) return; NETSEL.proto=p; syncNetUi(); }
+$('netStrictLine').addEventListener('click',function(){ if(!isAdmin) return; NETSEL.strict=!NETSEL.strict; if(NETSEL.strict) NETSEL.proto='https'; syncNetUi(); });
+$('netPort').addEventListener('change',function(){ $('netPortC').style.display=(this.value==='custom')?'':'none'; });
+$('netApply').addEventListener('click',function(){
+  var port=$('netPort').value; if(port==='custom') port=parseInt($('netPortC').value,10); else if(port!=='auto') port=parseInt(port,10);
+  if(port!=='auto'&&!(port>=1024&&port<=65535)){ toast('Порт: число от 1024 до 65535'); return; }
+  var body={protocol:NETSEL.proto,ip:$('netIp').value,port:port,strict:NETSEL.strict};
+  dlg({title:'Перезапустить сервер?',text:'Адрес, порт или протокол изменятся. Все устройства будут отключены и должны открыть новый адрес. При HTTPS браузер предупредит о самоподписанном сертификате.',ok:'Применить'},function(){
+    if(DEMO_MODE){ toast('Демо: настройки не применяются'); return; }
+    post('/api/net',body).then(function(r){ toast('Сервер перезапускается…'); setTimeout(function(){ location.href=r.url||location.href; },2800); })
+    .catch(function(e){ var c=e&&e.code; toast(c==='port_busy'?'Порт занят':c==='bad_ip'?'Этот IP недоступен':c==='bad_port'?'Недопустимый порт':c==='admin_required'?'Нужны права администратора':'Не удалось применить'); });
+  });
+});
+
+/* ---------- ПИСЬМО: текст, голос и файлы между пользователями сервера ---------- */
+var MAIL={peer:null,peers:[],lastId:0,timer:0,tick:0,rec:null,chunks:[],t0:0};
+function startMail(){ stopMail(); loadPeers(); MAIL.tick=0; MAIL.timer=setInterval(function(){ MAIL.tick++; if(MAIL.tick%3===0) loadPeers(); if(MAIL.peer) loadMsgs(); },2500); }
+function stopMail(){ clearInterval(MAIL.timer); MAIL.timer=0; }
+function loadPeers(){ api('/api/mail/peers').then(function(j){ MAIL.peers=j.peers||[]; MAIL.me=j.me||{}; $('mName').textContent=MAIL.me.name||'Моё имя'; renderPeers(); }).catch(function(e){ $('mThreads').innerHTML=emptyHtml('phone',e&&e.code==='auth_required'?'Письмо работает при включённой защите паролем':'Не удалось загрузить список'); }); }
+function renderPeers(){
+  var el=$('mThreads');
+  var html=MAIL.peers.length? MAIL.peers.map(function(p){
+    var k=p.kind==='pc'?'pc':p.kind==='tablet'?'tablet':'phone';
+    var last=p.last? (p.last.kind==='voice'?'Голосовое сообщение':p.last.kind==='file'?'Файл':p.last.preview||'') : 'Нет сообщений';
+    return '<button class="mt'+(MAIL.peer===p.id?' on':'')+'" data-mpeer="'+esc(p.id)+'"><div class="av'+(p.online?' on':'')+'">'+ic(k)+'<i></i></div><div class="tx"><b>'+esc(p.name)+'</b><small>'+esc(last)+'</small></div>'+(p.unread?'<span class="un">'+p.unread+'</span>':'')+'</button>';
+  }).join('') : emptyHtml('phone','Других устройств пока нет');
+  if(el._h!==html){ el.innerHTML=html; el._h=html; }
+}
+function openPeer(id){
+  MAIL.peer=id; MAIL.lastId=0; $('mMsgs').innerHTML=''; var p=MAIL.peers.filter(function(x){return x.id===id;})[0]||{};
+  $('mTitle').textContent=p.name||'Собеседник'; $('mSub').textContent=p.online?'в сети':'не в сети'; renderPeers(); loadMsgs(true);
+  post('/api/mail/read',{peer:id}).catch(function(){});
+}
+function msgHtml(m){
+  var body='', f=m.file||{};
+  if(m.kind==='voice') body='<audio controls preload="none" src="/api/mail/file?id='+encodeURIComponent(f.id)+'"></audio>'+(f.dur?'<small class="mt2" style="margin:0">'+fmtClock(f.dur)+'</small>':'');
+  else if(m.kind==='file') body='<a class="mfile" href="/api/mail/file?id='+encodeURIComponent(f.id)+'&dl=1" download="'+esc(f.name)+'">'+ic('file')+'<span><b>'+esc(f.name)+'</b><small>'+fmtSize(f.size)+'</small></span>'+ic('dl')+'</a>';
+  if(m.kind==='text'||m.text) body+='<span>'+esc(m.text).replace(/\n/g,'<br>')+'</span>';
+  return '<div class="mb'+(m.mine?' me':'')+'" data-mid="'+m.id+'">'+body+'<small class="mt2">'+fmtDT(m.t)+(m.mine?(m.read?' · прочитано':' · отправлено'):'')+((m.mine||isAdmin)?' <a data-mdel="'+m.id+'">удалить</a>':'')+'</small></div>';
+}
+function loadMsgs(first){
+  var peer=MAIL.peer; if(!peer) return;
+  api('/api/mail/messages?peer='+encodeURIComponent(peer)+'&after='+MAIL.lastId).then(function(j){
+    if(peer!==MAIL.peer) return;
+    var box=$('mMsgs'), list=j.messages||[], near=(box.scrollHeight-box.scrollTop-box.clientHeight)<60;
+    if(list.length){
+      var tmp=document.createElement('div'); tmp.innerHTML=list.map(msgHtml).join('');
+      while(tmp.firstChild) box.appendChild(tmp.firstChild);
+      list.forEach(function(m){ if(m.id>MAIL.lastId) MAIL.lastId=m.id; });
+      if(first||near) box.scrollTop=box.scrollHeight;
+      if(!first && list.some(function(m){return !m.mine;})) post('/api/mail/read',{peer:peer}).catch(function(){});
+    } else if(first) box.innerHTML='<div class="empty">Сообщений пока нет. Напишите первым.</div>';
+    (j.deleted||[]).forEach(function(id){ var el=document.querySelector('#mMsgs [data-mid="'+id+'"]'); if(el&&el.parentNode) el.parentNode.removeChild(el); });
+  }).catch(function(){});
+}
+function delMsg(id){ dlg({title:'Удалить сообщение?',text:'Оно исчезнет у обоих участников.',ok:'Удалить',danger:true},function(){ post('/api/mail/delete',{id:Number(id)}).then(function(){ var el=document.querySelector('#mMsgs [data-mid="'+id+'"]'); if(el&&el.parentNode) el.parentNode.removeChild(el); }).catch(function(e){ toast(opErr(e)); }); }); }
+function sendText(){
+  var t=$('mText').value.trim(); if(!MAIL.peer){ toast('Выберите собеседника'); return; } if(!t) return;
+  $('mText').value=''; post('/api/mail/send',{to:MAIL.peer,kind:'text',text:t}).then(function(){ loadMsgs(); }).catch(function(e){ $('mText').value=t; toast(e&&e.code==='blocked'?'Нельзя отправить: устройство заблокировано':'Не удалось отправить'); });
+}
+function mailUpload(blob,name,mime,dur){
+  return new Promise(function(res,rej){
+    if(DEMO_MODE){ setTimeout(function(){ res({fileId:'demo'}); },300); return; }
+    var x=new XMLHttpRequest(); x.open('POST','/api/mail/upload?name='+encodeURIComponent(name)+'&mime='+encodeURIComponent(mime||'')+'&dur='+(dur||0)); x.setRequestHeader('X-Nexora','1');
+    x.upload.onprogress=function(e){ if(e.lengthComputable) $('mProg').textContent='Отправка: '+Math.round(e.loaded*100/e.total)+'%'; };
+    x.onload=function(){ var j={}; try{ j=JSON.parse(x.responseText); }catch(_){} if(x.status>=200&&x.status<300) res(j); else { var e=new Error(j.error||('HTTP '+x.status)); e.code=j.error; rej(e); } };
+    x.onerror=function(){ rej(new Error('net')); }; x.send(blob);
+  });
+}
+function sendBlob(blob,name,mime,dur,kind){
+  if(!MAIL.peer){ toast('Выберите собеседника'); return; }
+  $('mProg').textContent='Отправка…';
+  mailUpload(blob,name,mime,dur).then(function(r){ return post('/api/mail/send',{to:MAIL.peer,kind:kind,fileId:r.fileId,text:''}); })
+  .then(function(){ $('mProg').textContent=''; loadMsgs(); })
+  .catch(function(e){ $('mProg').textContent=''; toast(e&&e.code==='too_large'?'Файл слишком большой':e&&e.code==='quota'?'Хранилище письма заполнено':'Не удалось отправить'); });
+}
+function recSupported(){ return !!(window.isSecureContext&&navigator.mediaDevices&&navigator.mediaDevices.getUserMedia&&window.MediaRecorder); }
+function setMic(on){ $('mMic').classList.toggle('rec',on); }
+function startRec(){
+  if(!MAIL.peer){ toast('Выберите собеседника'); return; }
+  if(!recSupported()){ toast('Голосовые сообщения работают только по HTTPS: Настройки → Сеть'); return; }
+  navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
+    var mt=''; ['audio/webm;codecs=opus','audio/webm','audio/mp4'].some(function(t){ if(MediaRecorder.isTypeSupported(t)){ mt=t; return true; } return false; });
+    var r=mt? new MediaRecorder(stream,{mimeType:mt}) : new MediaRecorder(stream);
+    MAIL.chunks=[]; MAIL.rec=r; MAIL.t0=Date.now();
+    r.ondataavailable=function(e){ if(e.data&&e.data.size) MAIL.chunks.push(e.data); };
+    r.onstop=function(){
+      stream.getTracks().forEach(function(t){ t.stop(); }); MAIL.rec=null; setMic(false);
+      var dur=Math.round((Date.now()-MAIL.t0)/1000), type=r.mimeType||mt||'audio/webm', blob=new Blob(MAIL.chunks,{type:type});
+      if(dur<1){ toast('Слишком короткое сообщение'); return; }
+      sendBlob(blob,'voice-'+Date.now()+(type.indexOf('mp4')>-1?'.m4a':'.webm'),type,dur,'voice');
+    };
+    r.start(); setMic(true);
+  }).catch(function(){ toast('Нет доступа к микрофону'); });
+}
+function stopRec(){ if(MAIL.rec&&MAIL.rec.state!=='inactive') MAIL.rec.stop(); }
+$('mMic').addEventListener('click',function(){ if(MAIL.rec) stopRec(); else startRec(); });
+$('mAttach').addEventListener('click',function(){ if(!MAIL.peer){ toast('Выберите собеседника'); return; } $('mFile').click(); });
+$('mFile').addEventListener('change',function(){ var f=this.files&&this.files[0]; this.value=''; if(!f) return; sendBlob(f,f.name,f.type||'application/octet-stream',0,'file'); });
+$('mSend').addEventListener('click',sendText);
+$('mText').addEventListener('keydown',function(e){ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendText(); } });
+$('mName').addEventListener('click',function(){
+  dlg({title:'Ваше имя в письме',text:'Так вас увидят другие пользователи сервера.',input:(MAIL.me&&MAIL.me.name)||'',ok:'Сохранить'},function(v){
+    v=(v||'').trim(); if(!v) return; post('/api/mail/profile',{name:v}).then(function(){ toast('Имя сохранено'); loadPeers(); }).catch(function(){ toast('Не удалось сохранить имя'); });
+  });
+});
+
+/* ---------- ИНСТРУМЕНТЫ: таймер, секундомер, калькулятор ---------- */
+function showTool(n){
+  Array.prototype.forEach.call(document.querySelectorAll('[data-tool]'),function(b){ b.classList.toggle('on',b.getAttribute('data-tool')===n); });
+  Array.prototype.forEach.call(document.querySelectorAll('.tool'),function(t){ t.classList.toggle('on',t.id==='t-'+n); });
+}
+function beep(){
+  try{ var C=window.AudioContext||window.webkitAudioContext, ctx=new C();
+    [0,0.3,0.6,0.9].forEach(function(t){ var o=ctx.createOscillator(), g=ctx.createGain(); o.frequency.value=880; g.gain.value=0.2; o.connect(g); g.connect(ctx.destination); o.start(ctx.currentTime+t); o.stop(ctx.currentTime+t+0.18); });
+  }catch(_){}
+  if(navigator.vibrate) navigator.vibrate([250,120,250]);
+}
+function p2(n){ return n<10?'0'+n:''+n; }
+function fmtClock(s){ s=Math.round(s); return Math.floor(s/60)+':'+p2(s%60); }
+var TM={run:false,end:0,left:0,tid:0};
+function tmFmt(s){ s=Math.max(0,Math.ceil(s)); return p2(Math.floor(s/3600))+':'+p2(Math.floor(s%3600/60))+':'+p2(s%60); }
+function tmInput(){ return (parseInt($('tmH').value,10)||0)*3600+(parseInt($('tmM').value,10)||0)*60+(parseInt($('tmS').value,10)||0); }
+function tmTick(){
+  var left=(TM.end-Date.now())/1000;
+  if(left<=0){ clearInterval(TM.tid); TM.run=false; TM.left=0; $('tmDisp').textContent='00:00:00'; $('tmGo').textContent='Старт'; beep(); dlg({title:'Таймер',text:'Время вышло',ok:'OK',cancel:false},function(){}); return; }
+  TM.left=left; $('tmDisp').textContent=tmFmt(left);
+}
+$('tmGo').addEventListener('click',function(){
+  if(TM.run){ clearInterval(TM.tid); TM.run=false; TM.left=(TM.end-Date.now())/1000; this.textContent='Продолжить'; return; }
+  var s=TM.left>0? TM.left : tmInput(); if(s<=0){ toast('Задайте время'); return; }
+  TM.end=Date.now()+s*1000; TM.run=true; this.textContent='Пауза'; clearInterval(TM.tid); TM.tid=setInterval(tmTick,200); tmTick();
+});
+$('tmReset').addEventListener('click',function(){ clearInterval(TM.tid); TM.run=false; TM.left=0; $('tmDisp').textContent='00:00:00'; $('tmGo').textContent='Старт'; });
+Array.prototype.forEach.call(document.querySelectorAll('[data-tp]'),function(b){ b.addEventListener('click',function(){ var s=parseInt(b.getAttribute('data-tp'),10); $('tmH').value=Math.floor(s/3600)||''; $('tmM').value=Math.floor(s%3600/60)||''; $('tmS').value=s%60||''; clearInterval(TM.tid); TM.run=false; TM.left=0; $('tmDisp').textContent=tmFmt(s); $('tmGo').textContent='Старт'; }); });
+['tmH','tmM','tmS'].forEach(function(id){ $(id).addEventListener('input',function(){ if(!TM.run){ TM.left=0; $('tmDisp').textContent=tmFmt(tmInput()); } }); });
+
+var SW={run:false,t0:0,acc:0,tid:0,laps:[]};
+function swFmt(ms){ var t=Math.floor(ms/10), cs=t%100, s=Math.floor(t/100)%60, m=Math.floor(t/6000); return p2(m)+':'+p2(s)+'.'+p2(cs); }
+function swNow(){ return SW.acc+(SW.run?Date.now()-SW.t0:0); }
+function swDraw(){ $('swDisp').textContent=swFmt(swNow()); }
+$('swGo').addEventListener('click',function(){
+  if(SW.run){ SW.acc+=Date.now()-SW.t0; SW.run=false; clearInterval(SW.tid); this.textContent='Продолжить'; swDraw(); }
+  else{ SW.t0=Date.now(); SW.run=true; this.textContent='Стоп'; clearInterval(SW.tid); SW.tid=setInterval(swDraw,40); }
+});
+$('swLap').addEventListener('click',function(){
+  if(!SW.run) return; var now=swNow(), prev=SW.laps.length?SW.laps[SW.laps.length-1].total:0; SW.laps.push({total:now,lap:now-prev});
+  $('swLaps').innerHTML=SW.laps.map(function(l,i){ return '<div><span>Круг '+(i+1)+'</span><span>'+swFmt(l.lap)+'</span><span>'+swFmt(l.total)+'</span></div>'; }).reverse().join('');
+});
+$('swReset').addEventListener('click',function(){ clearInterval(SW.tid); SW={run:false,t0:0,acc:0,tid:0,laps:[]}; $('swDisp').textContent='00:00.00'; $('swGo').textContent='Старт'; $('swLaps').innerHTML=''; });
+
+/* калькулятор: собственный разбор выражений (без eval) */
+function calcParse(src){
+  var s=src.replace(/×/g,'*').replace(/÷/g,'/').replace(/−/g,'-').replace(/,/g,'.').replace(/\s+/g,''), i=0;
+  function peek(){ return s.charAt(i); }
+  function expr(){ var v=term(); while(peek()==='+'||peek()==='-'){ var o=s.charAt(i++); var r=term(); v=(o==='+')?v+r:v-r; } return v; }
+  function term(){ var v=factor(); while(peek()==='*'||peek()==='/'){ var o=s.charAt(i++); var r=factor(); v=(o==='*')?v*r:v/r; } return v; }
+  function factor(){ var b=unary(); if(peek()==='^'){ i++; return Math.pow(b,factor()); } return b; }
+  function unary(){ if(peek()==='-'){ i++; return -unary(); } if(peek()==='+'){ i++; return unary(); } return post(); }
+  function post(){ var v=prim(); while(peek()==='%'){ i++; v=v/100; } return v; }
+  function prim(){
+    var c=peek();
+    if(c==='('){ i++; var v=expr(); if(peek()!==')') throw new Error('p'); i++; return v; }
+    if(s.substr(i,5)==='sqrt('){ i+=5; var q=expr(); if(peek()!==')') throw new Error('p'); i++; if(q<0) throw new Error('neg'); return Math.sqrt(q); }
+    var m=/^\d+(\.\d+)?|^\.\d+/.exec(s.slice(i)); if(!m) throw new Error('n'); i+=m[0].length; return parseFloat(m[0]);
+  }
+  var r=expr(); if(i!==s.length) throw new Error('x'); return r;
+}
+function calcClean(e){ e=e.replace(/[+×÷−^]+$/,''); var o=(e.match(/\(/g)||[]).length, c=(e.match(/\)/g)||[]).length; while(c<o){ e+=')'; c++; } return e; }
+function calcFmt(v){ if(!isFinite(v)) return 'Ошибка'; var t=parseFloat(v.toPrecision(12)); return String(t); }
+var CALC={e:'',done:false};
+function calcDraw(){ $('cExpr').textContent=CALC.e; var r=''; try{ if(CALC.e&&/[\d)%]$/.test(CALC.e)) r=calcFmt(calcParse(calcClean(CALC.e))); }catch(_){ r=''; } $('cRes').textContent=CALC.done?($('cRes').textContent):(r||'0'); }
+function calcKey(k){
+  if(k==='C'){ CALC.e=''; CALC.done=false; $('cRes').textContent='0'; $('cExpr').textContent=''; return; }
+  if(k==='⌫'){ CALC.e=CALC.e.replace(/(sqrt\(|.)$/,''); CALC.done=false; calcDraw(); return; }
+  if(k==='='){ if(!CALC.e) return; try{ var v=calcFmt(calcParse(calcClean(CALC.e))); $('cExpr').textContent=CALC.e+' ='; $('cRes').textContent=v; CALC.e=(v==='Ошибка')?'':v; CALC.done=true; }catch(_){ $('cRes').textContent='Ошибка'; CALC.e=''; CALC.done=true; } return; }
+  if(CALC.done && /[\d.(]|sqrt/.test(k)){ CALC.e=''; }
+  CALC.done=false;
+  if(k==='±'){ CALC.e=CALC.e? (CALC.e.charAt(0)==='−'?CALC.e.slice(1):'−'+CALC.e) : '−'; calcDraw(); return; }
+  if(k==='√'){ CALC.e+='sqrt('; calcDraw(); return; }
+  if(k==='x²'){ if(/[\d)]$/.test(CALC.e)) CALC.e+='^2'; calcDraw(); return; }
+  if(/^[+×÷−^]$/.test(k) && !CALC.e && k!=='−') return;
+  if(/^[+×÷−]$/.test(k)) CALC.e=CALC.e.replace(/[+×÷−]$/,'');
+  CALC.e+=k; calcDraw();
+}
+(function(){
+  var keys=['(',')','√','x²','C','⌫','%','÷','7','8','9','×','4','5','6','−','1','2','3','+','±','0','.','='];
+  $('calcPad').innerHTML=keys.map(function(k){ var c=/^[÷×−+]$/.test(k)?' op':(k==='='?' eq':''); return '<button class="'+c.trim()+'" data-ck="'+k+'">'+k+'</button>'; }).join('');
+  $('calcPad').addEventListener('click',function(e){ var b=e.target.closest&&e.target.closest('[data-ck]'); if(b) calcKey(b.getAttribute('data-ck')); });
+})();
 
 /* ---------- масштаб макета под экран (на телефоне вертикально: поворот на 90°) ---------- */
 var BW=864, BH=411, noRot=/[?&]rotate=0/.test(location.search);

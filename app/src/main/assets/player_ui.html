@@ -312,6 +312,10 @@ svg.ic{width:1em;height:1em;display:block}
 
     <div class="row item" style="--i:3"><b>Настройки веб-вещания</b><span class="caps">HTTP</span></div>
 
+    <div class="card static item" style="--i:3"><div class="tile"><svg class="ic"><use href="#i-globe"/></svg></div>
+      <div class="body"><div class="t">Открывать сервер</div><div class="s" style="white-space:normal">Во встроенном браузере Nexora</div></div>
+      <button class="sw" data-set="open_in_app_browser" role="switch" aria-checked="true"><i></i></button></div>
+
     <div class="card static item" style="--i:4"><div class="tile"><svg class="ic"><use href="#i-lock"/></svg></div>
       <div class="body"><div class="t">Вход по логину и паролю</div><div class="s" style="white-space:normal">Запрашивать HTTP Basic Auth при входе в браузере</div></div>
       <button class="sw" id="sw-auth" role="switch" aria-checked="false"><i></i></button></div>
@@ -914,7 +918,7 @@ document.querySelectorAll('.sub').forEach(p => p.insertBefore(document.querySele
 function openSub(name){
   const el = $('s-' + name); if (!el) return;
   activeSub = name; el.classList.remove('leaving'); el.classList.add('active');
-  if (name === 'share'){ renderShare(); clearInterval(subTimer); subTimer = setInterval(renderShare, 1500); }
+  if (name === 'share'){ renderShare(); renderSettings(); clearInterval(subTimer); subTimer = setInterval(renderShare, 1500); }
   if (name === 'settings') renderSettings();
   fab && fab.classList.remove('show');
 }

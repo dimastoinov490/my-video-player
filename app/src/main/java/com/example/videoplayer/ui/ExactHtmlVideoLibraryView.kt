@@ -580,10 +580,22 @@ fun ExactHtmlVideoLibraryView(
                         fun openExternal(url: String) {
                             Handler(Looper.getMainLooper()).post {
                                 try {
-                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
-                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    val prefs = context.getSharedPreferences("video_prefs", Context.MODE_PRIVATE)
+                                    val openInApp = prefs.getBoolean("open_in_app_browser", true)
+                                    val uri = Uri.parse(url)
+                                    val scheme = uri.scheme?.lowercase()
+                                    if (openInApp && (scheme == "http" || scheme == "https")) {
+                                        val intent = Intent(context, BrowserActivity::class.java).apply {
+                                            putExtra("url", url)
+                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        }
+                                        context.startActivity(intent)
+                                    } else {
+                                        val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        }
+                                        context.startActivity(intent)
                                     }
-                                    context.startActivity(intent)
                                 } catch (e: Exception) {
                                     Toast.makeText(context, "Не удалось открыть браузер: ${e.message}", Toast.LENGTH_SHORT).show()
                                 }
@@ -598,12 +610,14 @@ fun ExactHtmlVideoLibraryView(
                                 val bg = prefs.getBoolean("bg_play", false)
                                 val buff = prefs.getBoolean("show_buffering_status", true)
                                 val rot = prefs.getBoolean("auto_rotate", true)
+                                val openInApp = prefs.getBoolean("open_in_app_browser", true)
 
                                 val json = JSONObject()
                                 json.put("hw_accel", hw)
                                 json.put("bg_play", bg)
                                 json.put("show_buffering_status", buff)
                                 json.put("auto_rotate", rot)
+                                json.put("open_in_app_browser", openInApp)
                                 json.toString()
                             } catch (e: Exception) {
                                 "{}"
@@ -613,7 +627,7 @@ fun ExactHtmlVideoLibraryView(
                         @JavascriptInterface
                         fun setSetting(key: String, value: String) {
                             Handler(Looper.getMainLooper()).post {
-                                val validKeys = setOf("hw_accel", "bg_play", "show_buffering_status", "auto_rotate")
+                                val validKeys = setOf("hw_accel", "bg_play", "show_buffering_status", "auto_rotate", "open_in_app_browser")
                                 if (key in validKeys) {
                                     val prefs = context.getSharedPreferences("video_prefs", Context.MODE_PRIVATE)
                                     prefs.edit().putBoolean(key, value.toBoolean()).apply()
