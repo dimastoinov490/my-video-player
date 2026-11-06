@@ -14,15 +14,10 @@ import java.io.BufferedReader
 import java.io.File
 import java.io.FileReader
 import java.io.InputStreamReader
-import java.net.Inet4Address
-import java.net.InetAddress
-import java.net.InetSocketAddress
-import java.net.NetworkInterface
-import java.net.Socket
+import java.net.*
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 data class LanDevice(
@@ -55,7 +50,9 @@ data class LanDevice(
 
 object LanScanner {
     private const val TAG = "LanScanner"
-    private val PROBE_PORTS = intArrayOf(80, 443, 22, 445, 8080, 8008, 8009, 62078, 7000, 5555)
+
+    // Probe TCP ports: 80, 443, 53, 22, 445, 8080, 62078, 8008, 8009, 5555 (timeout 200ms)
+    private val PROBE_PORTS = intArrayOf(80, 443, 53, 22, 445, 8080, 62078, 8008, 8009, 5555)
 
     @Volatile
     var isScanning: Boolean = false
@@ -82,6 +79,7 @@ object LanScanner {
 
     fun getScanResultJson(clientIp: String?, serverIp: String?, connectedIps: Set<String>): JSONObject {
         val root = JSONObject()
+        root.put("ok", true)
         root.put("scanning", isScanning)
         root.put("progress", if (isScanning) scanProgress else 100)
         root.put("finished", lastFinishedTime ?: JSONObject.NULL)
@@ -134,11 +132,14 @@ object LanScanner {
     private suspend fun performScan(context: Context, serverIp: String?, connectedIps: Set<String>) {
         val (subnetPrefix, gatewayIp, myIp) = getSubnetInfo(context, serverIp)
         lastSubnet = "$subnetPrefix.0/24"
+        val totalHosts = 254
+
+        val srvIp = serverIp ?: myIp
+        Log.d(TAG, "Starting LAN scan on subnet $subnetPrefix.0/24, gateway: $gatewayIp, server: $srvIp, total hosts: $totalHosts")
 
         val foundMap = ConcurrentHashMap<String, LanDevice>()
 
-        // 1. Always add server itself
-        val srvIp = serverIp ?: myIp
+        // 1. Devices MUST include the phone itself (isServer=true)
         if (!srvIp.isNullOrBlank()) {
             val srvDevice = LanDevice(
                 ip = srvIp,
@@ -150,13 +151,13 @@ object LanScanner {
             foundMap[srvIp] = srvDevice
         }
 
-        // 2. Discover mDNS devices for 5 seconds concurrently
+        // 2. Discover mDNS devices via NsdManager concurrently
         val mdnsHosts = ConcurrentHashMap<String, String>()
         val nsdManager = context.getSystemService(Context.NSD_SERVICE) as? NsdManager
         val discoveryListeners = mutableListOf<NsdManager.DiscoveryListener>()
 
         if (nsdManager != null) {
-            val serviceTypes = listOf("_http._tcp.", "_googlecast._tcp.", "_airplay._tcp.", "_raop._tcp.")
+            val serviceTypes = listOf("_http._tcp.", "_googlecast._tcp.", "_airplay._tcp.", "_raop._tcp.", "_smb._tcp.")
             for (type in serviceTypes) {
                 val listener = object : NsdManager.DiscoveryListener {
                     override fun onStartDiscoveryFailed(p0: String?, p1: Int) {}
@@ -188,20 +189,23 @@ object LanScanner {
             }
         }
 
-        // 3. 48-worker thread pool for fast ping / socket probe
+        // 3. Thread pool for fast probing
         val executor = Executors.newFixedThreadPool(48)
         val dispatcher = executor.asCoroutineDispatcher()
         val completedCount = AtomicInteger(0)
-        val totalHosts = 254
 
         val arpTable = readArpTable()
 
         val jobs = (1..254).map { i ->
             scanScope.launch(dispatcher) {
                 val targetIp = "$subnetPrefix.$i"
+                // Send UDP probe on mDNS (5353) and NetBIOS (137) to wake non-ICMP hosts
+                sendUdpProbes(targetIp)
+
                 val dev = probeHost(targetIp, gatewayIp, arpTable)
                 if (dev != null) {
                     foundMap[targetIp] = dev
+                    Log.d(TAG, "Detected device at $targetIp (kind=${dev.kind}, hostname=${dev.hostname})")
                 }
                 val c = completedCount.incrementAndGet()
                 scanProgress = (c * 100) / totalHosts
@@ -220,10 +224,25 @@ object LanScanner {
             }
         }
 
-        // Read ARP table again for any new entries
+        // Read updated ARP table after probes
         val updatedArp = readArpTable()
 
-        // Enrich detected devices
+        // 4. Devices MUST include the gateway (isGateway=true, kind="router"), even if ping doesn't respond
+        if (!gatewayIp.isNullOrBlank()) {
+            val gwDevice = foundMap[gatewayIp] ?: LanDevice(
+                ip = gatewayIp,
+                hostname = "Router",
+                kind = "router",
+                isGateway = true,
+                rtt = 1
+            )
+            gwDevice.isGateway = true
+            gwDevice.kind = "router"
+            if (gwDevice.hostname.isBlank()) gwDevice.hostname = "Router"
+            foundMap[gatewayIp] = gwDevice
+        }
+
+        // Enrich all detected devices
         for ((ip, dev) in foundMap) {
             val mac = updatedArp[ip] ?: dev.mac
             if (mac.isNotBlank()) {
@@ -242,7 +261,7 @@ object LanScanner {
             classifyDevice(dev)
         }
 
-        // Sort by IP numerically
+        // Sort numerically by IP
         val sortedList = foundMap.values.sortedWith(Comparator { a, b ->
             val aParts = a.ip.split(".").mapNotNull { it.toIntOrNull() }
             val bParts = b.ip.split(".").mapNotNull { it.toIntOrNull() }
@@ -252,10 +271,45 @@ object LanScanner {
             0
         })
 
+        Log.d(TAG, "LAN scan completed. Total devices found: ${sortedList.size} (${sortedList.map { it.ip }})")
+
         synchronized(detectedDevices) {
             detectedDevices.clear()
             detectedDevices.addAll(sortedList)
         }
+    }
+
+    private fun sendUdpProbes(ip: String) {
+        try {
+            val targetAddr = InetAddress.getByName(ip)
+            DatagramSocket().use { ds ->
+                ds.soTimeout = 100
+                // NetBIOS Name Service Query (port 137)
+                val netBiosQuery = byteArrayOf(
+                    0x82.toByte(), 0x28.toByte(), 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00, 0x20, 0x43.toByte(), 0x4b.toByte(), 0x41.toByte(),
+                    0x41.toByte(), 0x41.toByte(), 0x41.toByte(), 0x41.toByte(), 0x41.toByte(), 0x41.toByte(),
+                    0x41.toByte(), 0x41.toByte(), 0x41.toByte(), 0x41.toByte(), 0x41.toByte(), 0x41.toByte(),
+                    0x41.toByte(), 0x41.toByte(), 0x41.toByte(), 0x41.toByte(), 0x41.toByte(), 0x41.toByte(),
+                    0x41.toByte(), 0x41.toByte(), 0x41.toByte(), 0x41.toByte(), 0x41.toByte(), 0x41.toByte(),
+                    0x41.toByte(), 0x41.toByte(), 0x41.toByte(), 0x00, 0x00, 0x21, 0x00, 0x01
+                )
+                ds.send(DatagramPacket(netBiosQuery, netBiosQuery.size, targetAddr, 137))
+
+                // mDNS query (port 5353)
+                val mdnsQuery = byteArrayOf(
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                    0x09, '_'.code.toByte(), 's'.code.toByte(), 'e'.code.toByte(), 'r'.code.toByte(), 'v'.code.toByte(),
+                    'i'.code.toByte(), 'c'.code.toByte(), 'e'.code.toByte(), 's'.code.toByte(),
+                    0x07, '_'.code.toByte(), 'd'.code.toByte(), 'n'.code.toByte(), 's'.code.toByte(),
+                    '-'.code.toByte(), 's'.code.toByte(), 'd'.code.toByte(),
+                    0x04, '_'.code.toByte(), 'u'.code.toByte(), 'd'.code.toByte(), 'p'.code.toByte(),
+                    0x05, 'l'.code.toByte(), 'o'.code.toByte(), 'c'.code.toByte(), 'a'.code.toByte(), 'l'.code.toByte(),
+                    0x00, 0x00, 0x0c, 0x00, 0x01
+                )
+                ds.send(DatagramPacket(mdnsQuery, mdnsQuery.size, targetAddr, 5353))
+            }
+        } catch (_: Exception) {}
     }
 
     private fun probeHost(ip: String, gatewayIp: String?, arpTable: Map<String, String>): LanDevice? {
@@ -272,7 +326,7 @@ object LanScanner {
             }
         } catch (_: Exception) {}
 
-        // 2. TCP probe ports
+        // 2. TCP probe ports: 80, 443, 53, 22, 445, 8080, 62078, 8008, 8009, 5555 (timeout 200ms)
         if (!reachable) {
             for (port in PROBE_PORTS) {
                 try {
@@ -286,7 +340,7 @@ object LanScanner {
             }
         }
 
-        // 3. Even if not responding directly, check if present in ARP cache
+        // 3. ARP cache presence
         val mac = arpTable[ip]
         if (!reachable && mac != null && mac != "00:00:00:00:00:00") {
             reachable = true
@@ -328,13 +382,13 @@ object LanScanner {
         val v = dev.vendor.lowercase()
 
         when {
-            hn.contains("router") || hn.contains("gateway") || v.contains("cisco") || v.contains("tp-link") || v.contains("d-link") || v.contains("netgear") || v.contains("zyxel") || v.contains("mikrotik") -> {
+            hn.contains("router") || hn.contains("gateway") || v.contains("cisco") || v.contains("tp-link") || v.contains("d-link") || v.contains("netgear") || v.contains("zyxel") || v.contains("mikrotik") || v.contains("keenetic") || v.contains("huawei") && hn.contains("hisi") -> {
                 dev.kind = "router"
             }
             hn.contains("ipad") || hn.contains("tablet") || hn.contains("tab") -> {
                 dev.kind = "tablet"
             }
-            hn.contains("iphone") || hn.contains("android") || hn.contains("pixel") || hn.contains("galaxy") || hn.contains("xiaomi") || hn.contains("huawei") || hn.contains("redmi") || hn.contains("oppo") || hn.contains("vivo") -> {
+            hn.contains("iphone") || hn.contains("android") || hn.contains("pixel") || hn.contains("galaxy") || hn.contains("xiaomi") || hn.contains("huawei") || hn.contains("redmi") || hn.contains("oppo") || hn.contains("vivo") || hn.contains("realme") || hn.contains("oneplus") -> {
                 dev.kind = "phone"
             }
             hn.contains("desktop") || hn.contains("laptop") || hn.contains("macbook") || hn.contains("imac") || hn.contains("pc") || hn.contains("windows") || hn.contains("thinkpad") || hn.contains("dell") || hn.contains("asus") || hn.contains("hp") || hn.contains("lenovo") -> {
@@ -390,10 +444,41 @@ object LanScanner {
             }
         } catch (_: Exception) {}
 
+        // If in hotspot mode or if no active network link properties found, scan network interfaces
+        if (myIp == null) {
+            try {
+                val interfaces = Collections.list(NetworkInterface.getNetworkInterfaces())
+                for (nif in interfaces) {
+                    val name = nif.name.lowercase()
+                    // Check wifi client (wlan) or hotspot (ap, softap, rndis, swlan)
+                    if (name.startsWith("wlan") || name.startsWith("ap") || name.startsWith("rndis") || name.startsWith("softap") || name.startsWith("eth")) {
+                        val addrs = Collections.list(nif.inetAddresses)
+                        for (a in addrs) {
+                            if (a is Inet4Address && !a.isLoopbackAddress) {
+                                val host = a.hostAddress ?: continue
+                                val parts = host.split(".")
+                                if (parts.size == 4) {
+                                    myIp = host
+                                    prefix = "${parts[0]}.${parts[1]}.${parts[2]}"
+                                    if (name.startsWith("ap") || name.startsWith("softap")) {
+                                        // Hotspot mode: this phone is gateway
+                                        gateway = host
+                                    }
+                                    break
+                                }
+                            }
+                        }
+                        if (myIp != null) break
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+
         if (serverIp != null && serverIp != "auto") {
             val parts = serverIp.split(".")
             if (parts.size == 4) {
                 prefix = "${parts[0]}.${parts[1]}.${parts[2]}"
+                myIp = serverIp
             }
         }
 

@@ -81,7 +81,6 @@ a{color:inherit;text-decoration:none}
 .sec h3{font-size:16px;font-weight:700;color:var(--o2)}
 .sec button{display:flex;align-items:center;gap:7px;color:var(--o2);font-size:16px;font-weight:600}
 .sec .ico{font-size:17px}
-.recent{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;flex:1;min-height:0}
 .rc{position:relative;border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,.11);background:linear-gradient(135deg,#3a1c08,#120804);padding:0;min-height:0;
   transition:transform .25s cubic-bezier(.22,1,.36,1),border-color .25s,box-shadow .25s}
 .rc:hover{transform:translateY(-2px);border-color:rgba(255,138,0,.7);box-shadow:0 6px 16px rgba(255,110,0,.25)}
@@ -197,7 +196,7 @@ body.rot .pane{touch-action:none}
   background:linear-gradient(180deg,rgba(255,255,255,.09),rgba(255,255,255,.028) 46%,rgba(0,0,0,.26));
   border:1px solid rgba(255,255,255,.10);border-top-color:rgba(255,255,255,.24);border-bottom-color:rgba(0,0,0,.55);
   box-shadow:0 11px 16px -7px rgba(0,0,0,.75),0 3px 0 rgba(0,0,0,.38),inset 0 1px 0 rgba(255,255,255,.16),inset 0 -12px 16px -9px rgba(0,0,0,.5),inset 0 0 0 1px rgba(255,138,0,.04);
-  will-change:transform,opacity}
+  content-visibility:auto;contain-intrinsic-size:auto 66px}
 .row.i3d:hover{border-color:rgba(255,138,0,.55);border-top-color:rgba(255,170,70,.7);background:linear-gradient(180deg,rgba(255,138,0,.14),rgba(255,138,0,.04) 46%,rgba(0,0,0,.26));
   box-shadow:0 11px 16px -7px rgba(0,0,0,.75),0 3px 0 rgba(0,0,0,.38),0 0 16px rgba(255,120,0,.22),inset 0 1px 0 rgba(255,200,120,.3),inset 0 -12px 16px -9px rgba(0,0,0,.5)}
 .row.i3d .thumb{box-shadow:0 7px 10px -4px rgba(0,0,0,.8),0 2px 0 rgba(0,0,0,.4),inset 0 0 0 1px rgba(255,255,255,.14),inset 0 9px 10px -7px rgba(255,255,255,.18),inset 0 -13px 14px -8px rgba(0,0,0,.55)}
@@ -303,23 +302,67 @@ body.rot .sc{touch-action:none}
 .mcomp .fld{margin:0;flex:1;height:34px}
 #mMic.rec{border-color:#ff6b4a;color:#ff8a78;background:rgba(255,80,50,.18)}
 .mprog{font-size:11px;color:var(--o1);padding:0 12px 6px;min-height:0}
-/* инструменты */
+/* ---------- v6 ---------- */
+.recent{display:flex;gap:16px;flex:1;min-height:0;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;overscroll-behavior-x:contain;scrollbar-width:none}
+.recent::-webkit-scrollbar{display:none}
+.recent.nosnap{scroll-snap-type:none}
+.recent .rc{flex:0 0 calc((100% - 32px)/3);scroll-snap-align:start}
+.rc.more{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;background:rgba(255,138,0,.07);border:1px dashed rgba(255,138,0,.5);color:var(--o1);font-size:14px;font-weight:700}
+.rc.more:after{display:none}.rc.more .ico{font-size:26px}
+body.rot .hs{touch-action:none}
+.stat.mem{flex:2.1 1 0}
+.mtop{display:flex;align-items:flex-start;gap:16px}
+.mtop>.ico{margin-top:1px}
+.mem .mc b{margin-top:0;font-size:19px}.mem .mc b:before{display:none}
+.mem .mc span{margin-top:6px;white-space:nowrap}
+.mbar{display:flex;height:5px;margin:12px 18px 0 0;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden}
+.mbar i{display:block;height:100%;width:0;transition:width .6s}
+.mbar .m{background:linear-gradient(90deg,var(--o1),var(--o3))}.mbar .o{background:rgba(255,255,255,.34)}
+.mem small{display:block;font-size:11px;color:#b9aa9a;margin-top:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:14px}
+/* полный экран видео и фото */
+.modal.full{padding:0}
+.modal.full .pbox{max-width:none;height:100%;border-radius:0;border:0;display:flex;flex-direction:column;box-shadow:none}
+.modal.full .pbox video,.modal.full .pbox img.big{flex:1;min-height:0;height:100%;max-height:none}
+.modal.full .pbox audio{flex:1}
+.modal.full .pbar{background:rgba(8,4,2,.92)}
+/* инструменты: современный плоский вид, крупные элементы */
 .tool{display:none}.tool.on{display:block}
-.tcard{display:flex;flex-direction:column;align-items:center;gap:12px;padding:14px;border-radius:18px;border:1px solid rgba(255,255,255,.1);border-top-color:rgba(255,255,255,.24);border-bottom-color:rgba(0,0,0,.55);
-  background:linear-gradient(180deg,rgba(255,255,255,.09),rgba(255,255,255,.028) 46%,rgba(0,0,0,.26));box-shadow:0 11px 16px -7px rgba(0,0,0,.75),inset 0 1px 0 rgba(255,255,255,.16)}
-.tdisp{font-size:52px;font-weight:700;letter-spacing:2px;font-variant-numeric:tabular-nums;line-height:1;text-shadow:0 0 18px rgba(255,138,0,.4)}
-.trow{display:flex;gap:9px;align-items:center;flex-wrap:wrap;justify-content:center}
-.trow .fld{width:70px;margin:0;text-align:center}
-.tbtn{height:34px;padding:0 18px;border-radius:17px;border:1.2px solid var(--o2);background:rgba(255,138,0,.10);color:var(--o1);font-size:13px;font-weight:700}
-.tbtn.main{background:linear-gradient(180deg,var(--o1),var(--o3));color:#1b0d02;border:0;box-shadow:0 6px 14px rgba(255,120,0,.3)}
-.laps{width:100%;max-height:92px;font-size:12px;color:#d6cfc7}.laps div{display:flex;justify-content:space-between;padding:3px 8px;border-bottom:1px solid rgba(255,255,255,.06)}
-.calc{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;width:100%;max-width:330px}
-.calc button{height:29px;border-radius:11px;border:1px solid rgba(255,255,255,.12);border-top-color:rgba(255,255,255,.28);border-bottom-color:rgba(0,0,0,.6);background:linear-gradient(180deg,rgba(255,255,255,.12),rgba(255,255,255,.03) 55%,rgba(0,0,0,.25));color:#fff;font-size:15px;font-weight:600;box-shadow:0 5px 8px -3px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.16)}
-.calc button:active{transform:translateY(1px);box-shadow:0 2px 4px -2px rgba(0,0,0,.7)}
-.calc button.op{color:var(--o1)}.calc button.eq{background:linear-gradient(180deg,var(--o1),var(--o3));color:#1b0d02;border:0}
-.cdisp{width:100%;max-width:330px;text-align:right;padding:6px 10px;border-radius:12px;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.08)}
-.cdisp small{display:block;min-height:15px;font-size:11.5px;color:#b9aa9a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cdisp b{display:block;font-size:22px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tseg{margin-left:auto;padding:0;width:380px}
+.tseg .segb{min-height:38px;font-size:13.5px}
+.tseg .segb.on{box-shadow:none}
+.tcard{display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px 22px;border-radius:24px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.09)}
+.tdisp{font-size:64px;font-weight:600;letter-spacing:1px;font-variant-numeric:tabular-nums;line-height:1}
+.ttime{display:flex;align-items:flex-start;gap:6px}
+.tf{display:flex;flex-direction:column;align-items:center}
+.tf input{width:104px;height:62px;border-radius:18px;border:1.5px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05);color:#fff;font-size:38px;font-weight:600;text-align:center;outline:none;font-family:inherit;padding:0}
+.tf input:focus{border-color:var(--o2)}
+.tf small{font-size:12px;color:#b9aa9a;margin-top:4px}
+.ttime>span{font-size:38px;line-height:62px;color:#6f655b}
+.tcard.run .ttime{display:none}.tcard:not(.run) .tdisp.tm{display:none}
+.chips{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.chip{height:40px;padding:0 22px;border-radius:22px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05);color:#e9ddd0;font-size:16px;font-weight:600}
+.chip:active{background:rgba(255,255,255,.12)}
+.big-btn{height:54px;min-width:180px;padding:0 32px;border-radius:30px;border:0;background:var(--o2);color:#1b0d02;font-size:20px;font-weight:700}
+.big-btn.alt{background:rgba(255,255,255,.09);color:#fff;min-width:130px}
+.big-btn:active{transform:scale(.97)}
+.rbtn{width:70px;height:70px;border-radius:50%;border:0;background:rgba(255,255,255,.10);color:#fff;font-size:16px;font-weight:600}
+.rbtn.go{background:var(--o2);color:#1b0d02}.rbtn.stop{background:rgba(255,80,50,.24);color:#ffa593}
+.rbtn:active{transform:scale(.96)}
+.trow{display:flex;gap:16px;align-items:center;justify-content:center;flex-wrap:wrap}
+.laps{width:100%;max-width:520px;max-height:130px;font-size:15px;color:#d6cfc7}.laps div{display:flex;justify-content:space-between;padding:8px 6px;border-bottom:1px solid rgba(255,255,255,.07);font-variant-numeric:tabular-nums}
+.tcalc{display:flex;gap:18px;width:100%;max-width:700px;align-items:stretch}
+.cleft{flex:1;min-width:0;display:flex;flex-direction:column;gap:10px}
+.cdisp{flex:1;display:flex;flex-direction:column;justify-content:flex-end;text-align:right;padding:14px 18px;border-radius:22px;background:rgba(0,0,0,.38);min-height:120px}
+.cdisp small{display:block;min-height:19px;font-size:16px;color:#b9aa9a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cdisp b{display:block;font-size:46px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:4px}
+.cfn{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.ckey{height:48px;border-radius:16px;border:0;background:#26221f;color:#fff;font-size:22px;font-weight:600}
+.ckey.fn{background:#1b1816;color:#d6cfc7;font-size:18px}
+.ckey.op{background:#3a2a1a;color:var(--o1)}
+.ckey.eq{background:var(--o2);color:#1b0d02}
+.ckey:active{transform:scale(.95);filter:brightness(1.25)}
+.cpad{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;width:312px;flex:none}
+.cpad .ckey{height:54px}
 .drawer{overflow-y:auto}.dm{height:36px;margin-bottom:3px}
 
 /* ---------- боковое меню ---------- */
@@ -422,10 +465,10 @@ body.rot .sc{touch-action:none}
           <div class="stat"><svg class="ico"><use href="#i-play" xlink:href="#i-play"/></svg><b id="stV">0</b><span>Видео</span></div>
           <div class="stat"><svg class="ico"><use href="#i-music" xlink:href="#i-music"/></svg><b id="stA">0</b><span>Аудио</span></div>
           <div class="stat"><svg class="ico"><use href="#i-image" xlink:href="#i-image"/></svg><b id="stP">0</b><span>Фото</span></div>
-          <div class="stat wide"><svg class="ico"><use href="#i-db" xlink:href="#i-db"/></svg><b id="stM">0 MB</b><span>Память</span></div>
+          <div class="stat wide mem"><div class="mtop"><svg class="ico"><use href="#i-db" xlink:href="#i-db"/></svg><div class="mc"><b id="stM">0 MB</b><span>Занято медиа</span></div><div class="mc"><b id="stF">—</b><span>Свободно</span></div></div><div class="mbar"><i class="m" id="stBm"></i><i class="o" id="stBo"></i></div><small id="stT"></small></div>
         </div>
         <div class="sec"><h3>Последние видео</h3><button data-go="videos">Все <svg class="ico"><use href="#i-arrow" xlink:href="#i-arrow"/></svg></button></div>
-        <div class="recent" id="recent"></div>
+        <div class="recent hs" id="recent"></div>
       </div>
     </div>
   </section>
@@ -549,22 +592,22 @@ body.rot .sc{touch-action:none}
   <!-- ИНСТРУМЕНТЫ -->
   <section class="pane" id="v-tools"><div class="page">
     <div class="head"><h2><svg class="ico"><use href="#i-tools" xlink:href="#i-tools"/></svg>Инструменты</h2>
-      <div class="seg" style="margin-left:auto;padding:0;width:340px"><button class="segb on" data-tool="timer">Таймер</button><button class="segb" data-tool="stopwatch">Секундомер</button><button class="segb" data-tool="calc">Калькулятор</button></div></div>
-    <div class="tool on" id="t-timer"><div class="tcard">
-      <div class="tdisp" id="tmDisp">00:00:00</div>
-      <div class="trow" id="tmInputs"><input class="fld" id="tmH" type="number" min="0" max="99" placeholder="ч"><input class="fld" id="tmM" type="number" min="0" max="59" placeholder="мин"><input class="fld" id="tmS" type="number" min="0" max="59" placeholder="сек"></div>
-      <div class="trow"><button class="tbtn" data-tp="60">1 мин</button><button class="tbtn" data-tp="300">5 мин</button><button class="tbtn" data-tp="600">10 мин</button><button class="tbtn" data-tp="900">15 мин</button></div>
-      <div class="trow"><button class="tbtn main" id="tmGo">Старт</button><button class="tbtn" id="tmReset">Сброс</button></div>
+      <div class="seg tseg"><button class="segb on" data-tool="timer">Таймер</button><button class="segb" data-tool="stopwatch">Секундомер</button><button class="segb" data-tool="calc">Калькулятор</button></div></div>
+    <div class="tool on" id="t-timer"><div class="tcard" id="tmCard">
+      <div class="tdisp tm" id="tmDisp">00:00:00</div>
+      <div class="ttime"><div class="tf"><input id="tmH" type="number" inputmode="numeric" min="0" max="99" placeholder="00"><small>часы</small></div><span>:</span><div class="tf"><input id="tmM" type="number" inputmode="numeric" min="0" max="59" placeholder="00"><small>минуты</small></div><span>:</span><div class="tf"><input id="tmS" type="number" inputmode="numeric" min="0" max="59" placeholder="00"><small>секунды</small></div></div>
+      <div class="chips"><button class="chip" data-tp="60">1 мин</button><button class="chip" data-tp="300">5 мин</button><button class="chip" data-tp="600">10 мин</button><button class="chip" data-tp="900">15 мин</button><button class="chip" data-tp="1800">30 мин</button></div>
+      <div class="trow"><button class="big-btn alt" id="tmReset">Сброс</button><button class="big-btn" id="tmGo">Старт</button></div>
     </div></div>
     <div class="tool" id="t-stopwatch"><div class="tcard">
       <div class="tdisp" id="swDisp">00:00.00</div>
-      <div class="trow"><button class="tbtn main" id="swGo">Старт</button><button class="tbtn" id="swLap">Круг</button><button class="tbtn" id="swReset">Сброс</button></div>
+      <div class="trow"><button class="rbtn" id="swReset">Сброс</button><button class="rbtn go" id="swGo">Старт</button><button class="rbtn" id="swLap">Круг</button></div>
       <div class="laps sc" id="swLaps"></div>
     </div></div>
-    <div class="tool" id="t-calc"><div class="tcard">
-      <div class="cdisp"><small id="cExpr"></small><b id="cRes">0</b></div>
-      <div class="calc" id="calcPad"></div>
-    </div></div>
+    <div class="tool" id="t-calc"><div class="tcard"><div class="tcalc">
+      <div class="cleft"><div class="cdisp"><small id="cExpr"></small><b id="cRes">0</b></div><div class="cfn" id="calcFn"></div></div>
+      <div class="cpad" id="calcPad"></div>
+    </div></div></div>
   </div></section>
 </div>
 
@@ -586,9 +629,9 @@ body.rot .sc{touch-action:none}
 <div class="modal" id="modal">
   <div class="pbox">
     <img id="pi" class="big" alt="" style="display:none">
-    <video id="pv" controls playsinline preload="metadata" style="display:none"></video>
+    <video id="pv" controls controlsList="nofullscreen nodownload" playsinline preload="metadata" style="display:none"></video>
     <audio id="pa" controls style="display:none"></audio>
-    <div class="pbar"><button class="btn-d" id="pprev" style="display:none" aria-label="Назад"><svg class="ico"><use href="#i-back" xlink:href="#i-back"/></svg></button><button class="btn-d" id="pnext" style="display:none" aria-label="Вперёд"><svg class="ico"><use href="#i-next" xlink:href="#i-next"/></svg></button><b id="pt"></b><a class="btn-d" id="pd" href="#" download aria-label="Скачать"><svg class="ico"><use href="#i-dl" xlink:href="#i-dl"/></svg></a><button class="btn-d" id="pc" aria-label="Закрыть"><svg class="ico"><use href="#i-x" xlink:href="#i-x"/></svg></button></div>
+    <div class="pbar"><button class="btn-d" id="pprev" style="display:none" aria-label="Назад"><svg class="ico"><use href="#i-back" xlink:href="#i-back"/></svg></button><button class="btn-d" id="pnext" style="display:none" aria-label="Вперёд"><svg class="ico"><use href="#i-next" xlink:href="#i-next"/></svg></button><b id="pt"></b><button class="btn-d" id="pfs" aria-label="На весь экран"><svg class="ico"><use href="#i-full" xlink:href="#i-full"/></svg></button><a class="btn-d" id="pd" href="#" download aria-label="Скачать"><svg class="ico"><use href="#i-dl" xlink:href="#i-dl"/></svg></a><button class="btn-d" id="pc" aria-label="Закрыть"><svg class="ico"><use href="#i-x" xlink:href="#i-x"/></svg></button></div>
   </div>
 </div>
 <div class="dlg" id="dlg"><div class="dbox"><h4 id="dT"></h4><p id="dP"></p><input class="fld" id="dI" style="display:none"><div class="dact"><button class="selbtn" id="dNo">Отмена</button><button class="btn-main" id="dYes">OK</button></div></div></div>
@@ -602,8 +645,8 @@ body.rot .sc{touch-action:none}
    Формат: {version, address, port, online, authRequired, folder, features:{photos,folders},
             stats:{videos,audio,photos,storage}, files:[{id,title,name,size,dur,isVideo,mime,kind,folder}]}
    kind:'photo' помечает фото, folder — имя папки (по желанию). Новые разделы «Письмо», «Инструменты», «Сеть» и сканер сети общаются с сервером через /api/mail/*, /api/net, /api/lan/*.
-   Дополнительно: me:{role:'user'|'admin',name}, wifi:{level:0-4,rssi}. */
-var DEMO={version:'1.0',address:'http://192.168.1.64:8765',port:8765,online:true,authRequired:true,folder:'Все папки',features:{photos:false,folders:false},
+   Дополнительно: me:{role:'user'|'admin',name}, wifi:{level:0-4,rssi}, disk:{total,free} (байты), stats.storageBytes. */
+var DEMO={disk:{total:128000000000,free:48200000000},version:'1.0',address:'http://192.168.1.64:8765',port:8765,online:true,authRequired:true,folder:'Все папки',features:{photos:false,folders:false},
  files:[
   {id:'1',title:'Furious 6',name:'Furious6.mp4',size:'552.4 MB',dur:'2:10:06',isVideo:true},
   {id:'2',title:'Седьмой_сын',name:'Seventh.mp4',size:'346.1 MB',dur:'1:41:59',isVideo:true},
@@ -631,6 +674,7 @@ $('stV').textContent=(D.stats&&D.stats.videos!=null)?D.stats.videos:videos.lengt
 $('stA').textContent=(D.stats&&D.stats.audio!=null)?D.stats.audio:audios.length;
 $('stP').textContent=(D.stats&&D.stats.photos!=null)?D.stats.photos:photos.length;
 $('stM').textContent=totalMem();
+var DISK=D.disk||(!window.NEXORA?{total:128000000000,free:48200000000}:null);
 $('ver').textContent=D.version||'1.0';
 $('popAddr').textContent=D.address||''; $('kvAddr').textContent=D.address||'-';
 $('kvMem').textContent=totalMem(); $('kvVid').textContent=videos.length+' файлов'; $('kvAud').textContent=audios.length+' файлов';
@@ -644,7 +688,7 @@ function thumbHtml(f){
 }
 function rowHtml(f,i){
   var dur=f.dur?'<span>'+ic('clock')+esc(f.dur)+'</span>':'';
-  return '<div class="row i3d in" style="--n:'+Math.min(i||0,12)+'"><div class="thumb">'+thumbHtml(f)+'</div><div class="meta"><b title="'+esc(f.name)+'">'+esc(f.title)+'</b>'+
+  return '<div class="row i3d'+((i||0)<14?' in':'')+'" style="--n:'+Math.min(i||0,12)+'"><div class="thumb">'+thumbHtml(f)+'</div><div class="meta"><b title="'+esc(f.name)+'">'+esc(f.title)+'</b>'+
     '<small><span>'+ic('save')+esc(f.size)+'</span>'+dur+'</small></div><div class="act">'+
     '<button class="btn-w" data-play="'+esc(f.id)+'">'+ic('play-s')+'<span>'+(f.isVideo?'Смотреть':'Слушать')+'</span></button>'+
     '<a class="btn-d" href="/download?id='+encodeURIComponent(f.id)+'" download="'+esc(f.name)+'" aria-label="Скачать">'+ic('dl')+'</a></div></div>';
@@ -659,9 +703,9 @@ function renderList(listEl,data,q,emptyIcon,emptyText){
 renderList($('lV'),videos,'','clap','Видео пока нет'); renderList($('lA'),audios,'','music','Аудио пока нет');
 $('qV').addEventListener('input',function(){renderList($('lV'),videos,this.value,'clap','Видео пока нет');});
 $('qA').addEventListener('input',function(){renderList($('lA'),audios,this.value,'music','Аудио пока нет');});
-$('recent').innerHTML=videos.slice(0,3).map(function(f){
+$('recent').innerHTML=videos.slice(0,20).map(function(f){
   return '<button class="rc" data-play="'+esc(f.id)+'"><img loading="lazy" alt="" src="/thumb?id='+encodeURIComponent(f.id)+'" onerror="this.remove()"><div class="ph">'+ic('play-s')+'</div><span>'+esc(f.title)+'</span></button>';
-}).join('') || '<div class="nodata">Видео пока нет</div>';
+}).join('')+(videos.length>3?'<button class="rc more" data-go="videos">'+ic('arrow')+'Все видео</button>':'') || '<div class="nodata">Видео пока нет</div>';
 /* ---------- запросы к серверу (в демо-режиме без сервера работают встроенные примеры) ---------- */
 var DEMO_MODE=!window.NEXORA;
 var ME=D.me||{role:'user',name:''};
@@ -737,7 +781,7 @@ function loadAlbums(){
     var total=0; PH.albums.forEach(function(a){total+=a.count||0;});
     if(!(D.stats&&D.stats.photos!=null)) $('stP').textContent=total;
     $('lP').innerHTML=PH.albums.length? '<div class="albums">'+PH.albums.map(function(a,i){
-      return '<button class="album i3d in" style="--n:'+Math.min(i,12)+'" data-album="'+esc(a.id)+'" data-name="'+esc(a.name)+'"><img loading="lazy" alt="" src="/photo?id='+encodeURIComponent(a.cover)+'&thumb=1" onerror="this.remove()"><div class="ph">'+ic('image')+'</div><div class="an"><b>'+esc(a.name)+'</b><small>'+a.count+' фото</small></div></button>';
+      return '<button class="album i3d'+(i<14?' in':'')+'" style="--n:'+Math.min(i,12)+'" data-album="'+esc(a.id)+'" data-name="'+esc(a.name)+'"><img loading="lazy" alt="" src="/photo?id='+encodeURIComponent(a.cover)+'&thumb=1" onerror="this.remove()"><div class="ph">'+ic('image')+'</div><div class="an"><b>'+esc(a.name)+'</b><small>'+a.count+' фото</small></div></button>';
     }).join('')+'</div>' : emptyHtml('image','Фото не найдены');
     after3d($('lP'));
   }).catch(function(){ $('lP').innerHTML=emptyHtml('image','Не удалось загрузить фото. Проверьте, что приложению разрешён доступ к фото.'); });
@@ -747,7 +791,7 @@ function openAlbum(id,name){
   api('/api/photos?album='+encodeURIComponent(id)).then(function(j){
     PH.items=j.items||[];
     $('lP').innerHTML=PH.items.length? '<div class="photos">'+PH.items.map(function(f,i){
-      return '<button class="pic i3d in" style="--n:'+Math.min(i,16)+'" data-photo="'+i+'"><img loading="lazy" alt="" src="/photo?id='+encodeURIComponent(f.id)+'&thumb=1" onerror="this.remove()"><div class="ph">'+ic('image')+'</div></button>';
+      return '<button class="pic i3d'+(i<30?' in':'')+'" style="--n:'+Math.min(i,16)+'" data-photo="'+i+'"><img loading="lazy" alt="" src="/photo?id='+encodeURIComponent(f.id)+'&thumb=1" onerror="this.remove()"><div class="ph">'+ic('image')+'</div></button>';
     }).join('')+'</div>' : emptyHtml('image','В альбоме нет фото');
     var p=$('v-photos'); if(p) p.scrollTop=0;
     after3d($('lP'));
@@ -779,13 +823,13 @@ function renderDir(j){
 function kindIcon(k){return k==='video'?'clap':k==='audio'?'music':k==='photo'?'image':'file';}
 function fsRow(it,i){
   var chk=isAdmin? '<span class="chk"></span>' : '', fsel=isAdmin? ' data-fsel="'+i+'"' : '';
-  if(it.dir) return '<div class="row i3d in clickable" style="--n:'+Math.min(i||0,12)+'" data-fs="'+esc(it.path)+'"'+fsel+'>'+chk+'<div class="thumb">'+ic('folder')+'</div><div class="meta"><b>'+esc(it.name)+'</b><small><span>'+(it.count!=null?it.count+' элементов':'Папка')+'</span></small></div><div class="act" style="color:var(--o2);font-size:18px">'+ic('arrow')+'</div></div>';
+  if(it.dir) return '<div class="row i3d'+((i||0)<14?' in':'')+' clickable" style="--n:'+Math.min(i||0,12)+'" data-fs="'+esc(it.path)+'"'+fsel+'>'+chk+'<div class="thumb">'+ic('folder')+'</div><div class="meta"><b>'+esc(it.name)+'</b><small><span>'+(it.count!=null?it.count+' элементов':'Папка')+'</span></small></div><div class="act" style="color:var(--o2);font-size:18px">'+ic('arrow')+'</div></div>';
   var u='/file?path='+encodeURIComponent(it.path), open='';
   if(it.kind==='video'||it.kind==='audio'||it.kind==='photo'){
     open='<button class="btn-w" data-fopen="'+i+'">'+ic(it.kind==='photo'?'image':'play-s')+'<span>'+(it.kind==='video'?'Смотреть':it.kind==='audio'?'Слушать':'Открыть')+'</span></button>';
   }
   var thumb=it.kind==='photo'? '<img loading="lazy" alt="" src="'+u+'" onerror="this.remove()">'+ic('image') : ic(kindIcon(it.kind));
-  return '<div class="row i3d in" style="--n:'+Math.min(i||0,12)+'"'+fsel+'>'+chk+'<div class="thumb">'+thumb+'</div><div class="meta"><b title="'+esc(it.name)+'">'+esc(it.name)+'</b><small><span>'+ic('save')+fmtSize(it.size)+'</span></small></div><div class="act">'+open+
+  return '<div class="row i3d'+((i||0)<14?' in':'')+'" style="--n:'+Math.min(i||0,12)+'"'+fsel+'>'+chk+'<div class="thumb">'+thumb+'</div><div class="meta"><b title="'+esc(it.name)+'">'+esc(it.name)+'</b><small><span>'+ic('save')+fmtSize(it.size)+'</span></small></div><div class="act">'+open+
     '<a class="btn-d" href="'+u+'&dl=1" download="'+esc(it.name)+'" aria-label="Скачать">'+ic('dl')+'</a></div></div>';
 }
 
@@ -816,7 +860,7 @@ function openFsFile(i){
   showViewer({title:it.name,name:it.name,url:u,dl:u+'&dl=1',kind:it.kind});
 }
 function stepPhoto(d){ if(!VW.list||!VW.list.length) return; openPhoto((VW.idx+d+VW.list.length)%VW.list.length); }
-function closePlayer(){var v=$('pv'),a=$('pa'),im=$('pi'); v.pause(); a.pause(); v.removeAttribute('src'); a.removeAttribute('src'); im.removeAttribute('src'); v.load(); a.load(); $('modal').className='modal';}
+function closePlayer(){playerFs(false); var v=$('pv'),a=$('pa'),im=$('pi'); v.pause(); a.pause(); v.removeAttribute('src'); a.removeAttribute('src'); im.removeAttribute('src'); v.load(); a.load(); $('modal').className='modal';}
 $('pprev').addEventListener('click',function(){stepPhoto(-1);});
 $('pnext').addEventListener('click',function(){stepPhoto(1);});
 $('pc').addEventListener('click',closePlayer);
@@ -862,23 +906,29 @@ function moveGlass(i,instant){
   glass.style.width=w+'px'; glass.style.transform='translateX('+x+'px)';
   if(instant){ void glass.offsetWidth; glass.classList.remove('snap'); }
 }
-var ORDER=['home','videos','audio','photos','folders','settings','mail','tools'];
+var ORDER=['home','videos','audio','photos','folders','settings','mail','tools'], GO_TOK=0;
 function go(name){
   var k=ORDER.indexOf(name); if(k<0){ name='home'; k=0; }
   var ti=-1; TABS.forEach(function(t,n){ if(t[0]===name) ti=n; });
   if(ti>=0) cur=ti;
+  var tok=++GO_TOK;
+  /* 1) сначала только нижняя панель: стекло едет без нагрузки на страницу */
   Array.prototype.forEach.call(tabs(),function(b,n){ b.classList.toggle('on',n===ti); });
-  ORDER.forEach(function(nm,n){
-    var p=$('v-'+nm); p.style.setProperty('--tx', n<k?'-34px':(n>k?'34px':'0px'));
-    p.classList.toggle('on',n===k); if(n===k) p.scrollTop=0;
-  });
   glass.style.opacity=(ti>=0)?'':'0';
   if(ti>=0) moveGlass(ti,false);
-  var pp=$('v-'+name); tilt3d(pp); setTimeout(function(){ refresh3d(pp); },900);
-  if(name==='photos') loadAlbums();
-  if(name==='folders') loadDir(FS.path);
-  if(name==='mail') startMail(); else stopMail();
   if(location.hash!=='#'+name) history.replaceState(null,'','#'+name);
+  /* 2) разделы переключаем на следующих кадрах, чтобы тяжёлый список не задерживал анимацию стекла */
+  requestAnimationFrame(function(){ requestAnimationFrame(function(){
+    if(tok!==GO_TOK) return;
+    ORDER.forEach(function(nm,n){
+      var p=$('v-'+nm); p.style.setProperty('--tx', n<k?'-34px':(n>k?'34px':'0px'));
+      p.classList.toggle('on',n===k); if(n===k) p.scrollTop=0;
+    });
+    var pp=$('v-'+name); tilt3d(pp); setTimeout(function(){ refresh3d(pp); },900);
+    if(name==='photos') loadAlbums();
+    if(name==='folders') loadDir(FS.path);
+    if(name==='mail') startMail(); else stopMail();
+  }); });
 }
 window.addEventListener('hashchange',function(){go(location.hash.slice(1)||'home');});
 
@@ -920,25 +970,46 @@ document.addEventListener('fullscreenchange',syncFs); document.addEventListener(
 var rotated=false, curScale=1, suppressClick=0;
 (function(){
   var st=null, raf=0;
-  function paneOf(t){ while(t&&t!==document){ if(t.classList&&(t.classList.contains('sc')||t.classList.contains('pane'))) return t; t=t.parentNode; } return null; }
+  function scrollerOf(t){ while(t&&t!==document){ if(t.classList&&(t.classList.contains('hs')||t.classList.contains('sc')||t.classList.contains('pane'))) return t; t=t.parentNode; } return null; }
+  function vertOf(t){ while(t&&t!==document){ if(t.classList&&(t.classList.contains('sc')||t.classList.contains('pane'))) return t; t=t.parentNode; } return null; }
   document.addEventListener('touchstart',function(e){
     cancelAnimationFrame(raf);
+    if(st&&st.hs) st.hs.classList.remove('nosnap');
     if(!rotated||e.touches.length!==1){ st=null; return; }
-    var el=paneOf(e.target); if(!el||(el.classList.contains('pane')&&!el.classList.contains('on'))){ st=null; return; }
-    var t=e.touches[0]; st={el:el,x:t.clientX,y:t.clientY,t:Date.now(),moved:false,v:0,sx:t.clientX,sy:t.clientY};
+    var el=scrollerOf(e.target); if(!el){ st=null; return; }
+    var hs=el.classList.contains('hs')? el : null, vert=hs? vertOf(el.parentNode) : el;
+    if(vert&&vert.classList.contains('pane')&&!vert.classList.contains('on')){ st=null; return; }
+    var t=e.touches[0]; st={hs:hs,el:vert,x:t.clientX,y:t.clientY,sx:t.clientX,sy:t.clientY,t:Date.now(),moved:false,mode:'',v:0,tgt:null,prop:''};
   },{passive:true});
   document.addEventListener('touchmove',function(e){
-    if(!st) return; var t=e.touches[0];
-    if(!st.moved && Math.abs(t.clientX-st.sx)+Math.abs(t.clientY-st.sy)<8) return;
-    st.moved=true; if(e.cancelable) e.preventDefault();
-    var d=((t.clientX-st.x)-(t.clientY-st.y))/curScale;   /* палец вверх или влево = вперёд по списку */
-    st.el.scrollTop+=d; var now=Date.now(); st.v=d/Math.max(1,now-st.t); st.t=now; st.x=t.clientX; st.y=t.clientY;
+    if(!st) return; var t=e.touches[0], tx=t.clientX-st.sx, ty=t.clientY-st.sy;
+    if(!st.moved && Math.abs(tx)+Math.abs(ty)<8) return;
+    if(!st.moved){
+      st.moved=true;
+      /* в повёрнутом макете вертикальный свайп по экрану = горизонтальная прокрутка карусели */
+      st.mode=(st.hs && Math.abs(ty)>=Math.abs(tx))? 'h' : 'v';
+      st.tgt=(st.mode==='h')? st.hs : st.el; st.prop=(st.mode==='h')? 'scrollLeft' : 'scrollTop';
+      if(st.mode==='h') st.hs.classList.add('nosnap');
+    }
+    if(!st.tgt) return;
+    if(e.cancelable) e.preventDefault();
+    var dx=t.clientX-st.x, dy=t.clientY-st.y;
+    var d=(st.mode==='h')? (-dy/curScale) : ((dx-dy)/curScale);   /* палец вверх или влево = дальше по списку */
+    st.tgt[st.prop]+=d; var now=Date.now(); st.v=d/Math.max(1,now-st.t); st.t=now; st.x=t.clientX; st.y=t.clientY;
   },{passive:false});
   document.addEventListener('touchend',function(){
     if(!st) return; var s=st; st=null;
-    if(s.moved){ suppressClick=Date.now()+350; var v=s.v*16; (function step(){ if(Math.abs(v)<0.4) return; s.el.scrollTop+=v; v*=0.95; raf=requestAnimationFrame(step); })(); }
+    if(s.moved&&s.tgt){
+      suppressClick=Date.now()+350; var v=s.v*16;
+      (function step(){ if(Math.abs(v)<0.4){ if(s.hs) s.hs.classList.remove('nosnap'); return; } s.tgt[s.prop]+=v; v*=0.95; raf=requestAnimationFrame(step); })();
+    } else if(s.hs) s.hs.classList.remove('nosnap');
   },{passive:true});
   document.addEventListener('click',function(e){ if(Date.now()<suppressClick){ e.stopPropagation(); e.preventDefault(); } },true);
+  /* колесо мыши и тачпад: вертикальное колесо листает карусель вбок */
+  document.addEventListener('wheel',function(e){
+    var h=e.target.closest&&e.target.closest('.hs'); if(!h||h.scrollWidth<=h.clientWidth) return;
+    if(Math.abs(e.deltaY)>Math.abs(e.deltaX)){ h.scrollLeft+=e.deltaY; e.preventDefault(); }
+  },{passive:false});
 })();
 
 var SIGMODE='app'; try{ SIGMODE=localStorage.getItem('nx_sigmode')||'app'; }catch(_){}
@@ -951,12 +1022,12 @@ function prep3d(p){
 }
 function tilt3d(p){
   if(!p._i3) return;
-  if(REDUCE||!SCROLL_ANIM){ for(var k=0;k<p._i3.length;k++){ var q=p._i3[k]; if(q.on){ q.el.style.transform=''; q.el.style.opacity=''; q.on=false; } } return; }
+  if(REDUCE||!SCROLL_ANIM){ for(var k=0;k<p._i3.length;k++){ var q=p._i3[k]; if(q.on){ q.el.style.transform=''; q.el.style.opacity=''; q.el.style.willChange=''; q.on=false; } } return; }
   var h=p.clientHeight||1, mid=p.scrollTop+h/2, half=h/2, list=p._i3;
   for(var i=0;i<list.length;i++){
     var o=list[i], t=(o.y-mid)/half, a=Math.abs(t);
-    if(a>1.5){ if(o.on){ o.el.style.transform=''; o.el.style.opacity=''; o.on=false; } continue; }
-    o.on=true; var ty=t>1?1:(t<-1?-1:t);
+    if(a>1.5){ if(o.on){ o.el.style.transform=''; o.el.style.opacity=''; o.el.style.willChange=''; o.on=false; } continue; }
+    o.on=true; o.el.style.willChange='transform,opacity'; var ty=t>1?1:(t<-1?-1:t);
     o.el.style.transform='perspective(700px) rotateX('+(-ty*11).toFixed(2)+'deg) translateZ('+(-a*16).toFixed(1)+'px) scale('+(1-a*0.045).toFixed(3)+')';
     o.el.style.opacity=(1-Math.max(0,a-0.62)*0.42).toFixed(2);
   }
@@ -990,6 +1061,7 @@ function pollStatus(){
     return r.json();
   }).then(function(j){
     if(!j) return; var rtt=Math.round(nowMs()-t0); failCount=0; setOnline(true);
+    if(j.disk){ DISK=j.disk; drawDisk(); }
     var w=j.wifi||{}, useApp=(SIGMODE==='app'&&typeof w.level==='number'), lv=useApp? w.level : levelFromRtt(rtt);
     setWifi(lv,{rtt:rtt,rssi:(useApp&&typeof w.rssi==='number')?w.rssi:null,src:useApp?'app':'rtt'});
   }).catch(function(){ failCount++; if(failCount>=2) setOnline(false); });
@@ -1027,6 +1099,7 @@ function blockDevice(id,to){
 function opErr(e){
   var c=e&&e.code;
   if(c==='admin_required') return 'Нужны права администратора';
+  if(c==='busy') return 'Сканирование уже идёт';
   if(c==='bad_setup_password') return 'Неверный пароль создания администратора';
   if(c==='rate_limited') return 'Слишком много попыток. Подождите несколько минут';
   if(c==='exists') return 'Такая учётная запись уже есть';
@@ -1136,6 +1209,7 @@ function devTab(t){
   Array.prototype.forEach.call(document.querySelectorAll('[data-dtab]'),function(b){ b.classList.toggle('on',b.getAttribute('data-dtab')===t); });
   $('dSrv').style.display=(t==='srv')?'':'none'; $('dLan').style.display=(t==='lan')?'':'none';
   clearInterval(devTimer); clearTimeout(LAN.timer);
+  $('lanBtn').disabled=!isAdmin; $('lanBtn').textContent=isAdmin?'Сканировать':'Только администратор';
   if(t==='srv'){ loadDevices(); devTimer=setInterval(function(){ if($('v-settings').classList.contains('on') && $('setBox').className.indexOf('s-dev')>-1) loadDevices(); },8000); }
   else loadLan();
 }
@@ -1152,10 +1226,14 @@ function renderLan(j){
       '<small>IP-адрес: '+esc(d.ip)+(d.mac?' · MAC: '+esc(d.mac):'')+'</small>'+(d.vendor&&d.hostname?'<small>Производитель: '+esc(d.vendor)+'</small>':'')+(d.rtt!=null?'<small>Отклик: '+d.rtt+' мс</small>':'')+'</div></div>';
   }).join('') : emptyHtml('phone',j.scanning?'Идёт поиск устройств…':'Устройства ещё не найдены');
   if(el._h!==html){ el.innerHTML=html; el._h=html; after3d(el); }
-  $('lanBtn').disabled=!!j.scanning||!isAdmin;
+  $('lanBtn').disabled=!!j.scanning||!isAdmin; $('lanBtn').textContent=!isAdmin?'Только администратор':(j.scanning?'Идёт поиск…':'Сканировать');
   clearTimeout(LAN.timer); if(j.scanning && DEVTAB==='lan') LAN.timer=setTimeout(loadLan,1500);
 }
-$('lanBtn').addEventListener('click',function(){ post('/api/lan/scan',{}).then(function(){ loadLan(); }).catch(function(e){ toast(opErr(e)); }); });
+$('lanBtn').addEventListener('click',function(){
+  if(!isAdmin){ toast('Запустить сканирование может администратор'); return; }
+  $('lanBtn').disabled=true; $('lanBtn').textContent='Идёт поиск…'; $('lanProg').style.width='3%'; $('lanInfo').textContent='Запуск сканирования…';
+  post('/api/lan/scan',{}).then(function(){ loadLan(); }).catch(function(e){ $('lanBtn').disabled=false; $('lanBtn').textContent='Сканировать'; toast(e&&e.message==='HTTP 404'?'Эта версия приложения не поддерживает сканер сети':opErr(e)); });
+});
 
 function loadNet(){ api('/api/net').then(function(j){ NET=j; renderNet(); }).catch(function(){ $('netNote').textContent='Не удалось загрузить настройки сети'; }); }
 function renderNet(){
@@ -1294,36 +1372,42 @@ function beep(){
 }
 function p2(n){ return n<10?'0'+n:''+n; }
 function fmtClock(s){ s=Math.round(s); return Math.floor(s/60)+':'+p2(s%60); }
-var TM={run:false,end:0,left:0,tid:0};
+var TM={run:false,paused:false,end:0,left:0,tid:0};
 function tmFmt(s){ s=Math.max(0,Math.ceil(s)); return p2(Math.floor(s/3600))+':'+p2(Math.floor(s%3600/60))+':'+p2(s%60); }
 function tmInput(){ return (parseInt($('tmH').value,10)||0)*3600+(parseInt($('tmM').value,10)||0)*60+(parseInt($('tmS').value,10)||0); }
+function tmShow(run){ $('tmCard').classList.toggle('run',!!run); }
 function tmTick(){
   var left=(TM.end-Date.now())/1000;
-  if(left<=0){ clearInterval(TM.tid); TM.run=false; TM.left=0; $('tmDisp').textContent='00:00:00'; $('tmGo').textContent='Старт'; beep(); dlg({title:'Таймер',text:'Время вышло',ok:'OK',cancel:false},function(){}); return; }
+  if(left<=0){ clearInterval(TM.tid); TM.run=false; TM.paused=false; TM.left=0; tmShow(false); $('tmGo').textContent='Старт'; beep(); dlg({title:'Таймер',text:'Время вышло',ok:'OK',cancel:false},function(){}); return; }
   TM.left=left; $('tmDisp').textContent=tmFmt(left);
 }
 $('tmGo').addEventListener('click',function(){
-  if(TM.run){ clearInterval(TM.tid); TM.run=false; TM.left=(TM.end-Date.now())/1000; this.textContent='Продолжить'; return; }
-  var s=TM.left>0? TM.left : tmInput(); if(s<=0){ toast('Задайте время'); return; }
-  TM.end=Date.now()+s*1000; TM.run=true; this.textContent='Пауза'; clearInterval(TM.tid); TM.tid=setInterval(tmTick,200); tmTick();
+  if(TM.run){ clearInterval(TM.tid); TM.run=false; TM.paused=true; TM.left=(TM.end-Date.now())/1000; this.textContent='Продолжить'; return; }
+  var s=TM.paused? TM.left : tmInput(); if(s<=0){ toast('Задайте время'); return; }
+  TM.end=Date.now()+s*1000; TM.run=true; TM.paused=false; this.textContent='Пауза'; tmShow(true); clearInterval(TM.tid); TM.tid=setInterval(tmTick,200); tmTick();
 });
-$('tmReset').addEventListener('click',function(){ clearInterval(TM.tid); TM.run=false; TM.left=0; $('tmDisp').textContent='00:00:00'; $('tmGo').textContent='Старт'; });
-Array.prototype.forEach.call(document.querySelectorAll('[data-tp]'),function(b){ b.addEventListener('click',function(){ var s=parseInt(b.getAttribute('data-tp'),10); $('tmH').value=Math.floor(s/3600)||''; $('tmM').value=Math.floor(s%3600/60)||''; $('tmS').value=s%60||''; clearInterval(TM.tid); TM.run=false; TM.left=0; $('tmDisp').textContent=tmFmt(s); $('tmGo').textContent='Старт'; }); });
-['tmH','tmM','tmS'].forEach(function(id){ $(id).addEventListener('input',function(){ if(!TM.run){ TM.left=0; $('tmDisp').textContent=tmFmt(tmInput()); } }); });
+$('tmReset').addEventListener('click',function(){ clearInterval(TM.tid); TM.run=false; TM.paused=false; TM.left=0; tmShow(false); $('tmGo').textContent='Старт'; });
+Array.prototype.forEach.call(document.querySelectorAll('[data-tp]'),function(b){ b.addEventListener('click',function(){
+  var s=parseInt(b.getAttribute('data-tp'),10); $('tmH').value=Math.floor(s/3600)||''; $('tmM').value=Math.floor(s%3600/60)||''; $('tmS').value=s%60||'';
+  clearInterval(TM.tid); TM.run=false; TM.paused=false; TM.left=0; tmShow(false); $('tmGo').textContent='Старт';
+}); });
 
 var SW={run:false,t0:0,acc:0,tid:0,laps:[]};
 function swFmt(ms){ var t=Math.floor(ms/10), cs=t%100, s=Math.floor(t/100)%60, m=Math.floor(t/6000); return p2(m)+':'+p2(s)+'.'+p2(cs); }
 function swNow(){ return SW.acc+(SW.run?Date.now()-SW.t0:0); }
 function swDraw(){ $('swDisp').textContent=swFmt(swNow()); }
+function swBtn(){ var b=$('swGo'); b.textContent=SW.run?'Стоп':(SW.acc>0?'Далее':'Старт'); b.className='rbtn '+(SW.run?'stop':'go'); }
 $('swGo').addEventListener('click',function(){
-  if(SW.run){ SW.acc+=Date.now()-SW.t0; SW.run=false; clearInterval(SW.tid); this.textContent='Продолжить'; swDraw(); }
-  else{ SW.t0=Date.now(); SW.run=true; this.textContent='Стоп'; clearInterval(SW.tid); SW.tid=setInterval(swDraw,40); }
+  if(SW.run){ SW.acc+=Date.now()-SW.t0; SW.run=false; clearInterval(SW.tid); swDraw(); }
+  else{ SW.t0=Date.now(); SW.run=true; clearInterval(SW.tid); SW.tid=setInterval(swDraw,40); }
+  swBtn();
 });
 $('swLap').addEventListener('click',function(){
   if(!SW.run) return; var now=swNow(), prev=SW.laps.length?SW.laps[SW.laps.length-1].total:0; SW.laps.push({total:now,lap:now-prev});
   $('swLaps').innerHTML=SW.laps.map(function(l,i){ return '<div><span>Круг '+(i+1)+'</span><span>'+swFmt(l.lap)+'</span><span>'+swFmt(l.total)+'</span></div>'; }).reverse().join('');
 });
-$('swReset').addEventListener('click',function(){ clearInterval(SW.tid); SW={run:false,t0:0,acc:0,tid:0,laps:[]}; $('swDisp').textContent='00:00.00'; $('swGo').textContent='Старт'; $('swLaps').innerHTML=''; });
+$('swReset').addEventListener('click',function(){ clearInterval(SW.tid); SW={run:false,t0:0,acc:0,tid:0,laps:[]}; $('swDisp').textContent='00:00.00'; $('swLaps').innerHTML=''; swBtn(); });
+swBtn();
 
 /* калькулятор: собственный разбор выражений (без eval) */
 function calcParse(src){
@@ -1343,27 +1427,62 @@ function calcParse(src){
   var r=expr(); if(i!==s.length) throw new Error('x'); return r;
 }
 function calcClean(e){ e=e.replace(/[+×÷−^]+$/,''); var o=(e.match(/\(/g)||[]).length, c=(e.match(/\)/g)||[]).length; while(c<o){ e+=')'; c++; } return e; }
-function calcFmt(v){ if(!isFinite(v)) return 'Ошибка'; var t=parseFloat(v.toPrecision(12)); return String(t); }
+function calcFmt(v){ if(!isFinite(v)) return 'Ошибка'; return String(parseFloat(v.toPrecision(12))); }
 var CALC={e:'',done:false};
-function calcDraw(){ $('cExpr').textContent=CALC.e; var r=''; try{ if(CALC.e&&/[\d)%]$/.test(CALC.e)) r=calcFmt(calcParse(calcClean(CALC.e))); }catch(_){ r=''; } $('cRes').textContent=CALC.done?($('cRes').textContent):(r||'0'); }
+function calcDraw(){ $('cExpr').textContent=CALC.e; var r=''; try{ if(CALC.e&&/[\d)%]$/.test(CALC.e)) r=calcFmt(calcParse(calcClean(CALC.e))); }catch(_){ r=''; } $('cRes').textContent=r||'0'; }
 function calcKey(k){
   if(k==='C'){ CALC.e=''; CALC.done=false; $('cRes').textContent='0'; $('cExpr').textContent=''; return; }
   if(k==='⌫'){ CALC.e=CALC.e.replace(/(sqrt\(|.)$/,''); CALC.done=false; calcDraw(); return; }
   if(k==='='){ if(!CALC.e) return; try{ var v=calcFmt(calcParse(calcClean(CALC.e))); $('cExpr').textContent=CALC.e+' ='; $('cRes').textContent=v; CALC.e=(v==='Ошибка')?'':v; CALC.done=true; }catch(_){ $('cRes').textContent='Ошибка'; CALC.e=''; CALC.done=true; } return; }
-  if(CALC.done && /[\d.(]|sqrt/.test(k)){ CALC.e=''; }
+  if(CALC.done && /[\d.(√]/.test(k)){ CALC.e=''; }
   CALC.done=false;
   if(k==='±'){ CALC.e=CALC.e? (CALC.e.charAt(0)==='−'?CALC.e.slice(1):'−'+CALC.e) : '−'; calcDraw(); return; }
   if(k==='√'){ CALC.e+='sqrt('; calcDraw(); return; }
   if(k==='x²'){ if(/[\d)]$/.test(CALC.e)) CALC.e+='^2'; calcDraw(); return; }
-  if(/^[+×÷−^]$/.test(k) && !CALC.e && k!=='−') return;
+  if(/^[+×÷−]$/.test(k) && !CALC.e && k!=='−') return;
   if(/^[+×÷−]$/.test(k)) CALC.e=CALC.e.replace(/[+×÷−]$/,'');
   CALC.e+=k; calcDraw();
 }
 (function(){
-  var keys=['(',')','√','x²','C','⌫','%','÷','7','8','9','×','4','5','6','−','1','2','3','+','±','0','.','='];
-  $('calcPad').innerHTML=keys.map(function(k){ var c=/^[÷×−+]$/.test(k)?' op':(k==='='?' eq':''); return '<button class="'+c.trim()+'" data-ck="'+k+'">'+k+'</button>'; }).join('');
-  $('calcPad').addEventListener('click',function(e){ var b=e.target.closest&&e.target.closest('[data-ck]'); if(b) calcKey(b.getAttribute('data-ck')); });
+  function keys(list,cls){ return list.map(function(k){ var c='ckey'+(cls?' '+cls:'')+(/^[÷×−+]$/.test(k)?' op':'')+(k==='='?' eq':''); return '<button class="'+c+'" data-ck="'+k+'">'+k+'</button>'; }).join(''); }
+  $('calcFn').innerHTML=keys(['(',')','√','x²'],'fn');
+  $('calcPad').innerHTML=keys(['C','⌫','%','÷','7','8','9','×','4','5','6','−','1','2','3','+','±','0','.','=']);
+  function onKey(e){ var b=e.target.closest&&e.target.closest('[data-ck]'); if(b) calcKey(b.getAttribute('data-ck')); }
+  $('calcFn').addEventListener('click',onKey); $('calcPad').addEventListener('click',onKey);
 })();
+
+/* ---------- память: занято медиа и свободно на телефоне ---------- */
+function sizeToBytes(str){ var m=/([\d.]+)\s*(KB|MB|GB|TB)?/i.exec(str||''); if(!m) return 0; var u=(m[2]||'MB').toUpperCase(); return parseFloat(m[1])*({KB:1024,MB:1048576,GB:1073741824,TB:1099511627776}[u]); }
+function drawDisk(){
+  if(!$('stF')) return;
+  var media=(D.stats&&D.stats.storageBytes!=null)? D.stats.storageBytes : sizeToBytes(totalMem());
+  if(DISK&&DISK.total>0){
+    var t=DISK.total, f=Math.max(0,Math.min(t,DISK.free)), mp=Math.min(100,media/t*100), up=Math.min(100,(t-f)/t*100);
+    $('stF').textContent=fmtSize(f); $('stBm').style.width=mp+'%'; $('stBo').style.width=Math.max(0,up-mp)+'%';
+    $('stT').textContent='Всего '+fmtSize(t)+' · занято '+fmtSize(t-f);
+  } else { $('stF').textContent='—'; $('stBm').style.width='0'; $('stBo').style.width='0'; $('stT').textContent='Свободная память пока недоступна'; }
+}
+/* ---------- видео и фото на весь экран ---------- */
+var PFS_REAL=false, WAS_FS=false;
+function playerFs(on){
+  var m=$('modal'), want=(on===undefined)? !m.classList.contains('full') : !!on;
+  m.classList.toggle('full',want);
+  var d=document.documentElement;
+  if(want){
+    WAS_FS=!!fsElem();
+    try{ var p=d.requestFullscreen? d.requestFullscreen({navigationUI:'hide'}) : (d.webkitRequestFullscreen? d.webkitRequestFullscreen() : null);
+         PFS_REAL=!!p||!!d.webkitRequestFullscreen; if(p&&p.catch) p.catch(function(){ PFS_REAL=false; }); }catch(_){ PFS_REAL=false; }
+  } else {
+    if(PFS_REAL&&!WAS_FS&&fsElem()){ try{ (document.exitFullscreen||document.webkitExitFullscreen).call(document); }catch(_){} }
+    PFS_REAL=false;
+  }
+  setTimeout(fit,200);
+}
+$('pfs').addEventListener('click',function(){ playerFs(); });
+$('pv').addEventListener('dblclick',function(){ playerFs(); });
+document.addEventListener('fullscreenchange',function(){ if(!fsElem() && PFS_REAL && $('modal').classList.contains('full')){ PFS_REAL=false; $('modal').classList.remove('full'); } });
+document.addEventListener('webkitfullscreenchange',function(){ if(!fsElem() && PFS_REAL && $('modal').classList.contains('full')){ PFS_REAL=false; $('modal').classList.remove('full'); } });
+drawDisk();
 
 /* ---------- масштаб макета под экран (на телефоне вертикально: поворот на 90°) ---------- */
 var BW=864, BH=411, noRot=/[?&]rotate=0/.test(location.search);

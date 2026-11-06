@@ -879,6 +879,8 @@ object LocalHttpShareServer {
                             send401WithoutAuth(output, needDevCookie)
                         } else if (reqAuth.role != "admin") {
                             sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"admin_required\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        } else if (LanScanner.isScanning) {
+                            sendResponse(output, 409, "application/json; charset=UTF-8", "{\"error\":\"busy\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
                         } else {
                             val connectedIps = devices.values.map { it.ip }.toSet()
                             LanScanner.startScan(context, currentBoundIp ?: localIpAddress(context), connectedIps)
@@ -2547,7 +2549,14 @@ object LocalHttpShareServer {
             "{\"level\":null,\"rssi\":null}"
         }
         val meJson = "{\"role\":${jsonEscape(reqAuth.role)},\"name\":${jsonEscape(reqAuth.username)}}"
-        val json = "{\"ok\":true,\"online\":true,\"time\":$timeMs,\"wifi\":$wifiJson,\"me\":$meJson}"
+        val stat = try {
+            val s = android.os.StatFs(Environment.getExternalStorageDirectory().path)
+            Pair(s.blockCountLong * s.blockSizeLong, s.availableBlocksLong * s.blockSizeLong)
+        } catch (_: Exception) {
+            Pair(0L, 0L)
+        }
+        val diskJson = "{\"total\":${stat.first},\"free\":${stat.second}}"
+        val json = "{\"ok\":true,\"online\":true,\"time\":$timeMs,\"wifi\":$wifiJson,\"me\":$meJson,\"disk\":$diskJson}"
         val data = json.toByteArray(Charsets.UTF_8)
         sendResponse(output, 200, "application/json; charset=UTF-8", data, isHead = isHead, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
     }
@@ -2627,13 +2636,21 @@ object LocalHttpShareServer {
         val totalPhotos = getPhotoCount(context)
         val folderSetting = HttpServerConfig.getBroadcastFolder(context)
 
-        val totalBytes = files.sumOf { it.sizeBytes }
-        val totalMb = totalBytes / (1024.0 * 1024.0)
+        val totalMediaBytes = getAllMediaTotalBytes(context)
+        val totalMb = totalMediaBytes / (1024.0 * 1024.0)
         val storageStr = if (totalMb >= 1024.0) {
             String.format(java.util.Locale.US, "%.1f GB", totalMb / 1024.0)
         } else {
             String.format(java.util.Locale.US, "%.1f MB", totalMb)
         }
+
+        val stat = try {
+            val s = android.os.StatFs(Environment.getExternalStorageDirectory().path)
+            Pair(s.blockCountLong * s.blockSizeLong, s.availableBlocksLong * s.blockSizeLong)
+        } catch (_: Exception) {
+            Pair(0L, 0L)
+        }
+        val diskJson = "{\"total\":${stat.first},\"free\":${stat.second}}"
 
         val versionName = try {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0"
@@ -2680,8 +2697,10 @@ object LocalHttpShareServer {
         jsonBuilder.append("\"videos\":$totalVideos,")
         jsonBuilder.append("\"audio\":$totalAudio,")
         jsonBuilder.append("\"photos\":$totalPhotos,")
-        jsonBuilder.append("\"storage\":${jsonEscape(storageStr)}")
+        jsonBuilder.append("\"storage\":${jsonEscape(storageStr)},")
+        jsonBuilder.append("\"storageBytes\":$totalMediaBytes")
         jsonBuilder.append("},")
+        jsonBuilder.append("\"disk\":$diskJson,")
         jsonBuilder.append("\"files\":$filesJson")
         jsonBuilder.append("}")
 
@@ -2803,6 +2822,38 @@ object LocalHttpShareServer {
         } catch (_: Exception) {
             0
         }
+    }
+
+    private fun getAllMediaTotalBytes(context: Context): Long {
+        var sum = 0L
+        val uris = listOf(
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        )
+        for (uri in uris) {
+            try {
+                val cursor = context.contentResolver.query(
+                    uri,
+                    arrayOf(MediaStore.MediaColumns.SIZE),
+                    null,
+                    null,
+                    null
+                )
+                cursor?.use { c ->
+                    val sizeCol = c.getColumnIndex(MediaStore.MediaColumns.SIZE)
+                    if (sizeCol >= 0) {
+                        while (c.moveToNext()) {
+                            val s = c.getLong(sizeCol)
+                            if (s > 0) sum += s
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Error querying size for $uri", e)
+            }
+        }
+        return sum
     }
 
     private fun getFileKind(ext: String): String {
