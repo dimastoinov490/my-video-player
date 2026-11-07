@@ -4,6 +4,10 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.os.Environment
 import java.io.File
+import java.security.MessageDigest
+import java.security.SecureRandom
+import javax.crypto.SecretKeyFactory
+import javax.crypto.spec.PBEKeySpec
 
 enum class HttpBroadcastFolder(val id: String, val title: String) {
     ALL("all", "Вся библиотека (Видео и Музыка)"),
@@ -21,14 +25,30 @@ object HttpServerConfig {
     private const val KEY_BROADCAST_FOLDER = "broadcast_folder"
     private const val KEY_PORT = "http_port"
 
-    const val DEFAULT_ADMIN_SETUP_PASSWORD = "taer2009M"
-    private const val KEY_ADMIN_SETUP_SALT = "admin_setup_salt"
-    private const val KEY_ADMIN_SETUP_HASH = "admin_setup_hash"
+    const val DEFAULT_ADMIN_LOGIN = "admin"
+    const val DEFAULT_ADMIN_PASSWORD = "admin"
+    const val DEFAULT_USER_LOGIN = "admin"
+    const val DEFAULT_USER_PASSWORD = "1234"
+
+    private const val KEY_ADMIN_USERNAME = "admin_username"
+    private const val KEY_ADMIN_SALT = "admin_password_salt"
+    private const val KEY_ADMIN_HASH = "admin_password_hash"
+    private const val KEY_ADMIN_PASS_IS_DEFAULT = "admin_password_is_default"
 
     private var appContext: Context? = null
+    @Volatile private var oldAccountsCleaned = false
 
     fun init(context: Context) {
         appContext = context.applicationContext
+        if (!oldAccountsCleaned) {
+            oldAccountsCleaned = true
+            try {
+                val oldPrefs = context.getSharedPreferences("http_accounts", Context.MODE_PRIVATE)
+                if (oldPrefs.all.isNotEmpty()) {
+                    oldPrefs.edit().clear().apply()
+                }
+            } catch (_: Exception) {}
+        }
     }
 
     private fun getPrefs(context: Context): SharedPreferences {
@@ -37,14 +57,14 @@ object HttpServerConfig {
     }
 
     fun hashPassword(password: CharArray, salt: ByteArray): ByteArray {
-        val spec = javax.crypto.spec.PBEKeySpec(password, salt, 60000, 256)
-        val factory = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+        val spec = PBEKeySpec(password, salt, 60000, 256)
+        val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
         return factory.generateSecret(spec).encoded
     }
 
     fun generateSalt(): ByteArray {
         val salt = ByteArray(16)
-        java.security.SecureRandom().nextBytes(salt)
+        SecureRandom().nextBytes(salt)
         return salt
     }
 
@@ -61,53 +81,85 @@ object HttpServerConfig {
         return data
     }
 
+    fun getAdminUsername(context: Context): String {
+        return getPrefs(context).getString(KEY_ADMIN_USERNAME, DEFAULT_ADMIN_LOGIN) ?: DEFAULT_ADMIN_LOGIN
+    }
+
+    fun isAdminPasswordDefault(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_ADMIN_PASS_IS_DEFAULT, true)
+    }
+
+    fun isUserPasswordDefault(context: Context): Boolean {
+        return getPassword(context) == DEFAULT_USER_PASSWORD
+    }
+
     @Synchronized
-    fun verifyAdminSetupPassword(context: Context, pw: String): Boolean {
-        init(context)
+    fun verifyAdminPassword(context: Context, password: String): Boolean {
         val prefs = getPrefs(context)
-        var saltHex = prefs.getString(KEY_ADMIN_SETUP_SALT, null)
-        var hashHex = prefs.getString(KEY_ADMIN_SETUP_HASH, null)
+        var saltHex = prefs.getString(KEY_ADMIN_SALT, null)
+        var hashHex = prefs.getString(KEY_ADMIN_HASH, null)
 
         if (saltHex.isNullOrEmpty() || hashHex.isNullOrEmpty()) {
             val salt = generateSalt()
-            val hash = hashPassword(DEFAULT_ADMIN_SETUP_PASSWORD.toCharArray(), salt)
+            val hash = hashPassword(DEFAULT_ADMIN_PASSWORD.toCharArray(), salt)
             saltHex = bytesToHex(salt)
             hashHex = bytesToHex(hash)
             prefs.edit()
-                .putString(KEY_ADMIN_SETUP_SALT, saltHex)
-                .putString(KEY_ADMIN_SETUP_HASH, hashHex)
+                .putString(KEY_ADMIN_SALT, saltHex)
+                .putString(KEY_ADMIN_HASH, hashHex)
+                .putBoolean(KEY_ADMIN_PASS_IS_DEFAULT, true)
                 .apply()
         }
 
         return try {
             val salt = hexToBytes(saltHex)
             val expectedHash = hexToBytes(hashHex)
-            val computedHash = hashPassword(pw.toCharArray(), salt)
-            java.security.MessageDigest.isEqual(computedHash, expectedHash)
+            val computedHash = hashPassword(password.toCharArray(), salt)
+            MessageDigest.isEqual(computedHash, expectedHash)
         } catch (_: Exception) {
             false
         }
     }
 
-    fun verifyAdminSetupPassword(pw: String): Boolean {
-        val ctx = appContext ?: return false
-        return verifyAdminSetupPassword(ctx, pw)
+    @Synchronized
+    fun setAdminCredentials(context: Context, newLogin: String?, newPassword: String?) {
+        val editor = getPrefs(context).edit()
+        if (!newLogin.isNullOrBlank()) {
+            editor.putString(KEY_ADMIN_USERNAME, newLogin.trim())
+        }
+        if (!newPassword.isNullOrEmpty()) {
+            val salt = generateSalt()
+            val hash = hashPassword(newPassword.toCharArray(), salt)
+            editor.putString(KEY_ADMIN_SALT, bytesToHex(salt))
+            editor.putString(KEY_ADMIN_HASH, bytesToHex(hash))
+            editor.putBoolean(KEY_ADMIN_PASS_IS_DEFAULT, false)
+        }
+        editor.apply()
     }
 
     @Synchronized
-    fun setAdminSetupPassword(context: Context, new: String) {
-        init(context)
-        val salt = generateSalt()
-        val hash = hashPassword(new.toCharArray(), salt)
-        getPrefs(context).edit()
-            .putString(KEY_ADMIN_SETUP_SALT, bytesToHex(salt))
-            .putString(KEY_ADMIN_SETUP_HASH, bytesToHex(hash))
-            .apply()
+    fun setUserCredentials(context: Context, newLogin: String?, newPassword: String?) {
+        val editor = getPrefs(context).edit()
+        if (!newLogin.isNullOrBlank()) {
+            editor.putString(KEY_USERNAME, newLogin.trim())
+        }
+        if (!newPassword.isNullOrEmpty()) {
+            editor.putString(KEY_PASSWORD, newPassword)
+        }
+        editor.apply()
     }
 
-    fun setAdminSetupPassword(new: String) {
-        val ctx = appContext ?: return
-        setAdminSetupPassword(ctx, new)
+    @Synchronized
+    fun resetAdmin(context: Context) {
+        val salt = generateSalt()
+        val hash = hashPassword(DEFAULT_ADMIN_PASSWORD.toCharArray(), salt)
+        getPrefs(context).edit()
+            .putString(KEY_ADMIN_USERNAME, DEFAULT_ADMIN_LOGIN)
+            .putString(KEY_ADMIN_SALT, bytesToHex(salt))
+            .putString(KEY_ADMIN_HASH, bytesToHex(hash))
+            .putBoolean(KEY_ADMIN_PASS_IS_DEFAULT, true)
+            .apply()
+        LocalHttpShareServer.closeAdminSessions()
     }
 
     fun isAuthRequired(context: Context): Boolean {
@@ -120,7 +172,7 @@ object HttpServerConfig {
     }
 
     fun getUsername(context: Context): String {
-        return getPrefs(context).getString(KEY_USERNAME, "admin") ?: "admin"
+        return getPrefs(context).getString(KEY_USERNAME, DEFAULT_USER_LOGIN) ?: DEFAULT_USER_LOGIN
     }
 
     fun setUsername(context: Context, username: String) {
@@ -129,7 +181,7 @@ object HttpServerConfig {
     }
 
     fun getPassword(context: Context): String {
-        return getPrefs(context).getString(KEY_PASSWORD, "1234") ?: "1234"
+        return getPrefs(context).getString(KEY_PASSWORD, DEFAULT_USER_PASSWORD) ?: DEFAULT_USER_PASSWORD
     }
 
     fun setPassword(context: Context, password: String) {
@@ -202,7 +254,7 @@ object HttpServerConfig {
 
     fun getFolderDirectory(context: Context, folder: HttpBroadcastFolder): File? {
         return when (folder) {
-            HttpBroadcastFolder.ALL -> null // uses full device scan (MediaStore + all public dirs)
+            HttpBroadcastFolder.ALL -> null
             HttpBroadcastFolder.MOVIES -> Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
             HttpBroadcastFolder.DOWNLOADS -> Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
             HttpBroadcastFolder.DCIM -> Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)

@@ -322,6 +322,8 @@ svg.ic{width:1em;height:1em;display:block}
     <div class="card static col item hide" id="auth-card" style="--i:5">
       <label class="field"><span>Логин</span><input id="in-user" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
       <label class="field"><span>Пароль</span><input id="in-pass" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+      <div class="kv" style="margin-top:calc(8*var(--u))"><span class="lbl">Администратор:</span><b id="adm-info">admin / admin</b></div>
+      <div class="btns" style="margin-top:calc(8*var(--u))"><button class="pbtn" id="btn-reset-admin" type="button">Сбросить администратора</button></div>
     </div>
 
     <div class="lbl item" style="--i:6;margin:calc(10*var(--u)) calc(8*var(--u)) calc(18*var(--u))">Папка вещания файлов:</div>
@@ -860,6 +862,7 @@ function shareAct(fn, ...args){
     if (fn==='shareSetServer') s.running = args[0];
     else if (fn==='shareSetConfig'){ const [k,v]=args; if(k==='auth_required') s.authRequired = (v==='true'); else if(k==='username') s.username=v; else if(k==='password') s.password=v; else if(k==='folder') s.folder=v; }
     else if (fn==='shareWifi') s.wifi.enabled = args[0];
+    else if (fn==='shareResetAdmin'){ s.adminUsername='admin'; s.adminPassword='admin'; s.adminDefault=true; }
   } else callB(fn, ...args);
   renderShare(); setTimeout(renderShare,350); setTimeout(renderShare,1200);
 }
@@ -879,6 +882,10 @@ function renderShare(){
   $('auth-card').classList.toggle('hide', !s.authRequired);
   if (document.activeElement !== $('in-user')) $('in-user').value = s.username || '';
   if (document.activeElement !== $('in-pass')) $('in-pass').value = s.password || '';
+  const admUser = s.adminUsername || 'admin';
+  const admPass = s.adminDefault ? (s.adminPassword || 'admin') : 'пароль изменён';
+  const admEl = $('adm-info');
+  if (admEl) admEl.textContent = admUser + (s.adminDefault ? (' / ' + admPass) : (' • ' + admPass));
   document.querySelectorAll('#l-folders .card').forEach(c=>c.classList.toggle('sel', c.dataset.f === s.folder));
   setSw($('sw-wifi'), w.enabled);
   $('wf-status').textContent = w.status || 'Прямое подключение по QR с паролем от Wi‑Fi Direct';
@@ -893,6 +900,11 @@ $('sw-auth').addEventListener('click',   ()=> shareAct('shareSetConfig','auth_re
 $('sw-wifi').addEventListener('click',   ()=> shareAct('shareWifi', !(getShare().wifi||{}).enabled));
 $('in-user').addEventListener('change', e=> shareAct('shareSetConfig','username', e.target.value.trim()));
 $('in-pass').addEventListener('change', e=> shareAct('shareSetConfig','password', e.target.value.trim()));
+$('btn-reset-admin').addEventListener('click', ()=>{
+  if (confirm('Сбросить учётную запись администратора до admin / admin? Все активные сессии администратора будут закрыты.')){
+    shareAct('shareResetAdmin');
+  }
+});
 $('btn-copy').addEventListener('click', ()=> copyText(getShare().url || ''));
 $('btn-open').addEventListener('click', ()=> openExternal(getShare().url || ''));
 buildFolders();

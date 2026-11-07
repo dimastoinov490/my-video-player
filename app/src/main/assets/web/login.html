@@ -138,8 +138,15 @@ h1 .a{color:var(--text)}h1 .b{color:var(--o2)}
     var token=btoa(unescape(encodeURIComponent(u+':'+p)));
     fetch('/api/login',{headers:{'Authorization':'Basic '+token},cache:'no-store',credentials:'same-origin'})
       .then(function(r){
-        if(r.ok){ location.replace('/'); }
-        else { showErr('Неверный логин или пароль'); go.disabled=false; pass.select(); }
+        if(r.ok){ location.replace('/'); return; }
+        return r.json().catch(function(){ return {}; }).then(function(j){
+          var c=j&&j.error, m='Неверный логин или пароль';
+          if(c==='schedule_blocked') m='Вход в это время запрещён администратором';
+          else if(c==='time_limit') m='Дневной лимит времени на сервере исчерпан';
+          else if(c==='rate_limited') m='Слишком много попыток. Подождите несколько минут';
+          else if(c==='blocked') m='Это устройство заблокировано администратором';
+          showErr(m); go.disabled=false; if(!c||c==='bad_credentials') pass.select();
+        });
       })
       .catch(function(){ showErr('Нет связи с сервером'); go.disabled=false; });
   });

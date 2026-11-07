@@ -209,6 +209,20 @@ object MailManager {
         )
     }
 
+    fun isSender(context: Context, myDeviceId: String, msgId: Long): Boolean {
+        val db = getDb(context)
+        return db.rawQuery(
+            "SELECT sender_id FROM messages WHERE id = ?",
+            arrayOf(msgId.toString())
+        ).use {
+            if (it.moveToFirst()) {
+                it.getString(0) == myDeviceId
+            } else {
+                false
+            }
+        }
+    }
+
     fun deleteMessage(context: Context, myDeviceId: String, msgId: Long, isAdmin: Boolean): Boolean {
         val db = getDb(context)
         var fileIdToDelete: String? = null

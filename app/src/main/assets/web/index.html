@@ -310,21 +310,37 @@ body.rot .sc{touch-action:none}
 .rc.more{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;background:rgba(255,138,0,.07);border:1px dashed rgba(255,138,0,.5);color:var(--o1);font-size:14px;font-weight:700}
 .rc.more:after{display:none}.rc.more .ico{font-size:26px}
 body.rot .hs{touch-action:none}
-.stat.mem{flex:2.1 1 0}
-.mtop{display:flex;align-items:flex-start;gap:16px}
-.mtop>.ico{margin-top:1px}
-.mem .mc b{margin-top:0;font-size:19px}.mem .mc b:before{display:none}
+.stat.mem{flex:2.4 1 0}
+.mtop{display:flex;align-items:flex-start}
+.mtop>.ico{margin:1px 12px 0 0}
+.mtop .mc+.mc{margin-left:16px}
+.mem .mc b{margin-top:0;font-size:18px}.mem .mc b:before{display:none}
 .mem .mc span{margin-top:6px;white-space:nowrap}
 .mbar{display:flex;height:5px;margin:12px 18px 0 0;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden}
 .mbar i{display:block;height:100%;width:0;transition:width .6s}
 .mbar .m{background:linear-gradient(90deg,var(--o1),var(--o3))}.mbar .o{background:rgba(255,255,255,.34)}
 .mem small{display:block;font-size:11px;color:#b9aa9a;margin-top:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:14px}
 /* полный экран видео и фото */
-.modal.full{padding:0}
-.modal.full .pbox{max-width:none;height:100%;border-radius:0;border:0;display:flex;flex-direction:column;box-shadow:none}
+/* ---------- v7: учётные записи, форма, полный экран без рамки ---------- */
+body.pfs .frame{inset:0;border:0;border-radius:0;box-shadow:none}
+.modal.full{padding:0;background:#000}
+.modal.full .pbox{position:relative;max-width:none;width:100%;height:100%;border-radius:0;border:0;box-shadow:none;display:flex;flex-direction:column;background:#000}
 .modal.full .pbox video,.modal.full .pbox img.big{flex:1;min-height:0;height:100%;max-height:none}
 .modal.full .pbox audio{flex:1}
-.modal.full .pbar{background:rgba(8,4,2,.92)}
+.modal.full .pbar{position:absolute;top:0;left:0;right:0;z-index:5;border:0;padding:12px 18px;background:linear-gradient(180deg,rgba(0,0,0,.72),transparent);transition:opacity .35s,transform .35s}
+.modal.full.idle .pbar{opacity:0;pointer-events:none;transform:translateY(-100%)}
+.modal.full.idle{cursor:none}
+.accb{display:flex;flex-direction:column;gap:6px;flex:none}
+.warnbox{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;margin-bottom:10px;border-radius:14px;border:1px solid rgba(255,138,0,.5);background:rgba(255,138,0,.08);color:var(--o1);font-size:12.5px;line-height:1.45}
+.warnbox .ico{font-size:20px;flex:none}
+.dbox.wide{max-width:430px}
+.flb{display:block;font-size:12px;color:#b9aa9a;margin:6px 2px 5px}
+.win{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;padding:8px;border-radius:12px;background:rgba(255,255,255,.04)}
+.days{display:flex;gap:4px}
+.dchip{width:30px;height:28px;border-radius:9px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.05);color:#d6cfc7;font-size:11px;font-weight:700}
+.dchip.on{background:var(--o2);color:#1b0d02;border-color:var(--o2)}
+.fld.tm{width:96px;margin:0}
+.mem .mc{min-width:0}
 /* инструменты: современный плоский вид, крупные элементы */
 .tool{display:none}.tool.on{display:block}
 .tseg{margin-left:auto;padding:0;width:380px}
@@ -465,7 +481,7 @@ body.rot .hs{touch-action:none}
           <div class="stat"><svg class="ico"><use href="#i-play" xlink:href="#i-play"/></svg><b id="stV">0</b><span>Видео</span></div>
           <div class="stat"><svg class="ico"><use href="#i-music" xlink:href="#i-music"/></svg><b id="stA">0</b><span>Аудио</span></div>
           <div class="stat"><svg class="ico"><use href="#i-image" xlink:href="#i-image"/></svg><b id="stP">0</b><span>Фото</span></div>
-          <div class="stat wide mem"><div class="mtop"><svg class="ico"><use href="#i-db" xlink:href="#i-db"/></svg><div class="mc"><b id="stM">0 MB</b><span>Занято медиа</span></div><div class="mc"><b id="stF">—</b><span>Свободно</span></div></div><div class="mbar"><i class="m" id="stBm"></i><i class="o" id="stBo"></i></div><small id="stT"></small></div>
+          <div class="stat wide mem"><div class="mtop"><svg class="ico"><use href="#i-db" xlink:href="#i-db"/></svg><div class="mc"><b id="stM">0 MB</b><span title="Занято медиа">Занято</span></div><div class="mc"><b id="stF">—</b><span>Свободно</span></div></div><div class="mbar"><i class="m" id="stBm"></i><i class="o" id="stBo"></i></div></div>
         </div>
         <div class="sec"><h3>Последние видео</h3><button data-go="videos">Все <svg class="ico"><use href="#i-arrow" xlink:href="#i-arrow"/></svg></button></div>
         <div class="recent hs" id="recent"></div>
@@ -506,7 +522,6 @@ body.rot .hs{touch-action:none}
         <button class="sm on" data-sub="settings"><svg class="ico"><use href="#i-gear" xlink:href="#i-gear"/></svg>Настройки</button>
         <button class="sm" data-sub="net"><svg class="ico"><use href="#i-globe" xlink:href="#i-globe"/></svg>Сеть</button>
         <button class="sm" data-sub="devices"><svg class="ico"><use href="#i-phone" xlink:href="#i-phone"/></svg>Устройства</button>
-        <button class="sm" data-sub="accounts"><svg class="ico"><use href="#i-user" xlink:href="#i-user"/></svg>Учётные записи</button>
         <button class="sm" data-sub="server"><svg class="ico"><use href="#i-info" xlink:href="#i-info"/></svg>О сервере</button>
         <button class="sm" data-sub="app"><svg class="ico"><use href="#i-star" xlink:href="#i-star"/></svg>О приложении</button>
       </div>
@@ -544,19 +559,6 @@ body.rot .hs{touch-action:none}
             <p class="note">Сканер ищет устройства в той же Wi-Fi сети, что и телефон с сервером: проверяет адреса подсети и находит имена устройств. Запустить поиск может администратор.</p>
           </div>
         </div>
-        <div class="blk-acc">
-          <div class="card" style="margin-bottom:12px">
-            <div class="kv"><svg class="ico"><use href="#i-user" xlink:href="#i-user"/></svg><span>Вы вошли как</span><span class="v" id="meName">-</span></div>
-            <div class="kv"><svg class="ico"><use href="#i-shield" xlink:href="#i-shield"/></svg><span>Права</span><span class="v" id="meRole">-</span></div>
-          </div>
-          <div class="pt"><h3>Создать администратора</h3></div>
-          <input class="fld" id="adName" placeholder="Логин администратора" autocomplete="off" autocapitalize="none" spellcheck="false">
-          <input class="fld" id="adPass" type="password" placeholder="Пароль администратора (от 6 символов)" autocomplete="new-password">
-          <input class="fld" id="adSetup" type="password" placeholder="Пароль создания администратора" autocomplete="off">
-          <button class="btn-main" id="adBtn">Создать</button>
-          <p class="note">Без пароля создания администратора учётную запись создать нельзя. Администратор может изменять и удалять файлы и блокировать устройства. Обычный вход даёт только просмотр и скачивание.</p>
-          <div id="adList"></div>
-        </div>
         <div class="set-head blk-head"><svg><use href="#logo" xlink:href="#logo"/></svg><div><h2><span class="a">Nexora</span> <span class="b">Media</span></h2><p>Версия <span id="ver">1.0</span></p></div></div>
         <div class="card blk-card">
           <div class="kv"><svg class="ico"><use href="#i-globe" xlink:href="#i-globe"/></svg><span>Wi-Fi сервер</span><span class="v ok" id="kvState">Активен</span></div>
@@ -572,6 +574,14 @@ body.rot .hs{touch-action:none}
       </div>
     </div>
   </div></section>
+  <!-- УЧЁТНЫЕ ЗАПИСИ -->
+  <section class="pane" id="v-accounts"><div class="page">
+    <div class="head"><h2><svg class="ico"><use href="#i-user" xlink:href="#i-user"/></svg>Учётные записи</h2><small id="accMe" style="margin-left:auto;color:#b9aa9a;font-size:12px"></small></div>
+    <div id="accBanner"></div>
+    <div class="devs" id="accList"></div>
+    <p class="note">Ограничения и данные другой учётной записи меняет только администратор. Свой логин и пароль можно сменить, зная текущий пароль: если пароль ещё не менялся, это стандартный пароль из приложения.</p>
+  </div></section>
+
   <!-- ПИСЬМО -->
   <section class="pane" id="v-mail" style="overflow:hidden"><div class="mail">
     <div class="mthreads sc" id="mThreads"></div>
@@ -619,7 +629,7 @@ body.rot .hs{touch-action:none}
   <button class="dm on" data-go="settings" data-sub="settings"><svg class="ico"><use href="#i-gear" xlink:href="#i-gear"/></svg>Настройки</button>
   <button class="dm" data-go="settings" data-sub="net"><svg class="ico"><use href="#i-globe" xlink:href="#i-globe"/></svg>Сеть</button>
   <button class="dm" data-go="settings" data-sub="devices"><svg class="ico"><use href="#i-phone" xlink:href="#i-phone"/></svg>Устройства</button>
-  <button class="dm" data-go="settings" data-sub="accounts"><svg class="ico"><use href="#i-user" xlink:href="#i-user"/></svg>Учётные записи</button>
+  <button class="dm" data-go="accounts"><svg class="ico"><use href="#i-user" xlink:href="#i-user"/></svg>Учётные записи</button>
   <button class="dm" data-go="mail"><svg class="ico"><use href="#i-mail" xlink:href="#i-mail"/></svg>Письмо</button>
   <button class="dm" data-go="tools"><svg class="ico"><use href="#i-tools" xlink:href="#i-tools"/></svg>Инструменты</button>
   <button class="dm" data-go="settings" data-sub="server"><svg class="ico"><use href="#i-info" xlink:href="#i-info"/></svg>О сервере</button>
@@ -635,6 +645,8 @@ body.rot .hs{touch-action:none}
   </div>
 </div>
 <div class="dlg" id="dlg"><div class="dbox"><h4 id="dT"></h4><p id="dP"></p><input class="fld" id="dI" style="display:none"><div class="dact"><button class="selbtn" id="dNo">Отмена</button><button class="btn-main" id="dYes">OK</button></div></div></div>
+<div class="dlg" id="fdlg"><div class="dbox wide"><h4 id="fT"></h4><p class="note" id="fH" style="margin:0 0 8px"></p><div class="sc" id="fBody" style="max-height:215px;padding-right:2px"></div><p class="note" id="fErr" style="color:#ff8a78;margin:6px 0 0;min-height:16px"></p><div class="dact"><button class="selbtn" id="fNo">Отмена</button><button class="btn-main" id="fYes">Сохранить</button></div></div></div>
+<div class="dlg" id="lock" style="z-index:95"><div class="dbox"><h4 id="lkT"></h4><p id="lkP"></p><div class="dact"><a class="btn-main" href="/logout">Выйти</a></div></div></div>
 <div class="toast" id="toast"></div>
 </div>
 </div>
@@ -645,7 +657,7 @@ body.rot .hs{touch-action:none}
    Формат: {version, address, port, online, authRequired, folder, features:{photos,folders},
             stats:{videos,audio,photos,storage}, files:[{id,title,name,size,dur,isVideo,mime,kind,folder}]}
    kind:'photo' помечает фото, folder — имя папки (по желанию). Новые разделы «Письмо», «Инструменты», «Сеть» и сканер сети общаются с сервером через /api/mail/*, /api/net, /api/lan/*.
-   Дополнительно: me:{role:'user'|'admin',name}, wifi:{level:0-4,rssi}, disk:{total,free} (байты), stats.storageBytes. */
+   Дополнительно: me:{id,role:'user'|'admin',name}, wifi:{level:0-4,rssi}, disk:{total,free} (байты), stats.storageBytes. */
 var DEMO={disk:{total:128000000000,free:48200000000},version:'1.0',address:'http://192.168.1.64:8765',port:8765,online:true,authRequired:true,folder:'Все папки',features:{photos:false,folders:false},
  files:[
   {id:'1',title:'Furious 6',name:'Furious6.mp4',size:'552.4 MB',dur:'2:10:06',isVideo:true},
@@ -708,14 +720,14 @@ $('recent').innerHTML=videos.slice(0,20).map(function(f){
 }).join('')+(videos.length>3?'<button class="rc more" data-go="videos">'+ic('arrow')+'Все видео</button>':'') || '<div class="nodata">Видео пока нет</div>';
 /* ---------- запросы к серверу (в демо-режиме без сервера работают встроенные примеры) ---------- */
 var DEMO_MODE=!window.NEXORA;
-var ME=D.me||{role:'user',name:''};
-if(DEMO_MODE) ME={role:/[?&]admin=1/.test(location.search)?'admin':'user',name:'demo'};   /* для просмотра без сервера: ?admin=1 */
+var ME=D.me||{role:'user',id:'user',name:''};
+if(DEMO_MODE){ var adm=/[?&]admin=1/.test(location.search); ME={role:adm?'admin':'user',id:adm?'admin':'user',name:adm?'admin':'user'}; }   /* для просмотра без сервера: ?admin=1 */
 var isAdmin=(ME.role==='admin');
 function post(url,obj){
   if(DEMO_MODE) return demoPost(url,obj);
   return fetch(url,{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json','X-Nexora':'1'},body:JSON.stringify(obj||{})}).then(function(r){
     if(r.status===401){ location.replace('/'); throw new Error('401'); }
-    return r.json().then(function(j){ if(!r.ok){ var e=new Error((j&&j.error)||('HTTP '+r.status)); e.code=j&&j.error; throw e; } return j; });
+    return r.json().then(function(j){ if(!r.ok){ lockCheck(j); var e=new Error((j&&j.error)||('HTTP '+r.status)); e.code=j&&j.error; throw e; } return j; });
   });
 }
 function demoPost(url,obj){
@@ -730,7 +742,7 @@ function api(url){
   if(DEMO_MODE) return demoApi(url);
   return fetch(url,{credentials:'same-origin',cache:'no-store'}).then(function(r){
     if(r.status===401){ location.replace('/'); throw new Error('401'); }
-    return r.json().then(function(j){ if(!r.ok){ var e=new Error((j&&j.error)||('HTTP '+r.status)); e.code=j&&j.error; throw e; } return j; });
+    return r.json().then(function(j){ if(!r.ok){ lockCheck(j); var e=new Error((j&&j.error)||('HTTP '+r.status)); e.code=j&&j.error; throw e; } return j; });
   });
 }
 function demoApi(url){
@@ -752,7 +764,9 @@ function demoApi(url){
     if(url.indexOf('/api/mail/peers')===0) return res({me:{id:'a',name:'Вы'},peers:[{id:'b',name:'Edge · Windows',kind:'pc',online:true,unread:2,last:{t:Date.now()-60000,kind:'text',preview:'Файл получил?'}},{id:'c',name:'Safari · iPad',kind:'tablet',online:false,unread:0,last:null}]});
     if(url.indexOf('/api/mail/messages')===0){ var af=url.match(/after=(\d+)/); if(af&&Number(af[1])>0) return res({messages:[]});
       return res({messages:[{id:1,mine:false,kind:'text',text:'Привет! Файл получил?',t:Date.now()-120000,read:true},{id:2,mine:true,kind:'text',text:'Да, спасибо',t:Date.now()-90000,read:true},{id:3,mine:false,kind:'file',text:'',t:Date.now()-60000,file:{id:'f',name:'Отчёт.pdf',size:1843200},read:true},{id:4,mine:false,kind:'voice',text:'',t:Date.now()-30000,file:{id:'v',name:'voice.webm',size:40000,dur:12},read:true}]}); }
-    if(url.indexOf('/api/accounts')===0) return res({accounts:[{name:'admin',created:Date.now()-86400000*2}]});
+    if(url.indexOf('/api/accounts')===0) return res({me:{id:ME.id,role:ME.role,name:ME.name},accounts:[
+      {id:'admin',name:'admin',role:'admin',passwordDefault:true,online:ME.id==='admin',sessions:ME.id==='admin'?1:0,usedToday:0,limitMin:0,remainingSec:null,schedule:null,lastLogin:ME.id==='admin'?Date.now()-600000:null},
+      {id:'user',name:'user',role:'user',passwordDefault:false,online:true,sessions:1,usedToday:4320,limitMin:120,remainingSec:2880,schedule:{mode:'allow',windows:[{days:[1,2,3,4,5],from:'08:00',to:'22:00'}]},lastLogin:Date.now()-3600000}]});
     if(url.indexOf('/api/photos')===0){
       var m=url.match(/album=([^&]+)/);
       if(!m) return res({albums:[{id:'1',name:'Screenshots',count:14,cover:0},{id:'2',name:'DCIM',count:128,cover:0},{id:'3',name:'Download',count:9,cover:0},{id:'4',name:'Pictures',count:33,cover:0}]});
@@ -882,7 +896,8 @@ document.addEventListener('click',function(e){
   var mdl=e.target.closest&&e.target.closest('[data-mdel]'); if(mdl){ delMsg(mdl.getAttribute('data-mdel')); return; }
   var se=e.target.closest&&e.target.closest('[data-sel]'); if(se){ selAction(se.getAttribute('data-sel')); return; }
   var bl=e.target.closest&&e.target.closest('[data-block]'); if(bl){ blockDevice(bl.getAttribute('data-block'),bl.getAttribute('data-to')==='1'); return; }
-  var da=e.target.closest&&e.target.closest('[data-delacc]'); if(da){ deleteAdmin(da.getAttribute('data-delacc')); return; }
+  var ae=e.target.closest&&e.target.closest('[data-accedit]'); if(ae){ var a1=ACC.list.filter(function(x){return x.id===ae.getAttribute('data-accedit');})[0]; if(a1) accCredDlg(a1); return; }
+  var al2=e.target.closest&&e.target.closest('[data-acclim]'); if(al2){ var a2=ACC.list.filter(function(x){return x.id===al2.getAttribute('data-acclim');})[0]; if(a2) accLimitDlg(a2); return; }
   var fr=e.target.closest&&e.target.closest('[data-fsel]');
   if(fr && isAdmin && !(e.target.closest&&e.target.closest('a,button'))){
     var ix=parseInt(fr.getAttribute('data-fsel'),10), itx=FS.items[ix];
@@ -906,7 +921,7 @@ function moveGlass(i,instant){
   glass.style.width=w+'px'; glass.style.transform='translateX('+x+'px)';
   if(instant){ void glass.offsetWidth; glass.classList.remove('snap'); }
 }
-var ORDER=['home','videos','audio','photos','folders','settings','mail','tools'], GO_TOK=0;
+var ORDER=['home','videos','audio','photos','folders','settings','mail','tools','accounts'], GO_TOK=0;
 function go(name){
   var k=ORDER.indexOf(name); if(k<0){ name='home'; k=0; }
   var ti=-1; TABS.forEach(function(t,n){ if(t[0]===name) ti=n; });
@@ -928,6 +943,7 @@ function go(name){
     if(name==='photos') loadAlbums();
     if(name==='folders') loadDir(FS.path);
     if(name==='mail') startMail(); else stopMail();
+    if(name==='accounts') startAcc(); else stopAcc();
   }); });
 }
 window.addEventListener('hashchange',function(){go(location.hash.slice(1)||'home');});
@@ -939,12 +955,11 @@ $('scrim').addEventListener('click',closeDrawer);
 $('statusBtn').addEventListener('click',function(e){e.stopPropagation(); $('pop').classList.toggle('show');});
 document.addEventListener('click',function(){$('pop').classList.remove('show');});
 function setSub(name){
-  var m={server:' s-server',app:' s-app',devices:' s-dev',accounts:' s-acc',net:' s-net'};
+  var m={server:' s-server',app:' s-app',devices:' s-dev',net:' s-net'};
   $('setBox').className='set'+(m[name]||'');
   Array.prototype.forEach.call(document.querySelectorAll('.sm,.dm'),function(b){ b.classList.toggle('on',b.getAttribute('data-sub')===name); });
   clearInterval(devTimer); clearTimeout(LAN.timer);
   if(name==='devices') devTab(DEVTAB);
-  if(name==='accounts') loadAccounts();
   if(name==='net') loadNet();
 }
 $('copyBtn').addEventListener('click',function(){
@@ -1060,7 +1075,7 @@ function pollStatus(){
     if(r.status===401){ location.replace('/'); return null; }
     return r.json();
   }).then(function(j){
-    if(!j) return; var rtt=Math.round(nowMs()-t0); failCount=0; setOnline(true);
+    if(!j||lockCheck(j)) return; var rtt=Math.round(nowMs()-t0); failCount=0; setOnline(true);
     if(j.disk){ DISK=j.disk; drawDisk(); }
     var w=j.wifi||{}, useApp=(SIGMODE==='app'&&typeof w.level==='number'), lv=useApp? w.level : levelFromRtt(rtt);
     setWifi(lv,{rtt:rtt,rssi:(useApp&&typeof w.rssi==='number')?w.rssi:null,src:useApp?'app':'rtt'});
@@ -1080,7 +1095,7 @@ function loadDevices(){
 function renderDevices(j){
   var list=j.devices||[], now=j.now||Date.now();
   $('devCount').textContent='Всего: '+list.length+', в сети: '+list.filter(function(d){return d.online;}).length;
-  $('devNote').textContent=isAdmin? '' : 'Блокировать устройства может администратор. Войдите под учётной записью администратора (раздел «Учётные записи»).';
+  $('devNote').textContent=isAdmin? '' : 'Блокировать устройства может администратор. Войдите под учётной записью администратора.';
   var first=!$('devs')._h;
   var dhtml=list.length? list.map(function(d,i){
     var kind=d.kind==='pc'?'pc':d.kind==='tablet'?'tablet':'phone';
@@ -1100,6 +1115,9 @@ function opErr(e){
   var c=e&&e.code;
   if(c==='admin_required') return 'Нужны права администратора';
   if(c==='busy') return 'Сканирование уже идёт';
+  if(c==='default_password') return 'Сначала смените стандартный пароль администратора (раздел «Учётные записи»)';
+  if(c==='bad_current') return 'Неверный текущий пароль';
+  if(c==='login_taken') return 'Такой логин уже используется';
   if(c==='bad_setup_password') return 'Неверный пароль создания администратора';
   if(c==='rate_limited') return 'Слишком много попыток. Подождите несколько минут';
   if(c==='exists') return 'Такая учётная запись уже есть';
@@ -1111,30 +1129,104 @@ function opErr(e){
   if(c==='no_access') return 'Нет доступа к файлам. Разрешите приложению доступ ко всем файлам';
   return 'Не удалось выполнить действие';
 }
-function loadAccounts(){
-  $('meName').textContent=ME.name||'гость'; $('meRole').textContent=isAdmin?'Администратор':'Пользователь (просмотр и скачивание)';
-  var box=$('adList'); if(!isAdmin){ box.innerHTML=''; return; }
-  api('/api/accounts').then(function(j){
-    var a=j.accounts||[];
-    box.innerHTML='<div class="pt" style="margin-top:16px"><h3>Учётные записи администраторов</h3></div><div class="devs">'+(a.length? a.map(function(x){
-      return '<div class="dev"><div class="di">'+ic('shield')+'</div><div class="dm2"><b>'+esc(x.name)+' <span class="bdg adm">админ</span></b><small>Создана: '+fmtDT(x.created)+'</small></div>'+
-        (x.name===ME.name?'':'<button class="btn-danger" data-delacc="'+esc(x.name)+'">'+ic('trash')+'Удалить</button>')+'</div>';
-    }).join('') : '<div class="empty">Администраторов пока нет</div>')+'</div>';
-  }).catch(function(){ box.innerHTML=''; });
+/* ---------- УЧЁТНЫЕ ЗАПИСИ: администратор и пользователь, смена логина и пароля, ограничения времени ---------- */
+var ACC={timer:0,list:[]}, DAYN=['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
+function startAcc(){ stopAcc(); loadAcc(); ACC.timer=setInterval(function(){ if($('v-accounts').classList.contains('on') && $('fdlg').className.indexOf('show')<0) loadAcc(); },5000); }
+function stopAcc(){ clearInterval(ACC.timer); ACC.timer=0; }
+function loadAcc(){ api('/api/accounts').then(renderAcc).catch(function(e){ $('accList').innerHTML=emptyHtml('user',e&&e.code==='auth_required'?'Учётные записи работают при включённой защите паролем':'Не удалось загрузить учётные записи'); }); }
+function schedText(s){
+  if(!s||s.mode==='off'||!(s.windows||[]).length) return 'Вход в любое время';
+  var w=s.windows.map(function(x){ var d=(x.days&&x.days.length&&x.days.length<7)? x.days.map(function(i){return DAYN[i];}).join(',') : 'каждый день'; return d+' '+x.from+'–'+x.to; }).join('; ');
+  return (s.mode==='allow'?'Вход только: ':'Вход запрещён: ')+w;
 }
-function deleteAdmin(name){
-  dlg({title:'Удалить учётную запись?',text:'Администратор «'+name+'» больше не сможет войти.',ok:'Удалить',danger:true},function(){
-    post('/api/accounts/delete',{name:name}).then(function(){ toast('Учётная запись удалена'); loadAccounts(); }).catch(function(e){ toast(opErr(e)); });
+function renderAcc(j){
+  ACC.list=j.accounts||[];
+  if(j.me){ ME.id=j.me.id; ME.role=j.me.role; if(j.me.name) ME.name=j.me.name; isAdmin=(ME.role==='admin'); }
+  $('accMe').textContent='Вы: '+(ME.name||'')+' · '+(isAdmin?'администратор':'пользователь');
+  var mine=ACC.list.filter(function(a){ return a.id===ME.id; })[0];
+  $('accBanner').innerHTML=(mine&&mine.passwordDefault)? '<div class="warnbox">'+ic('shield')+'<span>Вы используете стандартный пароль. Смените его кнопкой «Логин и пароль» на своей учётной записи.'+(isAdmin?' Пока пароль администратора стандартный, изменение файлов, блокировка устройств и ограничения недоступны.':'')+'</span></div>' : '';
+  var el=$('accList'), first=!el._h;
+  var html=ACC.list.map(function(a,i){
+    var me=(a.id===ME.id), canCred=isAdmin||me, canLim=isAdmin&&a.id==='user';
+    var left=(a.limitMin>0)? ((a.remainingSec||0)<=0?'лимит исчерпан':fmtDur(a.remainingSec)) : 'без ограничений';
+    return '<div class="dev i3d'+(first?' in':'')+(a.online?' on':'')+'" style="--n:'+i+'"><div class="di">'+ic(a.role==='admin'?'shield':'user')+'<i></i></div><div class="dm2"><b>'+esc(a.name)+' '+
+      (a.role==='admin'?'<span class="bdg adm">администратор</span>':'<span class="bdg usr">пользователь</span>')+(me?' <span class="bdg me">это вы</span>':'')+(a.passwordDefault?' <span class="bdg blk">стандартный пароль</span>':'')+'</b>'+
+      '<small>'+(a.online?'В сети · сессий: '+(a.sessions||1):'Не в сети')+(a.lastLogin?' · последний вход: '+fmtDT(a.lastLogin):'')+'</small>'+
+      '<small>Сегодня на сервере: '+fmtDur(a.usedToday||0)+' · Осталось: '+left+'</small><small>'+esc(schedText(a.schedule))+'</small></div>'+
+      '<div class="accb">'+(canCred?'<button class="selbtn" data-accedit="'+esc(a.id)+'">'+ic('edit')+'Логин и пароль</button>':'')+(canLim?'<button class="selbtn" data-acclim="'+esc(a.id)+'">'+ic('anim')+'Ограничения</button>':'')+'</div></div>';
+  }).join('');
+  if(el._h!==html){ el.innerHTML=html; el._h=html; after3d(el); }
+}
+/* форма с несколькими полями */
+var fdCb=null;
+function formDlg(o,cb){
+  $('fT').textContent=o.title||''; $('fH').textContent=o.hint||''; $('fBody').innerHTML=o.body||''; $('fErr').textContent=''; $('fYes').textContent=o.ok||'OK';
+  fdCb=cb; $('fdlg').className='dlg show'; var f=$('fBody').querySelector('input'); if(f) setTimeout(function(){ f.focus(); },80);
+}
+$('fNo').addEventListener('click',function(){ $('fdlg').className='dlg'; fdCb=null; });
+$('fYes').addEventListener('click',function(){
+  if(!fdCb) return; $('fYes').disabled=true;
+  fdCb(function(){ $('fdlg').className='dlg'; fdCb=null; $('fYes').disabled=false; },function(msg){ $('fErr').textContent=msg; $('fYes').disabled=false; });
+});
+function accCredDlg(a){
+  var me=(a.id===ME.id);
+  var cur=me?'Текущий пароль':(isAdmin?'Ваш пароль администратора или текущий пароль этой учётной записи':'Текущий пароль');
+  formDlg({title:'Логин и пароль: '+(a.id==='admin'?'администратор':'пользователь'),
+    hint:a.passwordDefault?'Пароль ещё не менялся: введите стандартный пароль (он показан в приложении на странице раздачи).':'Введите текущий пароль, чтобы подтвердить смену.',
+    body:'<input class="fld" id="fCur" type="password" placeholder="'+esc(cur)+'" autocomplete="off">'+
+      '<input class="fld" id="fLogin" placeholder="Новый логин" value="'+esc(a.name)+'" autocomplete="off" autocapitalize="none" spellcheck="false">'+
+      '<input class="fld" id="fNew" type="password" placeholder="Новый пароль (пусто = не менять)" autocomplete="new-password">'+
+      '<input class="fld" id="fNew2" type="password" placeholder="Повторите новый пароль" autocomplete="new-password">',ok:'Сохранить'},function(done,fail){
+    var c=$('fCur').value, l=$('fLogin').value.trim(), p=$('fNew').value, p2=$('fNew2').value;
+    if(!c){ fail('Введите текущий пароль'); return; }
+    if(!/^[A-Za-z0-9._-]{3,32}$/.test(l)){ fail('Логин: 3-32 символа, буквы, цифры, точка, дефис, подчёркивание'); return; }
+    if(p&&p!==p2){ fail('Новые пароли не совпадают'); return; }
+    if(l===a.name&&!p){ fail('Ничего не изменено'); return; }
+    post('/api/accounts/update',{id:a.id,currentPassword:c,newLogin:(l!==a.name?l:null),newPassword:p||null}).then(function(r){
+      done(); if(me&&r&&r.name) ME.name=r.name; toast('Данные сохранены'); $('accList')._h=''; loadAcc();
+    }).catch(function(e){ var k=e&&e.code; fail(k==='bad_current'?'Неверный текущий пароль':k==='login_taken'?'Такой логин уже используется':k==='weak_password'?'Пароль слишком короткий':k==='bad_login'?'Недопустимый логин':k==='nothing_to_change'?'Ничего не изменено':opErr(e)); });
   });
 }
-$('adBtn').addEventListener('click',function(){
-  var n=$('adName').value.trim(), p=$('adPass').value, sp=$('adSetup').value;
-  if(!n||!p||!sp){ toast('Заполните все три поля'); return; }
-  $('adBtn').disabled=true;
-  post('/api/accounts/create-admin',{name:n,password:p,setupPassword:sp}).then(function(){
-    toast('Администратор создан'); $('adName').value=''; $('adPass').value=''; $('adSetup').value=''; loadAccounts();
-  }).catch(function(e){ toast(opErr(e)); }).then(function(){ $('adBtn').disabled=false; });
-});
+function winRow(w){
+  var days=[1,2,3,4,5,6,0].map(function(d){ var on=(!w.days||!w.days.length||w.days.indexOf(d)>-1); return '<button class="dchip'+(on?' on':'')+'" data-d="'+d+'" type="button">'+DAYN[d]+'</button>'; }).join('');
+  return '<div class="win"><div class="days">'+days+'</div><input class="fld tm" type="time" value="'+esc(w.from||'08:00')+'"><span>–</span><input class="fld tm" type="time" value="'+esc(w.to||'22:00')+'"><button class="selbtn" data-rw type="button">'+ic('x')+'</button></div>';
+}
+function accLimitDlg(a){
+  var sc=a.schedule||{mode:'off',windows:[]}, mode=sc.mode||'off';
+  formDlg({title:'Ограничения: '+a.name,hint:'Ограничения действуют на пользователя. Администратор не ограничивается. Время телефона.',
+    body:'<label class="flb">Лимит времени на сервере в день, минут (0 = без лимита)</label><input class="fld" id="fLim" type="number" min="0" max="1440" value="'+(a.limitMin||0)+'">'+
+      '<label class="flb">Когда можно входить</label><div class="seg" style="padding:0 0 8px"><button class="segb" data-lm="off" type="button">В любое время</button><button class="segb" data-lm="allow" type="button">Только в интервалы</button><button class="segb" data-lm="deny" type="button">Запретить интервалы</button></div>'+
+      '<div id="fWin"></div><button class="selbtn" id="fAddWin" type="button">+ Добавить интервал</button>',ok:'Сохранить'},function(done,fail){
+    var lim=parseInt($('fLim').value,10)||0; if(lim<0||lim>1440){ fail('Лимит: от 0 до 1440 минут'); return; }
+    var wins=[]; if(mode!=='off'){
+      var rows=$('fWin').querySelectorAll('.win');
+      for(var i=0;i<rows.length;i++){
+        var ds=[]; Array.prototype.forEach.call(rows[i].querySelectorAll('.dchip.on'),function(c){ ds.push(parseInt(c.getAttribute('data-d'),10)); });
+        var ts=rows[i].querySelectorAll('input'), f=ts[0].value, t=ts[1].value;
+        if(!f||!t||f===t){ fail('Укажите время начала и конца (они не должны совпадать)'); return; }
+        wins.push({days:ds.length?ds:[0,1,2,3,4,5,6],from:f,to:t});
+      }
+      if(!wins.length){ fail('Добавьте хотя бы один интервал'); return; }
+    }
+    post('/api/accounts/limits',{id:a.id,limitMin:lim,schedule:{mode:mode,windows:wins}}).then(function(){ done(); toast('Ограничения сохранены'); $('accList')._h=''; loadAcc(); })
+    .catch(function(e){ fail(e&&e.code==='bad_limits'?'Некорректные ограничения':opErr(e)); });
+  });
+  function paint(){ Array.prototype.forEach.call($('fBody').querySelectorAll('[data-lm]'),function(b){ b.classList.toggle('on',b.getAttribute('data-lm')===mode); }); $('fWin').style.display=$('fAddWin').style.display=(mode==='off')?'none':''; }
+  $('fWin').innerHTML=(sc.windows||[]).map(winRow).join(''); paint();
+  $('fBody').onclick=function(e){
+    var m=e.target.closest&&e.target.closest('[data-lm]'); if(m){ mode=m.getAttribute('data-lm'); if(mode!=='off'&&!$('fWin').children.length) $('fWin').innerHTML=winRow({days:[1,2,3,4,5],from:'08:00',to:'22:00'}); paint(); return; }
+    var d=e.target.closest&&e.target.closest('.dchip'); if(d){ d.classList.toggle('on'); return; }
+    var r=e.target.closest&&e.target.closest('[data-rw]'); if(r){ var w=r.parentNode; w.parentNode.removeChild(w); return; }
+    if(e.target.id==='fAddWin'||(e.target.closest&&e.target.closest('#fAddWin'))){ $('fWin').insertAdjacentHTML('beforeend',winRow({days:[1,2,3,4,5,6,0],from:'08:00',to:'22:00'})); }
+  };
+}
+/* экран блокировки: время закончилось или вход сейчас запрещён */
+function lockCheck(j){
+  if(!j||!(j.error==='time_limit'||j.error==='schedule_blocked')) return false;
+  $('lkT').textContent=(j.error==='time_limit')?'Время на сервере закончилось':'Сейчас вход запрещён';
+  $('lkP').textContent=(j.error==='time_limit')?'Дневной лимит времени для этой учётной записи исчерпан. Доступ откроется завтра или когда администратор изменит ограничения.':'Администратор разрешил вход только в определённое время. Попробуйте позже.';
+  $('lock').className='dlg show'; return true;
+}
 
 /* ---------- диалог ---------- */
 var dlgCb=null;
@@ -1459,14 +1551,13 @@ function drawDisk(){
   if(DISK&&DISK.total>0){
     var t=DISK.total, f=Math.max(0,Math.min(t,DISK.free)), mp=Math.min(100,media/t*100), up=Math.min(100,(t-f)/t*100);
     $('stF').textContent=fmtSize(f); $('stBm').style.width=mp+'%'; $('stBo').style.width=Math.max(0,up-mp)+'%';
-    $('stT').textContent='Всего '+fmtSize(t)+' · занято '+fmtSize(t-f);
-  } else { $('stF').textContent='—'; $('stBm').style.width='0'; $('stBo').style.width='0'; $('stT').textContent='Свободная память пока недоступна'; }
+  } else { $('stF').textContent='—'; $('stBm').style.width='0'; $('stBo').style.width='0'; }
 }
 /* ---------- видео и фото на весь экран ---------- */
 var PFS_REAL=false, WAS_FS=false;
 function playerFs(on){
   var m=$('modal'), want=(on===undefined)? !m.classList.contains('full') : !!on;
-  m.classList.toggle('full',want);
+  m.classList.toggle('full',want); document.body.classList.toggle('pfs',want); m.classList.remove('idle'); clearTimeout(IDLE_T); if(want) wakeBar();
   var d=document.documentElement;
   if(want){
     WAS_FS=!!fsElem();
@@ -1480,8 +1571,17 @@ function playerFs(on){
 }
 $('pfs').addEventListener('click',function(){ playerFs(); });
 $('pv').addEventListener('dblclick',function(){ playerFs(); });
-document.addEventListener('fullscreenchange',function(){ if(!fsElem() && PFS_REAL && $('modal').classList.contains('full')){ PFS_REAL=false; $('modal').classList.remove('full'); } });
-document.addEventListener('webkitfullscreenchange',function(){ if(!fsElem() && PFS_REAL && $('modal').classList.contains('full')){ PFS_REAL=false; $('modal').classList.remove('full'); } });
+var IDLE_T=0;
+function wakeBar(){
+  var m=$('modal'); m.classList.remove('idle'); clearTimeout(IDLE_T);
+  if(!m.classList.contains('full')) return;
+  IDLE_T=setTimeout(function(){ var v=$('pv'); if(v.style.display==='none'||!v.paused) m.classList.add('idle'); },3000);
+}
+['pointerdown','pointermove','touchstart','keydown','click'].forEach(function(ev){ $('modal').addEventListener(ev,wakeBar,{passive:true}); });
+$('pv').addEventListener('pause',wakeBar); $('pv').addEventListener('play',wakeBar);
+
+document.addEventListener('fullscreenchange',function(){ if(!fsElem() && PFS_REAL && $('modal').classList.contains('full')){ PFS_REAL=false; $('modal').classList.remove('full'); $('modal').classList.remove('idle'); document.body.classList.remove('pfs'); } });
+document.addEventListener('webkitfullscreenchange',function(){ if(!fsElem() && PFS_REAL && $('modal').classList.contains('full')){ PFS_REAL=false; $('modal').classList.remove('full'); $('modal').classList.remove('idle'); document.body.classList.remove('pfs'); } });
 drawDisk();
 
 /* ---------- масштаб макета под экран (на телефоне вертикально: поворот на 90°) ---------- */

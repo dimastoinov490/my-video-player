@@ -307,6 +307,23 @@ fun ExactHtmlVideoLibraryView(
                     settings.useWideViewPort = true
                     settings.loadWithOverviewMode = true
 
+                    webChromeClient = object : android.webkit.WebChromeClient() {
+                        override fun onJsConfirm(
+                            view: WebView?,
+                            url: String?,
+                            message: String?,
+                            result: android.webkit.JsResult?
+                        ): Boolean {
+                            android.app.AlertDialog.Builder(context)
+                                .setMessage(message)
+                                .setPositiveButton("Да") { _, _ -> result?.confirm() }
+                                .setNegativeButton("Отмена") { _, _ -> result?.cancel() }
+                                .setOnCancelListener { result?.cancel() }
+                                .show()
+                            return true
+                        }
+                    }
+
                     webViewClient = object : WebViewClient() {
                         override fun onPageFinished(view: WebView?, url: String?) {
                             super.onPageFinished(view, url)
@@ -443,6 +460,10 @@ fun ExactHtmlVideoLibraryView(
                                 val wifiPass = WifiDirectManager.currentPass
                                 val wifiQr = WifiDirectManager.getWifiQrPayload(wifiSsid, wifiPass)
 
+                                val adminUser = HttpServerConfig.getAdminUsername(context)
+                                val adminDefault = HttpServerConfig.isAdminPasswordDefault(context)
+                                val adminPass = if (adminDefault) HttpServerConfig.DEFAULT_ADMIN_PASSWORD else null
+
                                 val json = JSONObject()
                                 json.put("running", isRunning)
                                 json.put("url", url)
@@ -451,6 +472,9 @@ fun ExactHtmlVideoLibraryView(
                                 json.put("authRequired", authReq)
                                 json.put("username", user)
                                 json.put("password", pass)
+                                json.put("adminUsername", adminUser)
+                                json.put("adminPassword", adminPass ?: JSONObject.NULL)
+                                json.put("adminDefault", adminDefault)
                                 json.put("folder", folder)
 
                                 val wifiJson = JSONObject()
@@ -472,6 +496,16 @@ fun ExactHtmlVideoLibraryView(
                                 json.toString()
                             } catch (e: Exception) {
                                 "{}"
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun shareResetAdmin() {
+                            Handler(Looper.getMainLooper()).post {
+                                HttpServerConfig.resetAdmin(context)
+                                LocalHttpShareServer.closeAdminSessions()
+                                Toast.makeText(context, "Администратор сброшен (admin / admin)", Toast.LENGTH_SHORT).show()
+                                webViewRef?.evaluateJavascript("if (window.onShareState) { window.onShareState(); }", null)
                             }
                         }
 
