@@ -50,6 +50,29 @@ h1 .a{color:var(--text)}h1 .b{color:var(--o2)}
 .or:before,.or:after{content:"";flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.22),transparent)}
 .hint{display:flex;align-items:center;justify-content:center;gap:14px;text-align:left;color:#d9cdc0;font-size:14px;line-height:1.35}
 .hint svg{width:38px;height:38px;color:var(--o2);flex:none}
+
+.foot{display:flex;justify-content:center;align-items:center;margin-top:22px}
+.lnk{background:none;border:0;color:var(--o1);font-size:17px;font-weight:600;cursor:pointer;font-family:inherit}
+.lnk:hover{text-decoration:underline}.foot .dot{color:#6f655b;margin:0 14px}
+.cap2{margin-top:12px;font-size:13.5px;color:var(--muted);line-height:1.45}
+.hint2{margin:0 0 14px;font-size:14px;color:#d9cdc0;line-height:1.45;text-align:left}
+.err.ok{color:#7dec9a}
+.capbox{display:flex;gap:10px;align-items:center;margin-bottom:12px}
+.capbox img{height:52px;width:150px;border-radius:12px;background:#fff;flex:none;object-fit:cover}
+.capbox .rf{flex:none;width:44px;height:52px;border-radius:14px;border:1.5px solid var(--line);background:rgba(255,255,255,.05);color:var(--o2);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.capbox .rf svg{width:22px;height:22px}
+.capbox input{flex:1;min-width:0;height:52px;border-radius:16px;border:1.5px solid var(--line);background:rgba(255,255,255,.05);color:var(--text);font-size:17px;padding:0 14px;outline:none;font-family:inherit;text-transform:uppercase;letter-spacing:2px}
+.capbox input:focus{border-color:var(--o1)}
+.panel{max-height:100%;overflow-y:auto}
+.panel.compact .logo{width:60px;height:60px;margin-bottom:0}
+.panel.compact h1{font-size:30px}
+.panel.compact .sub{margin:6px 0 12px;font-size:17px}
+.panel.compact .field{margin-bottom:10px}
+.panel.compact .field input{height:48px;font-size:16px}
+.panel.compact .btn{height:50px;font-size:17px}
+.back{display:block;margin:12px auto 0}
+#vReg .field input,#vForgot .field input{padding-left:18px}
+.capbox .rf{margin:0 0 0 0}.capbox>*+*{margin-left:10px}
 </style>
 </head>
 <body>
@@ -88,7 +111,8 @@ h1 .a{color:var(--text)}h1 .b{color:var(--o2)}
     <path d="M42 40 L74 60 L42 80 Z" fill="#150a04" stroke="#150a04" stroke-width="8" stroke-linejoin="round"/>
   </svg>
   <h1><span class="a">Nexora</span> <span class="b">Media</span></h1>
-  <p class="sub">Вход в медиа-сервер</p>
+  <p class="sub" id="sub">Вход в медиа-сервер</p>
+  <div id="vLogin">
 
   <form id="form" autocomplete="on" novalidate>
     <div class="field">
@@ -110,10 +134,32 @@ h1 .a{color:var(--text)}h1 .b{color:var(--o2)}
     <div class="err" id="err" role="alert"></div>
   </form>
 
-  <div class="or">или</div>
-  <div class="hint">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 9a15 15 0 0 1 19 0"/><path d="M5.5 12.5a10.5 10.5 0 0 1 13 0"/><path d="M8.7 16a6 6 0 0 1 6.6 0"/><circle cx="12" cy="19.2" r="1.2" fill="currentColor"/></svg>
-    <span>Подключитесь к Wi-Fi серверу<br>для просмотра медиафайлов</span>
+  <div class="foot"><button type="button" class="lnk" id="goReg">Регистрация</button><span class="dot">·</span><button type="button" class="lnk" id="goForgot">Забыл пароль?</button></div>
+  <p class="cap2">Новая учётная запись начинает работать только после одобрения администратора.</p>
+  </div>
+
+  <div id="vReg" style="display:none">
+    <p class="hint2">Придумайте логин и пароль и отправьте заявку. Войти можно будет после одобрения администратором.</p>
+    <div class="field"><input id="rLogin" type="text" placeholder="Логин (3-32 символа)" autocomplete="off" autocapitalize="none" spellcheck="false"></div>
+    <div class="field"><input id="rPass" type="password" placeholder="Пароль (от 4 символов)" autocomplete="new-password"></div>
+    <div class="field"><input id="rPass2" type="password" placeholder="Повторите пароль" autocomplete="new-password"></div>
+    <div class="capbox"><img class="capimg" alt="Проверочный код"><button type="button" class="rf capnew" aria-label="Другой код"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg></button><input class="capin" placeholder="Код" autocomplete="off" autocapitalize="characters" maxlength="8"></div>
+    <button class="btn" id="rGo" type="button"><span>Отправить заявку</span></button>
+    <div class="err" id="rErr" role="alert"></div>
+    <button type="button" class="lnk back" data-back>← Ко входу</button>
+  </div>
+
+  <div id="vForgot" style="display:none">
+    <p class="hint2">Введите логин и ПРЕДЫДУЩИЙ пароль (тот, что был до последней смены), пройдите проверку и задайте новый пароль. Для администратора восстановление делается в приложении на телефоне.</p>
+    <div class="field"><input id="fLogin" type="text" placeholder="Логин" autocomplete="off" autocapitalize="none" spellcheck="false"></div>
+    <div class="field"><input id="fOld" type="password" placeholder="Предыдущий пароль" autocomplete="off"></div>
+    <div class="field"><input id="fNewLogin" type="text" placeholder="Новый логин (необязательно)" autocomplete="off" autocapitalize="none" spellcheck="false"></div>
+    <div class="field"><input id="fNew" type="password" placeholder="Новый пароль" autocomplete="new-password"></div>
+    <div class="field"><input id="fNew2" type="password" placeholder="Повторите новый пароль" autocomplete="new-password"></div>
+    <div class="capbox"><img class="capimg" alt="Проверочный код"><button type="button" class="rf capnew" aria-label="Другой код"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg></button><input class="capin" placeholder="Код" autocomplete="off" autocapitalize="characters" maxlength="8"></div>
+    <button class="btn" id="fGo" type="button"><span>Сменить пароль</span></button>
+    <div class="err" id="fErr" role="alert"></div>
+    <button type="button" class="lnk back" data-back>← Ко входу</button>
   </div>
 </main>
 </div>
@@ -145,10 +191,78 @@ h1 .a{color:var(--text)}h1 .b{color:var(--o2)}
           else if(c==='time_limit') m='Дневной лимит времени на сервере исчерпан';
           else if(c==='rate_limited') m='Слишком много попыток. Подождите несколько минут';
           else if(c==='blocked') m='Это устройство заблокировано администратором';
+          else if(c==='pending_approval') m='Учётная запись ожидает одобрения администратора';
+          else if(c==='rejected') m='Заявка на регистрацию отклонена администратором';
           showErr(m); go.disabled=false; if(!c||c==='bad_credentials') pass.select();
         });
       })
       .catch(function(){ showErr('Нет связи с сервером'); go.disabled=false; });
+  });
+})();
+
+
+/* ---------- регистрация и восстановление пароля ---------- */
+(function(){
+  var panel=document.querySelector('.panel'), sub=document.getElementById('sub');
+  var views={login:document.getElementById('vLogin'),reg:document.getElementById('vReg'),forgot:document.getElementById('vForgot')};
+  var titles={login:'Вход в медиа-сервер',reg:'Регистрация',forgot:'Восстановление пароля'};
+  var cap={id:'',local:''};
+  function setView(v){
+    Object.keys(views).forEach(function(k){ views[k].style.display=(k===v)?'':'none'; });
+    sub.textContent=titles[v]; panel.className='panel'+(v==='login'?'':' compact'); panel.scrollTop=0;
+    ['rErr','fErr','err'].forEach(function(id){ var e=document.getElementById(id); if(e) e.className='err'; });
+    if(v!=='login') loadCaptcha();
+  }
+  function localCaptcha(){
+    var c=document.createElement('canvas'); c.width=300; c.height=104; var x=c.getContext('2d'), t='';
+    var A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; for(var i=0;i<5;i++) t+=A.charAt(Math.floor(Math.random()*A.length));
+    x.fillStyle='#fff'; x.fillRect(0,0,300,104);
+    for(var k=0;k<7;k++){ x.strokeStyle='rgba(60,60,60,.45)'; x.beginPath(); x.moveTo(Math.random()*300,Math.random()*104); x.lineTo(Math.random()*300,Math.random()*104); x.stroke(); }
+    x.font='bold 54px sans-serif'; x.textBaseline='middle';
+    for(var j=0;j<5;j++){ x.save(); x.translate(26+j*50,52+(Math.random()*12-6)); x.rotate((Math.random()-.5)*.6); x.fillStyle='#222'; x.fillText(t.charAt(j),0,0); x.restore(); }
+    cap.local=t; return c.toDataURL('image/png');
+  }
+  function setCap(img){ Array.prototype.forEach.call(document.querySelectorAll('.capimg'),function(i){ i.src=img; }); Array.prototype.forEach.call(document.querySelectorAll('.capin'),function(i){ i.value=''; }); }
+  function loadCaptcha(){
+    if(location.protocol==='file:'){ cap.id='local'; setCap(localCaptcha()); return; }
+    fetch('/api/captcha',{cache:'no-store',credentials:'same-origin'}).then(function(r){ return r.json(); }).then(function(j){ cap.id=j.id; setCap(j.image); }).catch(function(){ cap.id=''; });
+  }
+  function post(url,obj){
+    return fetch(url,{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json','X-Nexora':'1'},body:JSON.stringify(obj)}).then(function(r){ return r.json().catch(function(){ return {}; }).then(function(j){ return {ok:r.ok,j:j}; }); });
+  }
+  function msg(el,t,ok){ el.textContent=t; el.className='err show'+(ok?' ok':''); }
+  var ERR={bad_captcha:'Неверный код с картинки',login_taken:'Такой логин уже занят',bad_login:'Логин: 3-32 символа, буквы, цифры, точка, дефис, подчёркивание',weak_password:'Пароль слишком короткий',rate_limited:'Слишком много попыток. Подождите несколько минут',registration_closed:'Приём заявок сейчас закрыт администратором',auth_required:'На сервере выключена защита паролем',blocked:'Это устройство заблокировано администратором',bad_old:'Неверный логин или предыдущий пароль',locked:'Слишком много неверных попыток. Попробуйте позже',not_allowed:'Для этой учётной записи восстановление недоступно. Обратитесь к администратору',too_many:'Слишком много заявок. Попробуйте позже'};
+  document.getElementById('goReg').addEventListener('click',function(){ setView('reg'); });
+  document.getElementById('goForgot').addEventListener('click',function(){ setView('forgot'); });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-back]'),function(b){ b.addEventListener('click',function(){ setView('login'); }); });
+  Array.prototype.forEach.call(document.querySelectorAll('.capnew'),function(b){ b.addEventListener('click',loadCaptcha); });
+  function capVal(view){ return view.querySelector('.capin').value.trim(); }
+  document.getElementById('rGo').addEventListener('click',function(){
+    var e=document.getElementById('rErr'), l=document.getElementById('rLogin').value.trim(), p=document.getElementById('rPass').value, p2=document.getElementById('rPass2').value, c=capVal(views.reg);
+    if(!/^[A-Za-z0-9._-]{3,32}$/.test(l)) return msg(e,ERR.bad_login);
+    if(p.length<4) return msg(e,ERR.weak_password);
+    if(p!==p2) return msg(e,'Пароли не совпадают');
+    if(!c) return msg(e,'Введите код с картинки');
+    var b=this; b.disabled=true;
+    post('/api/register',{login:l,password:p,captchaId:cap.id,captcha:c}).then(function(r){
+      b.disabled=false;
+      if(r.ok){ msg(e,'Заявка отправлена. Дождитесь одобрения администратора, затем войдите.',true); document.getElementById('rPass').value=''; document.getElementById('rPass2').value=''; return; }
+      var k=r.j&&r.j.error; msg(e,ERR[k]||'Не удалось отправить заявку'); loadCaptcha();
+    }).catch(function(){ b.disabled=false; msg(e,'Нет связи с сервером'); });
+  });
+  document.getElementById('fGo').addEventListener('click',function(){
+    var e=document.getElementById('fErr'), l=document.getElementById('fLogin').value.trim(), o=document.getElementById('fOld').value, nl=document.getElementById('fNewLogin').value.trim(), p=document.getElementById('fNew').value, p2=document.getElementById('fNew2').value, c=capVal(views.forgot);
+    if(!l||!o) return msg(e,'Введите логин и предыдущий пароль');
+    if(nl&&!/^[A-Za-z0-9._-]{3,32}$/.test(nl)) return msg(e,ERR.bad_login);
+    if(p.length<4) return msg(e,ERR.weak_password);
+    if(p!==p2) return msg(e,'Новые пароли не совпадают');
+    if(!c) return msg(e,'Введите код с картинки');
+    var b=this; b.disabled=true;
+    post('/api/forgot',{login:l,oldPassword:o,newLogin:nl||null,newPassword:p,captchaId:cap.id,captcha:c}).then(function(r){
+      b.disabled=false;
+      if(r.ok){ document.getElementById('user').value=(nl||l); setView('login'); var er=document.getElementById('err'); er.textContent='Пароль изменён. Войдите с новым паролем.'; er.className='err show ok'; return; }
+      var k=r.j&&r.j.error; msg(e,ERR[k]||'Не удалось сменить пароль'); loadCaptcha();
+    }).catch(function(){ b.disabled=false; msg(e,'Нет связи с сервером'); });
   });
 })();
 

@@ -7,6 +7,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.*
+import java.util.concurrent.ConcurrentHashMap
 
 data class ScheduleWindow(
     val days: List<Int>, // 0..6 (0 = Sunday)
@@ -91,11 +92,14 @@ object UserLimitsManager {
     private const val KEY_USED_TODAY_SEC = "used_today_sec"
     private const val KEY_LAST_DATE = "last_date"
     private const val KEY_SCHEDULE_JSON = "schedule_json"
+    private const val KEY_ACCOUNTS_USAGE_JSON = "accounts_usage_json"
 
-    @Volatile private var cachedUsedTodaySec: Long = 0L
+    // Multi-account usage map: accountId -> usedSeconds
+    private val accountUsedSec = ConcurrentHashMap<String, Long>()
+
     @Volatile private var cachedLastDate: String = ""
-    @Volatile private var cachedLimitMin: Int = 0
-    @Volatile private var cachedSchedule: UserSchedule = UserSchedule()
+    @Volatile private var cachedLimitMin: Int = 0 // for fixed "user"
+    @Volatile private var cachedSchedule: UserSchedule = UserSchedule() // for fixed "user"
     @Volatile private var lastDiskSaveTime: Long = 0L
     @Volatile private var isLoaded = false
 
@@ -110,7 +114,7 @@ object UserLimitsManager {
         if (isLoaded) return
         val prefs = getPrefs(context)
         cachedLimitMin = prefs.getInt(KEY_LIMIT_MIN, 0)
-        cachedUsedTodaySec = prefs.getLong(KEY_USED_TODAY_SEC, 0L)
+        val legacyUsed = prefs.getLong(KEY_USED_TODAY_SEC, 0L)
         cachedLastDate = prefs.getString(KEY_LAST_DATE, "") ?: ""
         val schedStr = prefs.getString(KEY_SCHEDULE_JSON, null)
         cachedSchedule = if (!schedStr.isNullOrEmpty()) {
@@ -122,6 +126,25 @@ object UserLimitsManager {
         } else {
             UserSchedule()
         }
+
+        accountUsedSec.clear()
+        if (legacyUsed > 0L) {
+            accountUsedSec["user"] = legacyUsed
+        }
+        val usageStr = prefs.getString(KEY_ACCOUNTS_USAGE_JSON, null)
+        if (!usageStr.isNullOrEmpty()) {
+            try {
+                val usageObj = JSONObject(usageStr)
+                val keys = usageObj.keys()
+                while (keys.hasNext()) {
+                    val k = keys.next()
+                    accountUsedSec[k] = usageObj.optLong(k, 0L)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Error parsing usage json: ${e.message}")
+            }
+        }
+
         isLoaded = true
         checkDateResetLocked(context)
     }
@@ -135,7 +158,7 @@ object UserLimitsManager {
         val today = getCurrentDateString()
         if (cachedLastDate != today) {
             cachedLastDate = today
-            cachedUsedTodaySec = 0L
+            accountUsedSec.clear()
             saveToDisk(context, force = true)
         }
     }
@@ -143,23 +166,27 @@ object UserLimitsManager {
     @Synchronized
     private fun saveToDisk(context: Context, force: Boolean = false) {
         val now = System.currentTimeMillis()
-        if (!force && (now - lastDiskSaveTime < 30_000L)) {
+        if (!force && (now - lastDiskSaveTime < 15_000L)) {
             return
         }
         lastDiskSaveTime = now
         val prefs = getPrefs(context)
+        val usageObj = JSONObject()
+        accountUsedSec.forEach { (accId, sec) -> usageObj.put(accId, sec) }
+
         prefs.edit()
             .putInt(KEY_LIMIT_MIN, cachedLimitMin)
-            .putLong(KEY_USED_TODAY_SEC, cachedUsedTodaySec)
+            .putLong(KEY_USED_TODAY_SEC, accountUsedSec["user"] ?: 0L)
             .putString(KEY_LAST_DATE, cachedLastDate)
             .putString(KEY_SCHEDULE_JSON, cachedSchedule.toJson().toString())
+            .putString(KEY_ACCOUNTS_USAGE_JSON, usageObj.toString())
             .apply()
     }
 
-    fun getUsedTodaySeconds(context: Context): Long {
+    fun getUsedTodaySeconds(context: Context, accountId: String = "user"): Long {
         loadIfNeeded(context)
         checkDateResetLocked(context)
-        return cachedUsedTodaySec
+        return accountUsedSec[accountId] ?: 0L
     }
 
     fun getLimitMin(context: Context): Int {
@@ -169,12 +196,17 @@ object UserLimitsManager {
 
     fun getLimitMinutes(context: Context): Int = getLimitMin(context)
 
-    fun getRemainingSeconds(context: Context): Long? {
+    fun getRemainingSeconds(context: Context, accountId: String, limitMin: Int): Long? {
         loadIfNeeded(context)
         checkDateResetLocked(context)
-        if (cachedLimitMin <= 0) return null
-        val totalAllowed = cachedLimitMin * 60L
-        return maxOf(0L, totalAllowed - cachedUsedTodaySec)
+        if (limitMin <= 0) return null
+        val used = accountUsedSec[accountId] ?: 0L
+        val totalAllowed = limitMin * 60L
+        return maxOf(0L, totalAllowed - used)
+    }
+
+    fun getRemainingSeconds(context: Context): Long? {
+        return getRemainingSeconds(context, "user", getLimitMin(context))
     }
 
     fun getSchedule(context: Context): UserSchedule {
@@ -194,13 +226,17 @@ object UserLimitsManager {
     fun getScheduleJsonObject(context: Context): JSONObject? = getScheduleJson(context)
 
     @Synchronized
-    fun addActiveSeconds(context: Context, seconds: Long) {
+    fun addActiveSeconds(context: Context, accountId: String, seconds: Long) {
         if (seconds <= 0) return
         loadIfNeeded(context)
         checkDateResetLocked(context)
-        cachedUsedTodaySec += seconds
-        val isExceeded = cachedLimitMin > 0 && cachedUsedTodaySec >= cachedLimitMin * 60L
-        saveToDisk(context, force = isExceeded)
+        val current = accountUsedSec[accountId] ?: 0L
+        accountUsedSec[accountId] = current + seconds
+        saveToDisk(context, force = false)
+    }
+
+    fun addActiveSeconds(context: Context, seconds: Long) {
+        addActiveSeconds(context, "user", seconds)
     }
 
     @Synchronized
@@ -212,16 +248,25 @@ object UserLimitsManager {
         saveToDisk(context, force = true)
     }
 
-    fun isTimeLimitExceeded(context: Context): Boolean {
+    fun clearAccountData(context: Context, accountId: String) {
         loadIfNeeded(context)
-        checkDateResetLocked(context)
-        if (cachedLimitMin <= 0) return false
-        return cachedUsedTodaySec >= (cachedLimitMin * 60L)
+        accountUsedSec.remove(accountId)
+        saveToDisk(context, force = true)
     }
 
-    fun isScheduleAllowed(context: Context): Boolean {
+    fun isTimeLimitExceeded(context: Context, accountId: String, limitMin: Int): Boolean {
         loadIfNeeded(context)
-        val schedule = cachedSchedule
+        checkDateResetLocked(context)
+        if (limitMin <= 0) return false
+        val used = accountUsedSec[accountId] ?: 0L
+        return used >= (limitMin * 60L)
+    }
+
+    fun isTimeLimitExceeded(context: Context): Boolean {
+        return isTimeLimitExceeded(context, "user", getLimitMin(context))
+    }
+
+    fun isScheduleAllowed(schedule: UserSchedule): Boolean {
         if (schedule.mode == "off" || schedule.windows.isEmpty()) {
             return true
         }
@@ -242,9 +287,7 @@ object UserLimitsManager {
                 w.days.contains(dayOfWeek) && currentMinute in fMin until tMin
             } else {
                 // Crossing midnight: from day of start until next day's to
-                // Part 1: current day started today
                 (w.days.contains(dayOfWeek) && currentMinute >= fMin) ||
-                // Part 2: current day is day after start
                 (w.days.contains((dayOfWeek + 6) % 7) && currentMinute < tMin)
             }
 
@@ -259,6 +302,11 @@ object UserLimitsManager {
             "deny" -> !matchedAnyWindow
             else -> true
         }
+    }
+
+    fun isScheduleAllowed(context: Context): Boolean {
+        loadIfNeeded(context)
+        return isScheduleAllowed(cachedSchedule)
     }
 
     fun validateLimits(limitMin: Int, scheduleObj: JSONObject?): Pair<Boolean, UserSchedule?> {

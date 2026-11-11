@@ -148,7 +148,7 @@ a{color:inherit;text-decoration:none}
   border:1.2px solid rgba(255,150,30,.65);
   background:linear-gradient(180deg,rgba(255,170,60,.17),rgba(255,120,0,.05) 70%),rgba(20,10,4,.35);
   box-shadow:0 0 16px rgba(255,120,0,.42),inset 0 0 14px rgba(255,138,0,.14),inset 0 1px 0 rgba(255,225,170,.30);
-  transition:transform .6s cubic-bezier(.34,1.32,.5,1),opacity .3s;will-change:transform}
+  transition:transform .45s cubic-bezier(.22,1,.36,1),opacity .3s;will-change:transform}
 .glass:after{content:"";position:absolute;left:12%;right:12%;top:1px;height:42%;border-radius:18px 18px 40% 40%;background:linear-gradient(180deg,rgba(255,235,200,.16),transparent)}
 .glass.snap{transition:none}
 .tab{position:relative;z-index:2;flex:1;height:55px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--gray);transition:color .4s}
@@ -381,6 +381,17 @@ body.pfs .frame{inset:0;border:0;border-radius:0;box-shadow:none}
 .cpad .ckey{height:54px}
 .drawer{overflow-y:auto}.dm{height:36px;margin-bottom:3px}
 
+/* ---------- v8 ---------- */
+img.lz{opacity:0;transition:opacity .3s}img.lz.ld{opacity:1}
+.selbtn.dng{border-color:#ff6b4a;color:#ff8a78;background:rgba(255,80,50,.08)}
+.menu{position:relative}
+.menu.alert:after{content:"";position:absolute;right:-3px;top:-3px;width:11px;height:11px;border-radius:50%;background:#ff5a3c;border:2px solid #0c0704}
+.dm .un{margin-left:auto;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:linear-gradient(180deg,var(--o1),var(--o3));color:#1b0d02;font-size:10.5px;font-weight:700;align-items:center;justify-content:center}
+.accp{max-height:0;overflow:hidden;opacity:0;transition:max-height .4s ease,opacity .25s,margin .3s}
+.accp.open{max-height:640px;opacity:1;margin:-3px 0 4px}
+.accform{padding:14px 16px;border-radius:0 0 16px 16px;border:1px solid rgba(255,138,0,.4);border-top:0;background:rgba(255,255,255,.04)}
+.accform h5{font-size:14px;color:var(--o2);margin-bottom:8px}
+
 /* ---------- боковое меню ---------- */
 .scrim{position:absolute;inset:0;z-index:40;background:rgba(0,0,0,.6);opacity:0;pointer-events:none;transition:opacity .3s}.scrim.show{opacity:1;pointer-events:auto}
 .drawer{position:absolute;left:0;top:0;bottom:0;width:230px;z-index:41;transform:translateX(-102%);transition:transform .45s cubic-bezier(.22,1,.36,1);background:linear-gradient(180deg,#120905,#080403);border-right:1px solid rgba(255,138,0,.4);padding:16px 12px}
@@ -576,8 +587,10 @@ body.pfs .frame{inset:0;border:0;border-radius:0;box-shadow:none}
   </div></section>
   <!-- УЧЁТНЫЕ ЗАПИСИ -->
   <section class="pane" id="v-accounts"><div class="page">
-    <div class="head"><h2><svg class="ico"><use href="#i-user" xlink:href="#i-user"/></svg>Учётные записи</h2><small id="accMe" style="margin-left:auto;color:#b9aa9a;font-size:12px"></small></div>
+    <div class="head"><h2><svg class="ico"><use href="#i-user" xlink:href="#i-user"/></svg>Учётные записи</h2><small id="accMe" style="margin-left:auto;color:#b9aa9a;font-size:12px"></small><button class="selbtn main" id="accNew" style="display:none;margin-left:10px">+ Создать</button></div>
     <div id="accBanner"></div>
+    <div class="card" id="regBar" style="display:none;margin-bottom:10px"><div class="kv" id="regLine" style="cursor:pointer"><svg class="ico"><use href="#i-user" xlink:href="#i-user"/></svg><div class="kt"><b>Заявки на регистрацию</b><small>Пользователи подают заявку на странице входа, одобряет администратор в разделе «Письмо»</small></div><button class="sw on" id="regSw" role="switch" aria-label="Приём заявок"><i></i></button></div></div>
+    <div class="accp" id="ap-create"></div>
     <div class="devs" id="accList"></div>
     <p class="note">Ограничения и данные другой учётной записи меняет только администратор. Свой логин и пароль можно сменить, зная текущий пароль: если пароль ещё не менялся, это стандартный пароль из приложения.</p>
   </div></section>
@@ -589,7 +602,7 @@ body.pfs .frame{inset:0;border:0;border-radius:0;box-shadow:none}
       <div class="mhead"><b id="mTitle">Выберите собеседника</b><small id="mSub"></small><button class="selbtn" id="mName">Моё имя</button></div>
       <div class="mmsgs sc" id="mMsgs"></div>
       <div class="mprog" id="mProg"></div>
-      <div class="mcomp">
+      <div class="mcomp" id="mComp">
         <button class="btn-d" id="mAttach" aria-label="Прикрепить файл"><svg class="ico"><use href="#i-attach" xlink:href="#i-attach"/></svg></button>
         <button class="btn-d" id="mMic" aria-label="Голосовое сообщение"><svg class="ico"><use href="#i-mic" xlink:href="#i-mic"/></svg></button>
         <input class="fld" id="mText" placeholder="Сообщение" maxlength="4000" autocomplete="off">
@@ -630,7 +643,7 @@ body.pfs .frame{inset:0;border:0;border-radius:0;box-shadow:none}
   <button class="dm" data-go="settings" data-sub="net"><svg class="ico"><use href="#i-globe" xlink:href="#i-globe"/></svg>Сеть</button>
   <button class="dm" data-go="settings" data-sub="devices"><svg class="ico"><use href="#i-phone" xlink:href="#i-phone"/></svg>Устройства</button>
   <button class="dm" data-go="accounts"><svg class="ico"><use href="#i-user" xlink:href="#i-user"/></svg>Учётные записи</button>
-  <button class="dm" data-go="mail"><svg class="ico"><use href="#i-mail" xlink:href="#i-mail"/></svg>Письмо</button>
+  <button class="dm" data-go="mail"><svg class="ico"><use href="#i-mail" xlink:href="#i-mail"/></svg>Письмо<span class="un" id="dmBadge" style="display:none"></span></button>
   <button class="dm" data-go="tools"><svg class="ico"><use href="#i-tools" xlink:href="#i-tools"/></svg>Инструменты</button>
   <button class="dm" data-go="settings" data-sub="server"><svg class="ico"><use href="#i-info" xlink:href="#i-info"/></svg>О сервере</button>
   <button class="dm" data-go="settings" data-sub="app"><svg class="ico"><use href="#i-star" xlink:href="#i-star"/></svg>О приложении</button>
@@ -681,6 +694,30 @@ function totalMem(){
 }
 function toast(t){var el=$('toast'); el.textContent=t; el.className='toast show'; clearTimeout(toast.t); toast.t=setTimeout(function(){el.className='toast';},1800);}
 
+/* ---------- миниатюры подгружаются по очереди и не во время анимации перехода ---------- */
+var LZ={q:[],busy:0,hold:0,io:null,tm:0};
+if('IntersectionObserver' in window){ LZ.io=new IntersectionObserver(function(es){ es.forEach(function(e){ if(e.isIntersecting){ LZ.io.unobserve(e.target); LZ.q.push(e.target); } }); lzPump(); },{rootMargin:'400px'}); }
+function lzPump(){
+  if(LZ.tm) return;
+  var wait=LZ.hold-Date.now();
+  if(wait>0){ LZ.tm=setTimeout(function(){ LZ.tm=0; lzPump(); },wait); return; }
+  while(LZ.busy<2 && LZ.q.length){
+    var img=LZ.q.shift(), src=img.getAttribute('data-src'); if(!src||img.getAttribute('src')) continue;
+    LZ.busy++;
+    (function(img){
+      var done=false; function fin(){ if(done) return; done=true; LZ.busy--; setTimeout(lzPump,30); }
+      img.onload=function(){ img.classList.add('ld'); if(img.decode){ img.decode().then(fin,fin); } else fin(); };
+      img.onerror=function(){ if(img.parentNode) img.parentNode.removeChild(img); fin(); };
+      img.src=src;
+    })(img);
+  }
+}
+function lzObserve(root){
+  var list=root.querySelectorAll('img.lz');
+  for(var i=0;i<list.length;i++){ var im=list[i]; if(im._lz) continue; im._lz=1; if(LZ.io) LZ.io.observe(im); else LZ.q.push(im); }
+  if(!LZ.io) lzPump();
+}
+
 /* ---------- данные ---------- */
 $('stV').textContent=(D.stats&&D.stats.videos!=null)?D.stats.videos:videos.length;
 $('stA').textContent=(D.stats&&D.stats.audio!=null)?D.stats.audio:audios.length;
@@ -696,7 +733,7 @@ if(D.online===false){$('kvState').className='v';$('status').className='status of
 if(D.authRequired) $('logout').style.display='flex';
 
 function thumbHtml(f){
-  return f.isVideo ? '<img loading="lazy" alt="" src="/thumb?id='+encodeURIComponent(f.id)+'" onerror="this.remove()">'+ic('play-s') : ic('music');
+  return f.isVideo ? '<img class="lz" decoding="async" alt="" data-src="/thumb?id='+encodeURIComponent(f.id)+'" onerror="this.remove()">'+ic('play-s') : ic('music');
 }
 function rowHtml(f,i){
   var dur=f.dur?'<span>'+ic('clock')+esc(f.dur)+'</span>':'';
@@ -716,8 +753,9 @@ renderList($('lV'),videos,'','clap','Видео пока нет'); renderList($(
 $('qV').addEventListener('input',function(){renderList($('lV'),videos,this.value,'clap','Видео пока нет');});
 $('qA').addEventListener('input',function(){renderList($('lA'),audios,this.value,'music','Аудио пока нет');});
 $('recent').innerHTML=videos.slice(0,20).map(function(f){
-  return '<button class="rc" data-play="'+esc(f.id)+'"><img loading="lazy" alt="" src="/thumb?id='+encodeURIComponent(f.id)+'" onerror="this.remove()"><div class="ph">'+ic('play-s')+'</div><span>'+esc(f.title)+'</span></button>';
+  return '<button class="rc" data-play="'+esc(f.id)+'"><img class="lz" decoding="async" alt="" data-src="/thumb?id='+encodeURIComponent(f.id)+'" onerror="this.remove()"><div class="ph">'+ic('play-s')+'</div><span>'+esc(f.title)+'</span></button>';
 }).join('')+(videos.length>3?'<button class="rc more" data-go="videos">'+ic('arrow')+'Все видео</button>':'') || '<div class="nodata">Видео пока нет</div>';
+lzObserve($('recent'));
 /* ---------- запросы к серверу (в демо-режиме без сервера работают встроенные примеры) ---------- */
 var DEMO_MODE=!window.NEXORA;
 var ME=D.me||{role:'user',id:'user',name:''};
@@ -734,6 +772,7 @@ function demoPost(url,obj){
   return new Promise(function(res,rej){ setTimeout(function(){
     if(url==='/api/accounts/create-admin' && !obj.setupPassword){ var e=new Error('bad_setup_password'); e.code='bad_setup_password'; return rej(e); }
     if(url==='/api/fs/delete') return res({deleted:(obj.paths||[]).length,failed:[]});
+    if(url==='/api/registrations/decide') return res({ok:true});
     res({ok:true});
   },200); });
 }
@@ -761,12 +800,14 @@ function demoApi(url){
       {ip:'192.168.1.23',hostname:'Pixel-7',kind:'phone',isMe:true,connected:true,rtt:6},
       {ip:'192.168.1.40',hostname:'DESKTOP-4K2',kind:'pc',connected:true,rtt:3},
       {ip:'192.168.1.88',hostname:'Smart-TV',vendor:'Samsung',kind:'other',rtt:14}]});
-    if(url.indexOf('/api/mail/peers')===0) return res({me:{id:'a',name:'Вы'},peers:[{id:'b',name:'Edge · Windows',kind:'pc',online:true,unread:2,last:{t:Date.now()-60000,kind:'text',preview:'Файл получил?'}},{id:'c',name:'Safari · iPad',kind:'tablet',online:false,unread:0,last:null}]});
+    if(url.indexOf('/api/mail/peers')===0) return res({me:{id:'a',name:'Вы'},pendingRegs:2,peers:[{id:'b',name:'Edge · Windows',kind:'pc',online:true,unread:2,last:{t:Date.now()-60000,kind:'text',preview:'Файл получил?'}},{id:'c',name:'Safari · iPad',kind:'tablet',online:false,unread:0,last:null}]});
     if(url.indexOf('/api/mail/messages')===0){ var af=url.match(/after=(\d+)/); if(af&&Number(af[1])>0) return res({messages:[]});
       return res({messages:[{id:1,mine:false,kind:'text',text:'Привет! Файл получил?',t:Date.now()-120000,read:true},{id:2,mine:true,kind:'text',text:'Да, спасибо',t:Date.now()-90000,read:true},{id:3,mine:false,kind:'file',text:'',t:Date.now()-60000,file:{id:'f',name:'Отчёт.pdf',size:1843200},read:true},{id:4,mine:false,kind:'voice',text:'',t:Date.now()-30000,file:{id:'v',name:'voice.webm',size:40000,dur:12},read:true}]}); }
-    if(url.indexOf('/api/accounts')===0) return res({me:{id:ME.id,role:ME.role,name:ME.name},accounts:[
+    if(url.indexOf('/api/registrations')===0) return res({requests:[{id:'r1',login:'petya',t:Date.now()-3600000,ip:'192.168.1.77',name:'Chrome · Android'},{id:'r2',login:'masha',t:Date.now()-900000,ip:'192.168.1.81',name:'Safari · iPhone'}]});
+    if(url.indexOf('/api/accounts')===0) return res({me:{id:ME.id,role:ME.role,name:ME.name},registrationOpen:true,pendingRegs:2,accounts:[
       {id:'admin',name:'admin',role:'admin',passwordDefault:true,online:ME.id==='admin',sessions:ME.id==='admin'?1:0,usedToday:0,limitMin:0,remainingSec:null,schedule:null,lastLogin:ME.id==='admin'?Date.now()-600000:null},
-      {id:'user',name:'user',role:'user',passwordDefault:false,online:true,sessions:1,usedToday:4320,limitMin:120,remainingSec:2880,schedule:{mode:'allow',windows:[{days:[1,2,3,4,5],from:'08:00',to:'22:00'}]},lastLogin:Date.now()-3600000}]});
+      {id:'user',name:'user',role:'user',passwordDefault:false,deletable:false,online:true,sessions:1,usedToday:4320,limitMin:120,remainingSec:2880,schedule:{mode:'allow',windows:[{days:[1,2,3,4,5],from:'08:00',to:'22:00'}]},lastLogin:Date.now()-3600000},
+      {id:'u2',name:'anna',role:'user',passwordDefault:false,deletable:true,online:false,sessions:0,usedToday:1800,limitMin:0,remainingSec:null,schedule:null,lastLogin:Date.now()-86400000}]});
     if(url.indexOf('/api/photos')===0){
       var m=url.match(/album=([^&]+)/);
       if(!m) return res({albums:[{id:'1',name:'Screenshots',count:14,cover:0},{id:'2',name:'DCIM',count:128,cover:0},{id:'3',name:'Download',count:9,cover:0},{id:'4',name:'Pictures',count:33,cover:0}]});
@@ -795,7 +836,7 @@ function loadAlbums(){
     var total=0; PH.albums.forEach(function(a){total+=a.count||0;});
     if(!(D.stats&&D.stats.photos!=null)) $('stP').textContent=total;
     $('lP').innerHTML=PH.albums.length? '<div class="albums">'+PH.albums.map(function(a,i){
-      return '<button class="album i3d'+(i<14?' in':'')+'" style="--n:'+Math.min(i,12)+'" data-album="'+esc(a.id)+'" data-name="'+esc(a.name)+'"><img loading="lazy" alt="" src="/photo?id='+encodeURIComponent(a.cover)+'&thumb=1" onerror="this.remove()"><div class="ph">'+ic('image')+'</div><div class="an"><b>'+esc(a.name)+'</b><small>'+a.count+' фото</small></div></button>';
+      return '<button class="album i3d'+(i<14?' in':'')+'" style="--n:'+Math.min(i,12)+'" data-album="'+esc(a.id)+'" data-name="'+esc(a.name)+'"><img class="lz" decoding="async" alt="" data-src="/photo?id='+encodeURIComponent(a.cover)+'&thumb=1" onerror="this.remove()"><div class="ph">'+ic('image')+'</div><div class="an"><b>'+esc(a.name)+'</b><small>'+a.count+' фото</small></div></button>';
     }).join('')+'</div>' : emptyHtml('image','Фото не найдены');
     after3d($('lP'));
   }).catch(function(){ $('lP').innerHTML=emptyHtml('image','Не удалось загрузить фото. Проверьте, что приложению разрешён доступ к фото.'); });
@@ -805,7 +846,7 @@ function openAlbum(id,name){
   api('/api/photos?album='+encodeURIComponent(id)).then(function(j){
     PH.items=j.items||[];
     $('lP').innerHTML=PH.items.length? '<div class="photos">'+PH.items.map(function(f,i){
-      return '<button class="pic i3d'+(i<30?' in':'')+'" style="--n:'+Math.min(i,16)+'" data-photo="'+i+'"><img loading="lazy" alt="" src="/photo?id='+encodeURIComponent(f.id)+'&thumb=1" onerror="this.remove()"><div class="ph">'+ic('image')+'</div></button>';
+      return '<button class="pic i3d'+(i<30?' in':'')+'" style="--n:'+Math.min(i,16)+'" data-photo="'+i+'"><img class="lz" decoding="async" alt="" data-src="/photo?id='+encodeURIComponent(f.id)+'&thumb=1" onerror="this.remove()"><div class="ph">'+ic('image')+'</div></button>';
     }).join('')+'</div>' : emptyHtml('image','В альбоме нет фото');
     var p=$('v-photos'); if(p) p.scrollTop=0;
     after3d($('lP'));
@@ -842,7 +883,7 @@ function fsRow(it,i){
   if(it.kind==='video'||it.kind==='audio'||it.kind==='photo'){
     open='<button class="btn-w" data-fopen="'+i+'">'+ic(it.kind==='photo'?'image':'play-s')+'<span>'+(it.kind==='video'?'Смотреть':it.kind==='audio'?'Слушать':'Открыть')+'</span></button>';
   }
-  var thumb=it.kind==='photo'? '<img loading="lazy" alt="" src="'+u+'" onerror="this.remove()">'+ic('image') : ic(kindIcon(it.kind));
+  var thumb=it.kind==='photo'? '<img class="lz" decoding="async" alt="" data-src="'+u+'" onerror="this.remove()">'+ic('image') : ic(kindIcon(it.kind));
   return '<div class="row i3d'+((i||0)<14?' in':'')+'" style="--n:'+Math.min(i||0,12)+'"'+fsel+'>'+chk+'<div class="thumb">'+thumb+'</div><div class="meta"><b title="'+esc(it.name)+'">'+esc(it.name)+'</b><small><span>'+ic('save')+fmtSize(it.size)+'</span></small></div><div class="act">'+open+
     '<a class="btn-d" href="'+u+'&dl=1" download="'+esc(it.name)+'" aria-label="Скачать">'+ic('dl')+'</a></div></div>';
 }
@@ -896,8 +937,14 @@ document.addEventListener('click',function(e){
   var mdl=e.target.closest&&e.target.closest('[data-mdel]'); if(mdl){ delMsg(mdl.getAttribute('data-mdel')); return; }
   var se=e.target.closest&&e.target.closest('[data-sel]'); if(se){ selAction(se.getAttribute('data-sel')); return; }
   var bl=e.target.closest&&e.target.closest('[data-block]'); if(bl){ blockDevice(bl.getAttribute('data-block'),bl.getAttribute('data-to')==='1'); return; }
-  var ae=e.target.closest&&e.target.closest('[data-accedit]'); if(ae){ var a1=ACC.list.filter(function(x){return x.id===ae.getAttribute('data-accedit');})[0]; if(a1) accCredDlg(a1); return; }
-  var al2=e.target.closest&&e.target.closest('[data-acclim]'); if(al2){ var a2=ACC.list.filter(function(x){return x.id===al2.getAttribute('data-acclim');})[0]; if(a2) accLimitDlg(a2); return; }
+  var ae=e.target.closest&&e.target.closest('[data-accedit]'); if(ae){ var a1=ACC.list.filter(function(x){return x.id===ae.getAttribute('data-accedit');})[0]; if(a1) accCredPanel(a1); return; }
+  var al2=e.target.closest&&e.target.closest('[data-acclim]'); if(al2){ var a2=ACC.list.filter(function(x){return x.id===al2.getAttribute('data-acclim');})[0]; if(a2) accLimitPanel(a2); return; }
+  var ap1=e.target.closest&&e.target.closest('[data-apsave]'); if(ap1){ apSave(ap1); return; }
+  var ap2=e.target.closest&&e.target.closest('[data-apcancel]'); if(ap2){ closeAccPanel(); loadAcc(); return; }
+  var ad=e.target.closest&&e.target.closest('[data-accdel]'); if(ad){ accDelete(ad.getAttribute('data-accdel'),ad); return; }
+  var rq=e.target.closest&&e.target.closest('[data-mreq]'); if(rq){ openReq(); return; }
+  var r1=e.target.closest&&e.target.closest('[data-regok]'); if(r1){ decideReg(r1.getAttribute('data-regok'),true); return; }
+  var r2=e.target.closest&&e.target.closest('[data-regno]'); if(r2){ decideReg(r2.getAttribute('data-regno'),false); return; }
   var fr=e.target.closest&&e.target.closest('[data-fsel]');
   if(fr && isAdmin && !(e.target.closest&&e.target.closest('a,button'))){
     var ix=parseInt(fr.getAttribute('data-fsel'),10), itx=FS.items[ix];
@@ -926,7 +973,7 @@ function go(name){
   var k=ORDER.indexOf(name); if(k<0){ name='home'; k=0; }
   var ti=-1; TABS.forEach(function(t,n){ if(t[0]===name) ti=n; });
   if(ti>=0) cur=ti;
-  var tok=++GO_TOK;
+  var tok=++GO_TOK; LZ.hold=Date.now()+700;
   /* 1) сначала только нижняя панель: стекло едет без нагрузки на страницу */
   Array.prototype.forEach.call(tabs(),function(b,n){ b.classList.toggle('on',n===ti); });
   glass.style.opacity=(ti>=0)?'':'0';
@@ -1048,7 +1095,7 @@ function tilt3d(p){
   }
 }
 function refresh3d(p){ if(!p) return; prep3d(p); tilt3d(p); }
-function after3d(el){ var p=el; while(p&&!(p.classList&&p.classList.contains('pane'))) p=p.parentNode; if(!p) return; setTimeout(function(){ refresh3d(p); },80); }
+function after3d(el){ var p=el; while(p&&!(p.classList&&p.classList.contains('pane'))) p=p.parentNode; if(!p) return; lzObserve(p); setTimeout(function(){ refresh3d(p); },80); }
 Array.prototype.forEach.call(document.querySelectorAll('.pane'),function(p){
   var raf=0; p.addEventListener('scroll',function(){ if(raf) return; raf=requestAnimationFrame(function(){ raf=0; tilt3d(p); }); },{passive:true});
 });
@@ -1077,6 +1124,7 @@ function pollStatus(){
   }).then(function(j){
     if(!j||lockCheck(j)) return; var rtt=Math.round(nowMs()-t0); failCount=0; setOnline(true);
     if(j.disk){ DISK=j.disk; drawDisk(); }
+    if(isAdmin&&typeof j.pendingRegs==='number') setBadge(j.pendingRegs);
     var w=j.wifi||{}, useApp=(SIGMODE==='app'&&typeof w.level==='number'), lv=useApp? w.level : levelFromRtt(rtt);
     setWifi(lv,{rtt:rtt,rssi:(useApp&&typeof w.rssi==='number')?w.rssi:null,src:useApp?'app':'rtt'});
   }).catch(function(){ failCount++; if(failCount>=2) setOnline(false); });
@@ -1129,9 +1177,9 @@ function opErr(e){
   if(c==='no_access') return 'Нет доступа к файлам. Разрешите приложению доступ ко всем файлам';
   return 'Не удалось выполнить действие';
 }
-/* ---------- УЧЁТНЫЕ ЗАПИСИ: администратор и пользователь, смена логина и пароля, ограничения времени ---------- */
-var ACC={timer:0,list:[]}, DAYN=['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
-function startAcc(){ stopAcc(); loadAcc(); ACC.timer=setInterval(function(){ if($('v-accounts').classList.contains('on') && $('fdlg').className.indexOf('show')<0) loadAcc(); },5000); }
+/* ---------- УЧЁТНЫЕ ЗАПИСИ: админ, пользователь и созданные пользователи; панели раскрываются под карточкой ---------- */
+var ACC={timer:0,list:[],open:null,cb:null,reg:true,pend:0}, DAYN=['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
+function startAcc(){ stopAcc(); ACC.open=null; loadAcc(); ACC.timer=setInterval(function(){ if($('v-accounts').classList.contains('on') && !ACC.open) loadAcc(); },5000); }
 function stopAcc(){ clearInterval(ACC.timer); ACC.timer=0; }
 function loadAcc(){ api('/api/accounts').then(renderAcc).catch(function(e){ $('accList').innerHTML=emptyHtml('user',e&&e.code==='auth_required'?'Учётные записи работают при включённой защите паролем':'Не удалось загрузить учётные записи'); }); }
 function schedText(s){
@@ -1139,64 +1187,88 @@ function schedText(s){
   var w=s.windows.map(function(x){ var d=(x.days&&x.days.length&&x.days.length<7)? x.days.map(function(i){return DAYN[i];}).join(',') : 'каждый день'; return d+' '+x.from+'–'+x.to; }).join('; ');
   return (s.mode==='allow'?'Вход только: ':'Вход запрещён: ')+w;
 }
+function setBadge(n){
+  var b=$('dmBadge'); if(b){ b.style.display=n>0?'flex':'none'; b.textContent=n; }
+  $('menuBtn').classList.toggle('alert',n>0);
+}
 function renderAcc(j){
-  ACC.list=j.accounts||[];
+  ACC.list=j.accounts||[]; ACC.reg=(j.registrationOpen!==false); ACC.pend=j.pendingRegs||0;
   if(j.me){ ME.id=j.me.id; ME.role=j.me.role; if(j.me.name) ME.name=j.me.name; isAdmin=(ME.role==='admin'); }
   $('accMe').textContent='Вы: '+(ME.name||'')+' · '+(isAdmin?'администратор':'пользователь');
-  var mine=ACC.list.filter(function(a){ return a.id===ME.id; })[0];
-  $('accBanner').innerHTML=(mine&&mine.passwordDefault)? '<div class="warnbox">'+ic('shield')+'<span>Вы используете стандартный пароль. Смените его кнопкой «Логин и пароль» на своей учётной записи.'+(isAdmin?' Пока пароль администратора стандартный, изменение файлов, блокировка устройств и ограничения недоступны.':'')+'</span></div>' : '';
+  $('accNew').style.display=isAdmin?'':'none'; $('regBar').style.display=isAdmin?'':'none'; $('regSw').classList.toggle('on',ACC.reg);
+  if(isAdmin) setBadge(ACC.pend);
+  var mine=ACC.list.filter(function(a){ return a.id===ME.id; })[0], ban='';
+  if(mine&&mine.passwordDefault) ban+='<div class="warnbox">'+ic('shield')+'<span>Вы используете стандартный пароль. Смените его кнопкой «Логин и пароль» на своей учётной записи.'+(isAdmin?' Пока пароль администратора стандартный, изменение файлов, блокировка устройств, ограничения и одобрение заявок недоступны.':'')+'</span></div>';
+  if(isAdmin&&ACC.pend>0) ban+='<div class="warnbox">'+ic('mail')+'<span>Заявок на регистрацию: '+ACC.pend+'. Одобрить или отклонить их можно в разделе «Письмо».</span><button class="selbtn" data-go="mail">Открыть</button></div>';
+  $('accBanner').innerHTML=ban;
   var el=$('accList'), first=!el._h;
   var html=ACC.list.map(function(a,i){
-    var me=(a.id===ME.id), canCred=isAdmin||me, canLim=isAdmin&&a.id==='user';
+    var me=(a.id===ME.id), canCred=isAdmin||me, canLim=isAdmin&&a.role!=='admin', canDel=isAdmin&&a.deletable;
     var left=(a.limitMin>0)? ((a.remainingSec||0)<=0?'лимит исчерпан':fmtDur(a.remainingSec)) : 'без ограничений';
-    return '<div class="dev i3d'+(first?' in':'')+(a.online?' on':'')+'" style="--n:'+i+'"><div class="di">'+ic(a.role==='admin'?'shield':'user')+'<i></i></div><div class="dm2"><b>'+esc(a.name)+' '+
+    return '<div><div class="dev i3d'+(first?' in':'')+(a.online?' on':'')+'" style="--n:'+Math.min(i,10)+'"><div class="di">'+ic(a.role==='admin'?'shield':'user')+'<i></i></div><div class="dm2"><b>'+esc(a.name)+' '+
       (a.role==='admin'?'<span class="bdg adm">администратор</span>':'<span class="bdg usr">пользователь</span>')+(me?' <span class="bdg me">это вы</span>':'')+(a.passwordDefault?' <span class="bdg blk">стандартный пароль</span>':'')+'</b>'+
       '<small>'+(a.online?'В сети · сессий: '+(a.sessions||1):'Не в сети')+(a.lastLogin?' · последний вход: '+fmtDT(a.lastLogin):'')+'</small>'+
-      '<small>Сегодня на сервере: '+fmtDur(a.usedToday||0)+' · Осталось: '+left+'</small><small>'+esc(schedText(a.schedule))+'</small></div>'+
-      '<div class="accb">'+(canCred?'<button class="selbtn" data-accedit="'+esc(a.id)+'">'+ic('edit')+'Логин и пароль</button>':'')+(canLim?'<button class="selbtn" data-acclim="'+esc(a.id)+'">'+ic('anim')+'Ограничения</button>':'')+'</div></div>';
+      (a.role==='admin'?'':'<small>Сегодня на сервере: '+fmtDur(a.usedToday||0)+' · Осталось: '+left+'</small><small>'+esc(schedText(a.schedule))+'</small>')+'</div>'+
+      '<div class="accb">'+(canCred?'<button class="selbtn" data-accedit="'+esc(a.id)+'">'+ic('edit')+'Логин и пароль</button>':'')+(canLim?'<button class="selbtn" data-acclim="'+esc(a.id)+'">'+ic('anim')+'Ограничения</button>':'')+(canDel?'<button class="selbtn dng" data-accdel="'+esc(a.id)+'">'+ic('trash')+'Удалить</button>':'')+'</div></div>'+
+      '<div class="accp" id="ap-'+esc(a.id)+'"></div></div>';
   }).join('');
-  if(el._h!==html){ el.innerHTML=html; el._h=html; after3d(el); }
+  if(el._h!==html && !ACC.open){ el.innerHTML=html; el._h=html; after3d(el); }
 }
-/* форма с несколькими полями */
-var fdCb=null;
-function formDlg(o,cb){
-  $('fT').textContent=o.title||''; $('fH').textContent=o.hint||''; $('fBody').innerHTML=o.body||''; $('fErr').textContent=''; $('fYes').textContent=o.ok||'OK';
-  fdCb=cb; $('fdlg').className='dlg show'; var f=$('fBody').querySelector('input'); if(f) setTimeout(function(){ f.focus(); },80);
+/* панель, раскрывающаяся прямо под карточкой (вместо всплывающего окна) */
+function closeAccPanel(){
+  if(ACC.open){ var p=document.getElementById('ap-'+ACC.open.id); if(p){ p.classList.remove('open'); p.innerHTML=''; } }
+  ACC.open=null; ACC.cb=null;
 }
-$('fNo').addEventListener('click',function(){ $('fdlg').className='dlg'; fdCb=null; });
-$('fYes').addEventListener('click',function(){
-  if(!fdCb) return; $('fYes').disabled=true;
-  fdCb(function(){ $('fdlg').className='dlg'; fdCb=null; $('fYes').disabled=false; },function(msg){ $('fErr').textContent=msg; $('fYes').disabled=false; });
-});
-function accCredDlg(a){
-  var me=(a.id===ME.id);
-  var cur=me?'Текущий пароль':(isAdmin?'Ваш пароль администратора или текущий пароль этой учётной записи':'Текущий пароль');
-  formDlg({title:'Логин и пароль: '+(a.id==='admin'?'администратор':'пользователь'),
-    hint:a.passwordDefault?'Пароль ещё не менялся: введите стандартный пароль (он показан в приложении на странице раздачи).':'Введите текущий пароль, чтобы подтвердить смену.',
-    body:'<input class="fld" id="fCur" type="password" placeholder="'+esc(cur)+'" autocomplete="off">'+
-      '<input class="fld" id="fLogin" placeholder="Новый логин" value="'+esc(a.name)+'" autocomplete="off" autocapitalize="none" spellcheck="false">'+
-      '<input class="fld" id="fNew" type="password" placeholder="Новый пароль (пусто = не менять)" autocomplete="new-password">'+
-      '<input class="fld" id="fNew2" type="password" placeholder="Повторите новый пароль" autocomplete="new-password">',ok:'Сохранить'},function(done,fail){
+function openAccPanel(id,type,title,hint,body,ok,cb){
+  if(ACC.open&&ACC.open.id===id&&ACC.open.type===type){ closeAccPanel(); return null; }
+  closeAccPanel(); var p=document.getElementById('ap-'+id); if(!p) return null;
+  ACC.open={id:id,type:type}; ACC.cb=cb;
+  p.innerHTML='<div class="accform"><h5>'+esc(title)+'</h5>'+(hint?'<p class="note" style="margin:0 0 8px">'+esc(hint)+'</p>':'')+body+'<p class="note" id="apErr" style="color:#ff8a78;margin:6px 0 0;min-height:16px"></p><div class="dact"><button class="selbtn" data-apcancel type="button">Отмена</button><button class="btn-main" data-apsave type="button">'+esc(ok||'Сохранить')+'</button></div></div>';
+  p.classList.add('open'); var f=p.querySelector('input'); if(f) setTimeout(function(){ try{ f.focus({preventScroll:true}); }catch(_){ f.focus(); } },80);
+  setTimeout(function(){ if(p.scrollIntoView) p.scrollIntoView({block:'nearest',behavior:'smooth'}); },120);
+  return p;
+}
+function apSave(btn){
+  if(!ACC.cb) return; btn.disabled=true;
+  ACC.cb(function(){ closeAccPanel(); loadAcc(); },function(msg){ var e=document.getElementById('apErr'); if(e) e.textContent=msg; btn.disabled=false; });
+}
+function accCredPanel(a){
+  var me=(a.id===ME.id), cur=me?'Текущий пароль':(isAdmin?'Ваш пароль администратора или текущий пароль этой учётной записи':'Текущий пароль');
+  openAccPanel(a.id,'cred','Логин и пароль: '+a.name,a.passwordDefault?'Пароль ещё не менялся: введите стандартный пароль (он показан в приложении на странице раздачи).':'Введите текущий пароль, чтобы подтвердить смену.',
+    '<input class="fld" id="fCur" type="password" placeholder="'+esc(cur)+'" autocomplete="off">'+
+    '<input class="fld" id="fLogin" placeholder="Новый логин" value="'+esc(a.name)+'" autocomplete="off" autocapitalize="none" spellcheck="false">'+
+    '<input class="fld" id="fNew" type="password" placeholder="Новый пароль (пусто = не менять)" autocomplete="new-password">'+
+    '<input class="fld" id="fNew2" type="password" placeholder="Повторите новый пароль" autocomplete="new-password">','Сохранить',function(done,fail){
     var c=$('fCur').value, l=$('fLogin').value.trim(), p=$('fNew').value, p2=$('fNew2').value;
     if(!c){ fail('Введите текущий пароль'); return; }
     if(!/^[A-Za-z0-9._-]{3,32}$/.test(l)){ fail('Логин: 3-32 символа, буквы, цифры, точка, дефис, подчёркивание'); return; }
     if(p&&p!==p2){ fail('Новые пароли не совпадают'); return; }
     if(l===a.name&&!p){ fail('Ничего не изменено'); return; }
     post('/api/accounts/update',{id:a.id,currentPassword:c,newLogin:(l!==a.name?l:null),newPassword:p||null}).then(function(r){
-      done(); if(me&&r&&r.name) ME.name=r.name; toast('Данные сохранены'); $('accList')._h=''; loadAcc();
+      if(me&&r&&r.name) ME.name=r.name; toast('Данные сохранены'); $('accList')._h=''; done();
     }).catch(function(e){ var k=e&&e.code; fail(k==='bad_current'?'Неверный текущий пароль':k==='login_taken'?'Такой логин уже используется':k==='weak_password'?'Пароль слишком короткий':k==='bad_login'?'Недопустимый логин':k==='nothing_to_change'?'Ничего не изменено':opErr(e)); });
+  });
+}
+function accCreatePanel(){
+  openAccPanel('create','create','Новая учётная запись пользователя','Пользователь сразу сможет войти. Права: только просмотр и скачивание.',
+    '<input class="fld" id="cLogin" placeholder="Логин (3-32 символа)" autocomplete="off" autocapitalize="none" spellcheck="false"><input class="fld" id="cPass" type="password" placeholder="Пароль (от 4 символов)" autocomplete="new-password"><input class="fld" id="cPass2" type="password" placeholder="Повторите пароль" autocomplete="new-password">','Создать',function(done,fail){
+    var l=$('cLogin').value.trim(), p=$('cPass').value, p2=$('cPass2').value;
+    if(!/^[A-Za-z0-9._-]{3,32}$/.test(l)){ fail('Логин: 3-32 символа, буквы, цифры, точка, дефис, подчёркивание'); return; }
+    if(p.length<4){ fail('Пароль слишком короткий'); return; } if(p!==p2){ fail('Пароли не совпадают'); return; }
+    post('/api/accounts/create',{name:l,password:p}).then(function(){ toast('Учётная запись создана'); $('accList')._h=''; done(); })
+    .catch(function(e){ fail(e&&e.code==='login_taken'?'Такой логин уже используется':e&&e.code==='weak_password'?'Пароль слишком короткий':e&&e.code==='bad_name'?'Недопустимый логин':opErr(e)); });
   });
 }
 function winRow(w){
   var days=[1,2,3,4,5,6,0].map(function(d){ var on=(!w.days||!w.days.length||w.days.indexOf(d)>-1); return '<button class="dchip'+(on?' on':'')+'" data-d="'+d+'" type="button">'+DAYN[d]+'</button>'; }).join('');
   return '<div class="win"><div class="days">'+days+'</div><input class="fld tm" type="time" value="'+esc(w.from||'08:00')+'"><span>–</span><input class="fld tm" type="time" value="'+esc(w.to||'22:00')+'"><button class="selbtn" data-rw type="button">'+ic('x')+'</button></div>';
 }
-function accLimitDlg(a){
+function accLimitPanel(a){
   var sc=a.schedule||{mode:'off',windows:[]}, mode=sc.mode||'off';
-  formDlg({title:'Ограничения: '+a.name,hint:'Ограничения действуют на пользователя. Администратор не ограничивается. Время телефона.',
-    body:'<label class="flb">Лимит времени на сервере в день, минут (0 = без лимита)</label><input class="fld" id="fLim" type="number" min="0" max="1440" value="'+(a.limitMin||0)+'">'+
-      '<label class="flb">Когда можно входить</label><div class="seg" style="padding:0 0 8px"><button class="segb" data-lm="off" type="button">В любое время</button><button class="segb" data-lm="allow" type="button">Только в интервалы</button><button class="segb" data-lm="deny" type="button">Запретить интервалы</button></div>'+
-      '<div id="fWin"></div><button class="selbtn" id="fAddWin" type="button">+ Добавить интервал</button>',ok:'Сохранить'},function(done,fail){
+  var p=openAccPanel(a.id,'lim','Ограничения: '+a.name,'Действуют на этого пользователя (время телефона). Интервал, у которого конец раньше начала, переходит через полночь.',
+    '<label class="flb">Лимит времени на сервере в день, минут (0 = без лимита)</label><input class="fld" id="fLim" type="number" min="0" max="1440" value="'+(a.limitMin||0)+'">'+
+    '<label class="flb">Когда можно входить</label><div class="seg" style="padding:0 0 8px"><button class="segb" data-lm="off" type="button">В любое время</button><button class="segb" data-lm="allow" type="button">Только в интервалы</button><button class="segb" data-lm="deny" type="button">Запретить интервалы</button></div>'+
+    '<div id="fWin"></div><button class="selbtn" id="fAddWin" type="button">+ Добавить интервал</button>','Сохранить',function(done,fail){
     var lim=parseInt($('fLim').value,10)||0; if(lim<0||lim>1440){ fail('Лимит: от 0 до 1440 минут'); return; }
     var wins=[]; if(mode!=='off'){
       var rows=$('fWin').querySelectorAll('.win');
@@ -1208,18 +1280,26 @@ function accLimitDlg(a){
       }
       if(!wins.length){ fail('Добавьте хотя бы один интервал'); return; }
     }
-    post('/api/accounts/limits',{id:a.id,limitMin:lim,schedule:{mode:mode,windows:wins}}).then(function(){ done(); toast('Ограничения сохранены'); $('accList')._h=''; loadAcc(); })
+    post('/api/accounts/limits',{id:a.id,limitMin:lim,schedule:{mode:mode,windows:wins}}).then(function(){ toast('Ограничения сохранены'); $('accList')._h=''; done(); })
     .catch(function(e){ fail(e&&e.code==='bad_limits'?'Некорректные ограничения':opErr(e)); });
   });
-  function paint(){ Array.prototype.forEach.call($('fBody').querySelectorAll('[data-lm]'),function(b){ b.classList.toggle('on',b.getAttribute('data-lm')===mode); }); $('fWin').style.display=$('fAddWin').style.display=(mode==='off')?'none':''; }
+  if(!p) return;
+  function paint(){ Array.prototype.forEach.call(p.querySelectorAll('[data-lm]'),function(b){ b.classList.toggle('on',b.getAttribute('data-lm')===mode); }); $('fWin').style.display=$('fAddWin').style.display=(mode==='off')?'none':''; }
   $('fWin').innerHTML=(sc.windows||[]).map(winRow).join(''); paint();
-  $('fBody').onclick=function(e){
+  p.onclick=function(e){
     var m=e.target.closest&&e.target.closest('[data-lm]'); if(m){ mode=m.getAttribute('data-lm'); if(mode!=='off'&&!$('fWin').children.length) $('fWin').innerHTML=winRow({days:[1,2,3,4,5],from:'08:00',to:'22:00'}); paint(); return; }
     var d=e.target.closest&&e.target.closest('.dchip'); if(d){ d.classList.toggle('on'); return; }
     var r=e.target.closest&&e.target.closest('[data-rw]'); if(r){ var w=r.parentNode; w.parentNode.removeChild(w); return; }
     if(e.target.id==='fAddWin'||(e.target.closest&&e.target.closest('#fAddWin'))){ $('fWin').insertAdjacentHTML('beforeend',winRow({days:[1,2,3,4,5,6,0],from:'08:00',to:'22:00'})); }
   };
 }
+var DELARM={id:'',t:0};
+function accDelete(id,btn){
+  if(DELARM.id!==id||Date.now()-DELARM.t>3500){ DELARM={id:id,t:Date.now()}; btn.textContent='Точно удалить?'; setTimeout(function(){ if(DELARM.id===id&&btn.parentNode) { btn.innerHTML=ic('trash')+'Удалить'; DELARM.id=''; } },3500); return; }
+  DELARM.id=''; post('/api/accounts/delete',{id:id}).then(function(){ toast('Учётная запись удалена'); $('accList')._h=''; loadAcc(); }).catch(function(e){ toast(e&&e.code==='protected'?'Эту учётную запись удалить нельзя':opErr(e)); });
+}
+$('accNew').addEventListener('click',accCreatePanel);
+$('regLine').addEventListener('click',function(){ if(!isAdmin) return; post('/api/accounts/settings',{registrationOpen:!ACC.reg}).then(function(){ ACC.reg=!ACC.reg; $('regSw').classList.toggle('on',ACC.reg); toast(ACC.reg?'Заявки на регистрацию принимаются':'Приём заявок закрыт'); }).catch(function(e){ toast(opErr(e)); }); });
 /* экран блокировки: время закончилось или вход сейчас запрещён */
 function lockCheck(j){
   if(!j||!(j.error==='time_limit'||j.error==='schedule_blocked')) return false;
@@ -1360,20 +1440,20 @@ $('netApply').addEventListener('click',function(){
 
 /* ---------- ПИСЬМО: текст, голос и файлы между пользователями сервера ---------- */
 var MAIL={peer:null,peers:[],lastId:0,timer:0,tick:0,rec:null,chunks:[],t0:0};
-function startMail(){ stopMail(); loadPeers(); MAIL.tick=0; MAIL.timer=setInterval(function(){ MAIL.tick++; if(MAIL.tick%3===0) loadPeers(); if(MAIL.peer) loadMsgs(); },2500); }
+function startMail(){ stopMail(); loadPeers(); MAIL.tick=0; MAIL.timer=setInterval(function(){ MAIL.tick++; if(MAIL.tick%3===0) loadPeers(); if(MAIL.peer==='__req') loadRegs(); else if(MAIL.peer) loadMsgs(); },2500); }
 function stopMail(){ clearInterval(MAIL.timer); MAIL.timer=0; }
-function loadPeers(){ api('/api/mail/peers').then(function(j){ MAIL.peers=j.peers||[]; MAIL.me=j.me||{}; $('mName').textContent=MAIL.me.name||'Моё имя'; renderPeers(); }).catch(function(e){ $('mThreads').innerHTML=emptyHtml('phone',e&&e.code==='auth_required'?'Письмо работает при включённой защите паролем':'Не удалось загрузить список'); }); }
+function loadPeers(){ api('/api/mail/peers').then(function(j){ MAIL.peers=j.peers||[]; MAIL.me=j.me||{}; MAIL.pend=j.pendingRegs||0; if(isAdmin) setBadge(MAIL.pend); $('mName').textContent=MAIL.me.name||'Моё имя'; renderPeers(); }).catch(function(e){ $('mThreads').innerHTML=emptyHtml('phone',e&&e.code==='auth_required'?'Письмо работает при включённой защите паролем':'Не удалось загрузить список'); }); }
 function renderPeers(){
   var el=$('mThreads');
-  var html=MAIL.peers.length? MAIL.peers.map(function(p){
+  var html=reqThread()+(MAIL.peers.length? MAIL.peers.map(function(p){
     var k=p.kind==='pc'?'pc':p.kind==='tablet'?'tablet':'phone';
     var last=p.last? (p.last.kind==='voice'?'Голосовое сообщение':p.last.kind==='file'?'Файл':p.last.preview||'') : 'Нет сообщений';
     return '<button class="mt'+(MAIL.peer===p.id?' on':'')+'" data-mpeer="'+esc(p.id)+'"><div class="av'+(p.online?' on':'')+'">'+ic(k)+'<i></i></div><div class="tx"><b>'+esc(p.name)+'</b><small>'+esc(last)+'</small></div>'+(p.unread?'<span class="un">'+p.unread+'</span>':'')+'</button>';
-  }).join('') : emptyHtml('phone','Других устройств пока нет');
+  }).join('') : emptyHtml('phone','Других устройств пока нет'));
   if(el._h!==html){ el.innerHTML=html; el._h=html; }
 }
 function openPeer(id){
-  MAIL.peer=id; MAIL.lastId=0; $('mMsgs').innerHTML=''; var p=MAIL.peers.filter(function(x){return x.id===id;})[0]||{};
+  MAIL.peer=id; MAIL.lastId=0; $('mComp').style.display=''; $('mMsgs')._h=''; $('mMsgs').innerHTML=''; var p=MAIL.peers.filter(function(x){return x.id===id;})[0]||{};
   $('mTitle').textContent=p.name||'Собеседник'; $('mSub').textContent=p.online?'в сети':'не в сети'; renderPeers(); loadMsgs(true);
   post('/api/mail/read',{peer:id}).catch(function(){});
 }
@@ -1385,7 +1465,7 @@ function msgHtml(m){
   return '<div class="mb'+(m.mine?' me':'')+'" data-mid="'+m.id+'">'+body+'<small class="mt2">'+fmtDT(m.t)+(m.mine?(m.read?' · прочитано':' · отправлено'):'')+((m.mine||isAdmin)?' <a data-mdel="'+m.id+'">удалить</a>':'')+'</small></div>';
 }
 function loadMsgs(first){
-  var peer=MAIL.peer; if(!peer) return;
+  var peer=MAIL.peer; if(!peer||peer==='__req') return;
   api('/api/mail/messages?peer='+encodeURIComponent(peer)+'&after='+MAIL.lastId).then(function(j){
     if(peer!==MAIL.peer) return;
     var box=$('mMsgs'), list=j.messages||[], near=(box.scrollHeight-box.scrollTop-box.clientHeight)<60;
@@ -1398,6 +1478,28 @@ function loadMsgs(first){
     } else if(first) box.innerHTML='<div class="empty">Сообщений пока нет. Напишите первым.</div>';
     (j.deleted||[]).forEach(function(id){ var el=document.querySelector('#mMsgs [data-mid="'+id+'"]'); if(el&&el.parentNode) el.parentNode.removeChild(el); });
   }).catch(function(){});
+}
+/* ---------- заявки на регистрацию в разделе «Письмо» (только администратор) ---------- */
+function openReq(){
+  MAIL.peer='__req'; MAIL.lastId=0; $('mTitle').textContent='Заявки на регистрацию'; $('mSub').textContent='Одобряет администратор'; $('mProg').textContent='';
+  $('mComp').style.display='none'; $('mMsgs').innerHTML=''; $('mMsgs')._h=''; renderPeers(); loadRegs();
+}
+function loadRegs(){ api('/api/registrations').then(renderRegs).catch(function(e){ $('mMsgs').innerHTML=emptyHtml('user',opErr(e)); }); }
+function renderRegs(j){
+  var list=j.requests||[], el=$('mMsgs'); MAIL.pend=list.length; setBadge(list.length);
+  var first=!el._h;
+  var html=list.length? list.map(function(r,i){
+    return '<div class="dev i3d'+(first?' in':'')+'" style="--n:'+Math.min(i,8)+'"><div class="di">'+ic('user')+'</div><div class="dm2"><b>'+esc(r.login)+' <span class="bdg usr">ожидает</span></b><small>Устройство: '+esc(r.name||'неизвестно')+' · IP: '+esc(r.ip||'')+'</small><small>Подана: '+fmtDT(r.t)+'</small></div>'+
+      '<div class="accb"><button class="selbtn main" data-regok="'+esc(r.id)+'">Одобрить</button><button class="selbtn dng" data-regno="'+esc(r.id)+'">Отклонить</button></div></div>';
+  }).join('') : '<div class="empty">Новых заявок нет</div>';
+  if(el._h!==html){ el.innerHTML=html; el._h=html; }
+}
+function decideReg(id,ok){
+  post('/api/registrations/decide',{id:id,approve:ok}).then(function(){ toast(ok?'Учётная запись активирована':'Заявка отклонена'); $('mMsgs')._h=''; loadRegs(); loadPeers(); }).catch(function(e){ toast(opErr(e)); });
+}
+function reqThread(){
+  if(!isAdmin) return '';
+  return '<button class="mt'+(MAIL.peer==='__req'?' on':'')+'" data-mreq><div class="av on">'+ic('user')+'<i></i></div><div class="tx"><b>Заявки на регистрацию</b><small>'+(MAIL.pend?('Ожидают: '+MAIL.pend):'Нет новых заявок')+'</small></div>'+(MAIL.pend?'<span class="un">'+MAIL.pend+'</span>':'')+'</button>';
 }
 function delMsg(id){ dlg({title:'Удалить сообщение?',text:'Оно исчезнет у обоих участников.',ok:'Удалить',danger:true},function(){ post('/api/mail/delete',{id:Number(id)}).then(function(){ var el=document.querySelector('#mMsgs [data-mid="'+id+'"]'); if(el&&el.parentNode) el.parentNode.removeChild(el); }).catch(function(e){ toast(opErr(e)); }); }); }
 function sendText(){
@@ -1599,7 +1701,7 @@ function fit(){
 }
 window.addEventListener('resize',fit); window.addEventListener('orientationchange',function(){setTimeout(fit,120);});
 fit();
-go(location.hash.slice(1)||'home'); moveGlass(cur,true);
+go(location.hash.slice(1)||'home'); moveGlass(cur,true); lzObserve(document.body);
 </script>
 </body>
 </html>

@@ -22,6 +22,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.*
 import java.net.*
+import java.security.SecureRandom
 import java.util.Collections
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -37,7 +38,8 @@ data class HttpMediaFile(
     val mimeType: String,
     val isVideo: Boolean,
     val contentUri: Uri?,
-    val directFile: File?
+    val directFile: File?,
+    val dateAdded: Long = 0L
 )
 
 data class FileUploadMeta(
@@ -130,6 +132,9 @@ object LocalHttpShareServer {
     private val devices = ConcurrentHashMap<String, DeviceRecord>()
     @Volatile private var devicesLoaded = false
     @Volatile private var lastDevicesSaveTime = 0L
+
+    private val thumbSemaphore = java.util.concurrent.Semaphore(2, true)
+    @Volatile private var thumbPregenThread: Thread? = null
 
     @Volatile private var wifiLevel: Int? = null
     @Volatile private var wifiRssi: Int? = null
@@ -269,6 +274,7 @@ object LocalHttpShareServer {
             lastErrorMessage = null
 
             startWifiPoller(context)
+            startThumbnailPregeneration(context)
 
             threadPool.execute {
                 acceptClientsLoop(socket, context.applicationContext)
@@ -288,6 +294,7 @@ object LocalHttpShareServer {
     @Synchronized
     fun stop() {
         isRunning = false
+        stopThumbnailPregeneration()
         stopWifiPoller()
         LanScanner.stopScan()
         clearSessions()
@@ -476,6 +483,7 @@ object LocalHttpShareServer {
             var hostHeader: String? = null
             var userAgentHeader: String? = null
             var acceptHeader: String? = null
+            var ifNoneMatchHeader: String? = null
 
             var line = readHttpHeaderLine(rawInput)
             while (!line.isNullOrBlank()) {
@@ -498,6 +506,8 @@ object LocalHttpShareServer {
                     userAgentHeader = line.substringAfter(":").trim()
                 } else if (lower.startsWith("accept:")) {
                     acceptHeader = line.substringAfter(":").trim()
+                } else if (lower.startsWith("if-none-match:")) {
+                    ifNoneMatchHeader = line.substringAfter(":").trim()
                 }
                 line = readHttpHeaderLine(rawInput)
             }
@@ -506,6 +516,35 @@ object LocalHttpShareServer {
             val existingDevId = extractCookie(cookieHeader, "nx_dev")
             val clientDevId = if (existingDevId.isNullOrBlank()) UUID.randomUUID().toString() else existingDevId
             val needDevCookie = if (existingDevId.isNullOrBlank()) clientDevId else null
+
+            // Public routes: /api/captcha, /api/register, /api/forgot (available without auth, blocked check, or authRequired)
+            if (decodedPath == "/api/captcha" && (method == "GET" || method == "HEAD")) {
+                handleCaptcha(output, clientIp, method == "HEAD", needDevCookie)
+                return
+            }
+            if ((decodedPath == "/api/register" || decodedPath == "/api/forgot") && method == "POST") {
+                if (xNexoraHeader != "1") {
+                    sendResponse(output, 400, "application/json; charset=UTF-8", "{\"error\":\"bad_request\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                    return
+                }
+                val contentLength = (contentLengthHeader ?: 0L).toInt().coerceAtMost(64 * 1024)
+                val bodyBytes = ByteArray(contentLength)
+                var readTotal = 0
+                while (readTotal < contentLength) {
+                    val r = rawInput.read(bodyBytes, readTotal, contentLength - readTotal)
+                    if (r == -1) break
+                    readTotal += r
+                }
+                val bodyString = String(bodyBytes, 0, readTotal, Charsets.UTF_8)
+                val bodyJson = try { JSONObject(bodyString) } catch (_: Exception) { JSONObject() }
+
+                if (decodedPath == "/api/register") {
+                    handleRegister(output, context, bodyJson, clientIp, userAgent, needDevCookie)
+                } else {
+                    handleForgot(output, context, bodyJson, clientIp, needDevCookie)
+                }
+                return
+            }
 
             // Check if device or IP is blocked
             if (isDeviceOrIpBlocked(context, clientDevId, clientIp)) {
@@ -526,7 +565,21 @@ object LocalHttpShareServer {
 
             // Restrictions enforcement for user role
             if (reqAuth.isAuthorized && reqAuth.role == "user" && decodedPath != "/logout") {
-                if (!UserLimitsManager.isScheduleAllowed(context)) {
+                val accountId = reqAuth.id
+                val (schedule, limitMin) = if (accountId == "user") {
+                    Pair(UserLimitsManager.getSchedule(context), UserLimitsManager.getLimitMin(context))
+                } else {
+                    val dyn = DynamicUserManager.findById(context, accountId)
+                    if (dyn != null && dyn.status == "active") {
+                        Pair(dyn.schedule, dyn.limitMin)
+                    } else {
+                        if (!sessionToken.isNullOrEmpty()) activeSessions.remove(sessionToken)
+                        send401WithoutAuth(output, needDevCookie)
+                        return
+                    }
+                }
+
+                if (!UserLimitsManager.isScheduleAllowed(schedule)) {
                     if (!sessionToken.isNullOrEmpty()) {
                         activeSessions.remove(sessionToken)
                     }
@@ -539,7 +592,7 @@ object LocalHttpShareServer {
                     )
                     return
                 }
-                if (UserLimitsManager.isTimeLimitExceeded(context)) {
+                if (UserLimitsManager.isTimeLimitExceeded(context, accountId, limitMin)) {
                     if (!sessionToken.isNullOrEmpty()) {
                         activeSessions.remove(sessionToken)
                     }
@@ -559,10 +612,10 @@ object LocalHttpShareServer {
                         val elapsedSec = (now - session.lastActiveTime) / 1000
                         val delta = elapsedSec.coerceAtMost(10)
                         if (delta > 0 && (now - session.lastActiveTime) <= 15000L) {
-                            UserLimitsManager.addActiveSeconds(context, delta)
+                            UserLimitsManager.addActiveSeconds(context, accountId, delta)
                         }
                         session.lastActiveTime = now
-                        if (UserLimitsManager.isTimeLimitExceeded(context)) {
+                        if (UserLimitsManager.isTimeLimitExceeded(context, accountId, limitMin)) {
                             activeSessions.remove(sessionToken)
                             sendResponse(
                                 output, 403, "application/json; charset=UTF-8",
@@ -593,15 +646,85 @@ object LocalHttpShareServer {
                             return
                         }
 
-                        val authResult = if (!authRequired) {
-                            AuthResult(id = "user", username = HttpServerConfig.getUsername(context), role = "user")
+                        // Parse Basic Auth header
+                        if (authHeader == null || !authHeader.startsWith("Basic ", ignoreCase = true)) {
+                            loginRateLimiter.recordFailure(clientIp)
+                            val json = "{\"error\":\"bad_credentials\"}".toByteArray(Charsets.UTF_8)
+                            sendResponse(output, 401, "application/json; charset=UTF-8", json, isHead = isHead, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                            return
+                        }
+                        val encoded = authHeader.substringAfter("Basic ").trim()
+                        val decoded = try {
+                            String(Base64.decode(encoded, Base64.DEFAULT), Charsets.UTF_8)
+                        } catch (_: Exception) {
+                            ""
+                        }
+                        val colonIndex = decoded.indexOf(':')
+                        if (colonIndex == -1) {
+                            loginRateLimiter.recordFailure(clientIp)
+                            val json = "{\"error\":\"bad_credentials\"}".toByteArray(Charsets.UTF_8)
+                            sendResponse(output, 401, "application/json; charset=UTF-8", json, isHead = isHead, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                            return
+                        }
+                        val user = decoded.substring(0, colonIndex).trim()
+                        val pass = decoded.substring(colonIndex + 1)
+
+                        val adminUser = HttpServerConfig.getAdminUsername(context)
+                        val regularUser = HttpServerConfig.getUsername(context)
+
+                        var authResult: AuthResult? = null
+
+                        if (user.equals(adminUser, ignoreCase = true)) {
+                            if (HttpServerConfig.verifyAdminPassword(context, pass)) {
+                                authResult = AuthResult(id = "admin", username = adminUser, role = "admin")
+                            }
+                        } else if (user.equals(regularUser, ignoreCase = true)) {
+                            val expectedPass = HttpServerConfig.getPassword(context)
+                            if (pass == expectedPass) {
+                                authResult = AuthResult(id = "user", username = regularUser, role = "user")
+                            }
                         } else {
-                            checkCredentials(authHeader, context)
+                            val dynUser = DynamicUserManager.findByName(context, user)
+                            if (dynUser != null && DynamicUserManager.verifyUserPassword(dynUser, pass)) {
+                                when (dynUser.status) {
+                                    "pending" -> {
+                                        sendResponse(
+                                            output, 403, "application/json; charset=UTF-8",
+                                            "{\"error\":\"pending_approval\"}".toByteArray(Charsets.UTF_8),
+                                            isHead = isHead,
+                                            extraHeaders = listOf("Cache-Control: no-store"),
+                                            needDevCookie = needDevCookie
+                                        )
+                                        return
+                                    }
+                                    "rejected" -> {
+                                        sendResponse(
+                                            output, 403, "application/json; charset=UTF-8",
+                                            "{\"error\":\"rejected\"}".toByteArray(Charsets.UTF_8),
+                                            isHead = isHead,
+                                            extraHeaders = listOf("Cache-Control: no-store"),
+                                            needDevCookie = needDevCookie
+                                        )
+                                        return
+                                    }
+                                    "active" -> {
+                                        authResult = AuthResult(id = dynUser.id, username = dynUser.name, role = "user")
+                                    }
+                                }
+                            }
                         }
 
                         if (authResult != null) {
                             if (authResult.role == "user") {
-                                if (!UserLimitsManager.isScheduleAllowed(context)) {
+                                val accountId = authResult.id
+                                val (schedule, limitMin) = if (accountId == "user") {
+                                    Pair(UserLimitsManager.getSchedule(context), UserLimitsManager.getLimitMin(context))
+                                } else {
+                                    val dyn = DynamicUserManager.findById(context, accountId)!!
+                                    Pair(dyn.schedule, dyn.limitMin)
+                                }
+
+                                if (!UserLimitsManager.isScheduleAllowed(schedule)) {
                                     sendResponse(
                                         output, 403, "application/json; charset=UTF-8",
                                         "{\"error\":\"schedule_blocked\"}".toByteArray(Charsets.UTF_8),
@@ -611,7 +734,7 @@ object LocalHttpShareServer {
                                     )
                                     return
                                 }
-                                if (UserLimitsManager.isTimeLimitExceeded(context)) {
+                                if (UserLimitsManager.isTimeLimitExceeded(context, accountId, limitMin)) {
                                     sendResponse(
                                         output, 403, "application/json; charset=UTF-8",
                                         "{\"error\":\"time_limit\"}".toByteArray(Charsets.UTF_8),
@@ -692,7 +815,16 @@ object LocalHttpShareServer {
                         } else {
                             val idParam = extractQueryParam(queryString, "id")
                                 ?: decodedPath.removePrefix("/thumb/").removePrefix("/")
-                            serveThumbnail(output, idParam, context, isHead, needDevCookie)
+                            serveThumbnail(output, idParam, context, isHead, ifNoneMatchHeader, needDevCookie)
+                        }
+                    }
+                    decodedPath == "/api/registrations" -> {
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
+                        } else if (reqAuth.role != "admin") {
+                            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"admin_required\"}".toByteArray(Charsets.UTF_8), isHead = isHead, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        } else {
+                            serveApiRegistrations(output, context, isHead, needDevCookie)
                         }
                     }
                     decodedPath == "/api/photos" -> {
@@ -798,6 +930,9 @@ object LocalHttpShareServer {
                         } else {
                             val blockedIds = devices.values.filter { it.blocked }.map { it.id }.toSet()
                             val json = MailManager.getPeers(context, clientDevId, devices, blockedIds)
+                            if (reqAuth.role == "admin") {
+                                json.put("pendingRegs", DynamicUserManager.getPendingCount(context))
+                            }
                             val data = json.toString().toByteArray(Charsets.UTF_8)
                             sendResponse(output, 200, "application/json; charset=UTF-8", data, isHead = isHead, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
                         }
@@ -1012,6 +1147,50 @@ object LocalHttpShareServer {
                             sendResponse(output, 200, "application/json; charset=UTF-8", "{\"ok\":true}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
                         }
                     }
+                    "/api/registrations/decide" -> {
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
+                        } else if (reqAuth.role != "admin") {
+                            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"admin_required\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        } else if (HttpServerConfig.isAdminPasswordDefault(context)) {
+                            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"default_password\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        } else {
+                            handleRegistrationDecide(output, context, bodyJson, needDevCookie)
+                        }
+                    }
+                    "/api/accounts/create" -> {
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
+                        } else if (reqAuth.role != "admin") {
+                            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"admin_required\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        } else if (HttpServerConfig.isAdminPasswordDefault(context)) {
+                            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"default_password\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        } else {
+                            handleAccountCreate(output, context, bodyJson, needDevCookie)
+                        }
+                    }
+                    "/api/accounts/delete" -> {
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
+                        } else if (reqAuth.role != "admin") {
+                            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"admin_required\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        } else if (HttpServerConfig.isAdminPasswordDefault(context)) {
+                            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"default_password\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        } else {
+                            handleAccountDelete(output, context, bodyJson, needDevCookie)
+                        }
+                    }
+                    "/api/accounts/settings" -> {
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
+                        } else if (reqAuth.role != "admin") {
+                            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"admin_required\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        } else if (HttpServerConfig.isAdminPasswordDefault(context)) {
+                            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"default_password\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        } else {
+                            handleAccountSettings(output, context, bodyJson, needDevCookie)
+                        }
+                    }
                     "/api/accounts/update" -> {
                         if (authRequired && !reqAuth.isAuthorized) {
                             send401WithoutAuth(output, needDevCookie)
@@ -1145,8 +1324,14 @@ object LocalHttpShareServer {
         // 2. Check regular user
         val expectedUser = HttpServerConfig.getUsername(context)
         val expectedPass = HttpServerConfig.getPassword(context)
-        if (user == expectedUser && pass == expectedPass) {
+        if (user.equals(expectedUser, ignoreCase = true) && pass == expectedPass) {
             return AuthResult(id = "user", username = expectedUser, role = "user")
+        }
+
+        // 3. Check dynamic active users
+        val dynUser = DynamicUserManager.findByName(context, user)
+        if (dynUser != null && dynUser.status == "active" && DynamicUserManager.verifyUserPassword(dynUser, pass)) {
+            return AuthResult(id = dynUser.id, username = dynUser.name, role = "user")
         }
 
         return null
@@ -1166,22 +1351,34 @@ object LocalHttpShareServer {
         }
 
         val targetId = body.optString("id", "").trim()
-        if (targetId != "admin" && targetId != "user") {
+        val isTargetAdmin = targetId == "admin"
+        val isTargetUser = targetId == "user"
+        val dynTarget = if (!isTargetAdmin && !isTargetUser) DynamicUserManager.findById(context, targetId) else null
+
+        if (!isTargetAdmin && !isTargetUser && dynTarget == null) {
             sendResponse(output, 400, "application/json; charset=UTF-8", "{\"error\":\"bad_login\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
             return
         }
 
-        if (reqAuth.role != "admin" && (reqAuth.role != "user" || targetId != "user")) {
+        if (reqAuth.role != "admin" && (reqAuth.role != "user" || targetId != reqAuth.id)) {
             sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"forbidden\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
             return
         }
 
         val currentPassword = body.optString("currentPassword", "")
-        val isCurrentValid = if (targetId == "admin") {
+        val isCurrentValid = if (isTargetAdmin) {
             HttpServerConfig.verifyAdminPassword(context, currentPassword)
-        } else {
+        } else if (isTargetUser) {
             val userPass = HttpServerConfig.getPassword(context)
             if (currentPassword == userPass) {
+                true
+            } else if (reqAuth.role == "admin" && HttpServerConfig.verifyAdminPassword(context, currentPassword)) {
+                true
+            } else {
+                false
+            }
+        } else {
+            if (DynamicUserManager.verifyUserPassword(dynTarget!!, currentPassword)) {
                 true
             } else if (reqAuth.role == "admin" && HttpServerConfig.verifyAdminPassword(context, currentPassword)) {
                 true
@@ -1201,15 +1398,19 @@ object LocalHttpShareServer {
         val hasNewPassword = body.has("newPassword") && !body.isNull("newPassword")
         val rawNewPassword = if (hasNewPassword) body.optString("newPassword", "") else null
 
-        val currentTargetLogin = if (targetId == "admin") HttpServerConfig.getAdminUsername(context) else HttpServerConfig.getUsername(context)
+        val currentTargetLogin = when {
+            isTargetAdmin -> HttpServerConfig.getAdminUsername(context)
+            isTargetUser -> HttpServerConfig.getUsername(context)
+            else -> dynTarget!!.name
+        }
+
         val finalLogin = if (!rawNewLogin.isNullOrBlank()) {
             val loginRegex = Regex("^[A-Za-z0-9._-]{3,32}$")
             if (!rawNewLogin.matches(loginRegex)) {
                 sendResponse(output, 400, "application/json; charset=UTF-8", "{\"error\":\"bad_login\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
                 return
             }
-            val otherLogin = if (targetId == "admin") HttpServerConfig.getUsername(context) else HttpServerConfig.getAdminUsername(context)
-            if (rawNewLogin.equals(otherLogin, ignoreCase = true)) {
+            if (DynamicUserManager.isLoginTaken(context, rawNewLogin, targetId)) {
                 sendResponse(output, 409, "application/json; charset=UTF-8", "{\"error\":\"login_taken\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
                 return
             }
@@ -1219,7 +1420,7 @@ object LocalHttpShareServer {
         }
 
         val finalPassword = if (!rawNewPassword.isNullOrEmpty()) {
-            val minLen = if (targetId == "admin") 6 else 4
+            val minLen = if (isTargetAdmin) 6 else 4
             if (rawNewPassword.length < minLen) {
                 sendResponse(output, 400, "application/json; charset=UTF-8", "{\"error\":\"weak_password\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
                 return
@@ -1237,12 +1438,20 @@ object LocalHttpShareServer {
         }
 
         accountUpdateRateLimiter.recordSuccess(clientIp)
-        if (targetId == "admin") {
+        if (isTargetAdmin) {
             val pwdToSave = finalPassword ?: currentPassword
             HttpServerConfig.setAdminCredentials(context, finalLogin, pwdToSave)
-        } else {
+        } else if (isTargetUser) {
+            if (finalPassword != null) {
+                val curPass = HttpServerConfig.getPassword(context)
+                val saltBytes = HttpServerConfig.generateSalt()
+                val hashBytes = HttpServerConfig.hashPassword(curPass.toCharArray(), saltBytes)
+                DynamicUserManager.setFixedUserPrevPassword(context, HttpServerConfig.bytesToHex(saltBytes), HttpServerConfig.bytesToHex(hashBytes))
+            }
             val pwdToSave = finalPassword ?: HttpServerConfig.getPassword(context)
             HttpServerConfig.setUserCredentials(context, finalLogin, pwdToSave)
+        } else {
+            DynamicUserManager.updateCredentials(context, targetId, finalLogin, finalPassword)
         }
 
         // Close ALL other sessions of this account
@@ -1266,7 +1475,9 @@ object LocalHttpShareServer {
         needDevCookie: String?
     ) {
         val targetId = body.optString("id", "").trim()
-        if (targetId != "user") {
+        val isTargetUser = targetId == "user"
+        val dynTarget = if (!isTargetUser) DynamicUserManager.findById(context, targetId) else null
+        if (!isTargetUser && dynTarget == null) {
             sendResponse(output, 400, "application/json; charset=UTF-8", "{\"error\":\"bad_limits\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
             return
         }
@@ -1280,12 +1491,284 @@ object LocalHttpShareServer {
             return
         }
 
-        UserLimitsManager.setLimits(context, limitMin, parsedSchedule)
-
-        if (!UserLimitsManager.isScheduleAllowed(context) || UserLimitsManager.isTimeLimitExceeded(context)) {
-            activeSessions.values.filter { it.accountId == "user" }.forEach {
-                activeSessions.remove(it.token)
+        if (isTargetUser) {
+            UserLimitsManager.setLimits(context, limitMin, parsedSchedule)
+            if (!UserLimitsManager.isScheduleAllowed(parsedSchedule) || UserLimitsManager.isTimeLimitExceeded(context, "user", limitMin)) {
+                activeSessions.values.filter { it.accountId == "user" }.forEach {
+                    activeSessions.remove(it.token)
+                }
             }
+        } else {
+            DynamicUserManager.setLimits(context, targetId, limitMin, parsedSchedule)
+            if (!UserLimitsManager.isScheduleAllowed(parsedSchedule) || UserLimitsManager.isTimeLimitExceeded(context, targetId, limitMin)) {
+                activeSessions.values.filter { it.accountId == targetId }.forEach {
+                    activeSessions.remove(it.token)
+                }
+            }
+        }
+
+        sendResponse(output, 200, "application/json; charset=UTF-8", "{\"ok\":true}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+    }
+
+    private fun handleAccountCreate(
+        output: OutputStream,
+        context: Context,
+        body: JSONObject,
+        needDevCookie: String?
+    ) {
+        val name = body.optString("name", "").trim()
+        val password = body.optString("password", "")
+        val loginRegex = Regex("^[A-Za-z0-9._-]{3,32}$")
+        if (!name.matches(loginRegex)) {
+            sendResponse(output, 400, "application/json; charset=UTF-8", "{\"error\":\"bad_name\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+        if (password.length < 4) {
+            sendResponse(output, 400, "application/json; charset=UTF-8", "{\"error\":\"weak_password\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+        if (DynamicUserManager.isLoginTaken(context, name)) {
+            sendResponse(output, 409, "application/json; charset=UTF-8", "{\"error\":\"login_taken\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+        val newUser = DynamicUserManager.createUser(context, name, password)
+        sendResponse(output, 200, "application/json; charset=UTF-8", "{\"ok\":true,\"id\":${jsonEscape(newUser.id)}}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+    }
+
+    private fun handleAccountDelete(
+        output: OutputStream,
+        context: Context,
+        body: JSONObject,
+        needDevCookie: String?
+    ) {
+        val id = body.optString("id", "").trim()
+        if (id == "admin" || id == "user") {
+            sendResponse(output, 400, "application/json; charset=UTF-8", "{\"error\":\"protected\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+        val user = DynamicUserManager.findById(context, id)
+        if (user == null) {
+            sendResponse(output, 404, "application/json; charset=UTF-8", "{\"error\":\"not_found\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+        activeSessions.values.filter { it.accountId == id }.forEach {
+            activeSessions.remove(it.token)
+        }
+        DynamicUserManager.deleteUser(context, id)
+        sendResponse(output, 200, "application/json; charset=UTF-8", "{\"ok\":true}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+    }
+
+    private fun handleAccountSettings(
+        output: OutputStream,
+        context: Context,
+        body: JSONObject,
+        needDevCookie: String?
+    ) {
+        val regOpen = body.optBoolean("registrationOpen", true)
+        DynamicUserManager.setRegistrationOpen(context, regOpen)
+        sendResponse(output, 200, "application/json; charset=UTF-8", "{\"ok\":true}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+    }
+
+    private fun handleRegistrationDecide(
+        output: OutputStream,
+        context: Context,
+        body: JSONObject,
+        needDevCookie: String?
+    ) {
+        val id = body.optString("id", "").trim()
+        val approve = body.optBoolean("approve", false)
+        val success = DynamicUserManager.decideRegistration(context, id, approve)
+        if (!success) {
+            sendResponse(output, 404, "application/json; charset=UTF-8", "{\"error\":\"not_found\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+        sendResponse(output, 200, "application/json; charset=UTF-8", "{\"ok\":true}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+    }
+
+    private fun serveApiRegistrations(
+        output: OutputStream,
+        context: Context,
+        isHead: Boolean,
+        needDevCookie: String? = null
+    ) {
+        val pending = DynamicUserManager.getPendingUsers(context).sortedByDescending { it.created }
+        val sb = StringBuilder("{\"requests\":[")
+        pending.forEachIndexed { i, u ->
+            sb.append("{")
+            sb.append("\"id\":${jsonEscape(u.id)},")
+            sb.append("\"login\":${jsonEscape(u.name)},")
+            sb.append("\"t\":${u.created},")
+            sb.append("\"ip\":${jsonEscape(u.ip)},")
+            sb.append("\"name\":${jsonEscape(u.deviceName)}")
+            sb.append("}")
+            if (i < pending.size - 1) sb.append(",")
+        }
+        sb.append("]}")
+        val data = sb.toString().toByteArray(Charsets.UTF_8)
+        sendResponse(output, 200, "application/json; charset=UTF-8", data, isHead = isHead, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+    }
+
+    private fun handleCaptcha(
+        output: OutputStream,
+        clientIp: String,
+        isHead: Boolean,
+        needDevCookie: String?
+    ) {
+        if (DynamicUserManager.isCaptchaRateLimited(clientIp)) {
+            sendResponse(output, 429, "application/json; charset=UTF-8", "{\"error\":\"rate_limited\"}".toByteArray(Charsets.UTF_8), isHead = isHead, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+        val (id, image) = DynamicUserManager.generateCaptcha()
+        val json = "{\"id\":${jsonEscape(id)},\"image\":${jsonEscape(image)}}".toByteArray(Charsets.UTF_8)
+        sendResponse(output, 200, "application/json; charset=UTF-8", json, isHead = isHead, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+    }
+
+    private fun handleRegister(
+        output: OutputStream,
+        context: Context,
+        body: JSONObject,
+        clientIp: String,
+        userAgent: String,
+        needDevCookie: String?
+    ) {
+        val captchaId = body.optString("captchaId", "").trim()
+        val captcha = body.optString("captcha", "").trim()
+        if (!DynamicUserManager.verifyCaptcha(captchaId, captcha)) {
+            sendResponse(output, 400, "application/json; charset=UTF-8", "{\"error\":\"bad_captcha\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+
+        if (!DynamicUserManager.isRegistrationOpen(context)) {
+            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"registration_closed\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+
+        if (!DynamicUserManager.canRegister(clientIp)) {
+            sendResponse(output, 429, "application/json; charset=UTF-8", "{\"error\":\"too_many\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+
+        if (DynamicUserManager.getPendingCount(context) >= 20) {
+            sendResponse(output, 429, "application/json; charset=UTF-8", "{\"error\":\"too_many\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+
+        val login = body.optString("login", "").trim()
+        val password = body.optString("password", "")
+        val loginRegex = Regex("^[A-Za-z0-9._-]{3,32}$")
+        if (!login.matches(loginRegex)) {
+            sendResponse(output, 400, "application/json; charset=UTF-8", "{\"error\":\"bad_login\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+
+        if (password.length < 4) {
+            sendResponse(output, 400, "application/json; charset=UTF-8", "{\"error\":\"weak_password\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+
+        if (DynamicUserManager.isLoginTaken(context, login)) {
+            sendResponse(output, 409, "application/json; charset=UTF-8", "{\"error\":\"login_taken\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+
+        DynamicUserManager.recordRegistrationAttempt(clientIp)
+        val devName = parseBrowserAndOs(userAgent).ifEmpty { "Браузер" }
+        DynamicUserManager.registerPendingUser(context, login, password, clientIp, devName)
+
+        sendResponse(output, 200, "application/json; charset=UTF-8", "{\"ok\":true,\"status\":\"pending\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+    }
+
+    private fun handleForgot(
+        output: OutputStream,
+        context: Context,
+        body: JSONObject,
+        clientIp: String,
+        needDevCookie: String?
+    ) {
+        val captchaId = body.optString("captchaId", "").trim()
+        val captcha = body.optString("captcha", "").trim()
+        if (!DynamicUserManager.verifyCaptcha(captchaId, captcha)) {
+            sendResponse(output, 400, "application/json; charset=UTF-8", "{\"error\":\"bad_captcha\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+
+        val login = body.optString("login", "").trim()
+        if (DynamicUserManager.isForgotLocked(clientIp, login)) {
+            sendResponse(output, 429, "application/json; charset=UTF-8", "{\"error\":\"locked\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+
+        val adminLogin = HttpServerConfig.getAdminUsername(context)
+        if (login.equals("admin", ignoreCase = true) || login.equals(adminLogin, ignoreCase = true)) {
+            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"not_allowed\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+
+        val oldPassword = body.optString("oldPassword", "")
+        val userLogin = HttpServerConfig.getUsername(context)
+        val isFixedUser = login.equals("user", ignoreCase = true) || login.equals(userLogin, ignoreCase = true)
+
+        val validOld = if (isFixedUser) {
+            val prevSalt = DynamicUserManager.getFixedUserPrevSalt(context)
+            val prevHash = DynamicUserManager.getFixedUserPrevHash(context)
+            if (prevSalt.isNullOrEmpty() || prevHash.isNullOrEmpty() || oldPassword == "1234") {
+                false
+            } else {
+                DynamicUserManager.verifyPasswordWithSaltHash(oldPassword, prevSalt, prevHash)
+            }
+        } else {
+            val dyn = DynamicUserManager.findByName(context, login)
+            if (dyn == null || dyn.prevSalt.isNullOrEmpty() || dyn.prevHash.isNullOrEmpty() || oldPassword == "1234") {
+                false
+            } else {
+                DynamicUserManager.verifyPasswordWithSaltHash(oldPassword, dyn.prevSalt, dyn.prevHash)
+            }
+        }
+
+        if (!validOld) {
+            DynamicUserManager.recordForgotFailure(clientIp, login)
+            try {
+                Thread.sleep(300L + SecureRandom().nextInt(300))
+            } catch (_: Exception) {}
+            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"bad_old\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+
+        val hasNewLogin = body.has("newLogin") && !body.isNull("newLogin")
+        val newLogin = if (hasNewLogin) body.optString("newLogin", "").trim() else null
+        val finalLogin = if (!newLogin.isNullOrBlank()) {
+            val loginRegex = Regex("^[A-Za-z0-9._-]{3,32}$")
+            if (!newLogin.matches(loginRegex)) {
+                sendResponse(output, 400, "application/json; charset=UTF-8", "{\"error\":\"bad_login\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                return
+            }
+            val targetId = if (isFixedUser) "user" else DynamicUserManager.findByName(context, login)?.id
+            if (DynamicUserManager.isLoginTaken(context, newLogin, targetId)) {
+                sendResponse(output, 409, "application/json; charset=UTF-8", "{\"error\":\"login_taken\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                return
+            }
+            newLogin
+        } else {
+            if (isFixedUser) userLogin else DynamicUserManager.findByName(context, login)?.name ?: login
+        }
+
+        val newPassword = body.optString("newPassword", "")
+        if (newPassword.length < 4) {
+            sendResponse(output, 400, "application/json; charset=UTF-8", "{\"error\":\"weak_password\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+
+        if (isFixedUser) {
+            val curPass = HttpServerConfig.getPassword(context)
+            val saltBytes = HttpServerConfig.generateSalt()
+            val hashBytes = HttpServerConfig.hashPassword(curPass.toCharArray(), saltBytes)
+            DynamicUserManager.setFixedUserPrevPassword(context, HttpServerConfig.bytesToHex(saltBytes), HttpServerConfig.bytesToHex(hashBytes))
+            HttpServerConfig.setUserCredentials(context, finalLogin, newPassword)
+            activeSessions.values.filter { it.accountId == "user" }.forEach { activeSessions.remove(it.token) }
+        } else {
+            val dyn = DynamicUserManager.findByName(context, login)!!
+            DynamicUserManager.updateCredentials(context, dyn.id, finalLogin, newPassword)
+            activeSessions.values.filter { it.accountId == dyn.id }.forEach { activeSessions.remove(it.token) }
         }
 
         sendResponse(output, 200, "application/json; charset=UTF-8", "{\"ok\":true}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
@@ -1728,7 +2211,8 @@ object LocalHttpShareServer {
                             mimeType = mime,
                             isVideo = isVideo,
                             contentUri = null,
-                            directFile = file
+                            directFile = file,
+                            dateAdded = file.lastModified() / 1000L
                         )
                     )
                 }
@@ -1742,7 +2226,8 @@ object LocalHttpShareServer {
                     MediaStore.Video.Media.SIZE,
                     MediaStore.Video.Media.DURATION,
                     MediaStore.Video.Media.MIME_TYPE,
-                    MediaStore.Video.Media.DATA
+                    MediaStore.Video.Media.DATA,
+                    MediaStore.Video.Media.DATE_ADDED
                 )
                 val cursor: Cursor? = context.contentResolver.query(
                     MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
@@ -1759,6 +2244,7 @@ object LocalHttpShareServer {
                     val durCol = c.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
                     val mimeCol = c.getColumnIndexOrThrow(MediaStore.Video.Media.MIME_TYPE)
                     val dataCol = c.getColumnIndexOrThrow(MediaStore.Video.Media.DATA)
+                    val dateAddedCol = c.getColumnIndex(MediaStore.Video.Media.DATE_ADDED)
 
                     while (c.moveToNext()) {
                         val id = c.getLong(idCol)
@@ -1768,6 +2254,7 @@ object LocalHttpShareServer {
                         val dur = c.getLong(durCol)
                         val mime = c.getString(mimeCol) ?: "video/mp4"
                         val path = c.getString(dataCol)
+                        val dateAdded = if (dateAddedCol != -1) c.getLong(dateAddedCol) else 0L
                         val uri = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id)
                         val directFile = path?.let { File(it) }?.takeIf { it.exists() }
 
@@ -1781,7 +2268,8 @@ object LocalHttpShareServer {
                                 mimeType = mime,
                                 isVideo = true,
                                 contentUri = uri,
-                                directFile = directFile
+                                directFile = directFile,
+                                dateAdded = dateAdded
                             )
                         )
                     }
@@ -1798,7 +2286,8 @@ object LocalHttpShareServer {
                     MediaStore.Audio.Media.SIZE,
                     MediaStore.Audio.Media.DURATION,
                     MediaStore.Audio.Media.MIME_TYPE,
-                    MediaStore.Audio.Media.DATA
+                    MediaStore.Audio.Media.DATA,
+                    MediaStore.Audio.Media.DATE_ADDED
                 )
                 val cursor: Cursor? = context.contentResolver.query(
                     MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
@@ -1815,6 +2304,7 @@ object LocalHttpShareServer {
                     val durCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
                     val mimeCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.MIME_TYPE)
                     val dataCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
+                    val dateAddedCol = c.getColumnIndex(MediaStore.Audio.Media.DATE_ADDED)
 
                     while (c.moveToNext()) {
                         val id = c.getLong(idCol)
@@ -1824,6 +2314,7 @@ object LocalHttpShareServer {
                         val dur = c.getLong(durCol)
                         val mime = c.getString(mimeCol) ?: "audio/mpeg"
                         val path = c.getString(dataCol)
+                        val dateAdded = if (dateAddedCol != -1) c.getLong(dateAddedCol) else 0L
                         val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
                         val directFile = path?.let { File(it) }?.takeIf { it.exists() }
 
@@ -1837,7 +2328,8 @@ object LocalHttpShareServer {
                                 mimeType = mime,
                                 isVideo = false,
                                 contentUri = uri,
-                                directFile = directFile
+                                directFile = directFile,
+                                dateAdded = dateAdded
                             )
                         )
                     }
@@ -1861,7 +2353,8 @@ object LocalHttpShareServer {
                             mimeType = if (isVid) "video/mp4" else "application/octet-stream",
                             isVideo = isVid,
                             contentUri = null,
-                            directFile = f
+                            directFile = f,
+                            dateAdded = f.lastModified() / 1000L
                         )
                     )
                 }
@@ -1979,46 +2472,7 @@ object LocalHttpShareServer {
         }
     }
 
-    private fun serveThumbnail(
-        output: OutputStream,
-        mediaId: String,
-        context: Context,
-        isHead: Boolean,
-        needDevCookie: String? = null
-    ) {
-        val safeFileName = mediaId.replace(Regex("[^a-zA-Z0-9._-]"), "_") + ".jpg"
-        val thumbsDir = File(context.cacheDir, "http_thumbs")
-        val cachedFile = File(thumbsDir, safeFileName)
-
-        if (cachedFile.exists() && cachedFile.length() > 0) {
-            try {
-                val bytes = cachedFile.readBytes()
-                val header = StringBuilder("HTTP/1.1 200 OK\r\n")
-                    .append("Content-Type: image/jpeg\r\n")
-                    .append("Content-Length: ${bytes.size}\r\n")
-                    .append("Cache-Control: max-age=86400\r\n")
-                if (needDevCookie != null) {
-                    header.append("Set-Cookie: nx_dev=$needDevCookie; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly\r\n")
-                }
-                header.append("Connection: close\r\n\r\n")
-                output.write(header.toString().toByteArray(Charsets.UTF_8))
-                if (!isHead) output.write(bytes)
-                output.flush()
-                return
-            } catch (e: Exception) {
-                Log.w(TAG, "Error reading cached thumbnail: ${e.message}")
-            }
-        }
-
-        val mediaList = loadMediaList(context)
-        val item = mediaList.find { it.id == mediaId || it.fileName == mediaId }
-
-        if (item == null || !item.isVideo) {
-            val notFound = "Thumbnail not found".toByteArray(Charsets.UTF_8)
-            sendResponse(output, 404, "text/plain; charset=UTF-8", notFound, isHead, needDevCookie = needDevCookie)
-            return
-        }
-
+    fun generateRawThumbnailBitmap(context: Context, item: HttpMediaFile): Bitmap? {
         var bitmap: Bitmap? = null
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && item.contentUri != null) {
@@ -2066,28 +2520,148 @@ object LocalHttpShareServer {
                 } catch (_: Throwable) {}
             }
         }
+        return bitmap
+    }
 
-        if (bitmap == null) {
-            val notFound = "Thumbnail generation failed".toByteArray(Charsets.UTF_8)
+    private fun generateThumbnailToFile(context: Context, item: HttpMediaFile, cachedFile: File) {
+        val raw = generateRawThumbnailBitmap(context, item) ?: return
+        try {
+            val scaled = Bitmap.createScaledBitmap(raw, 320, 180, true)
+            val baos = ByteArrayOutputStream()
+            scaled.compress(Bitmap.CompressFormat.JPEG, 75, baos)
+            cachedFile.writeBytes(baos.toByteArray())
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed writing thumb file: ${e.message}")
+        }
+    }
+
+    fun startThumbnailPregeneration(context: Context) {
+        stopThumbnailPregeneration()
+        val t = Thread {
+            try {
+                android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
+                val thumbsDir = File(context.cacheDir, "http_thumbs")
+                if (!thumbsDir.exists()) thumbsDir.mkdirs()
+                val mediaList = loadMediaList(context).filter { it.isVideo }.sortedByDescending { it.dateAdded }
+                for (item in mediaList) {
+                    if (Thread.currentThread().isInterrupted || serverSocket?.isClosed == true) break
+                    val safeFileName = item.id.replace(Regex("[^a-zA-Z0-9._-]"), "_") + ".jpg"
+                    val cachedFile = File(thumbsDir, safeFileName)
+                    if (cachedFile.exists() && cachedFile.length() > 0) continue
+                    generateThumbnailToFile(context, item, cachedFile)
+                }
+            } catch (_: InterruptedException) {
+            } catch (e: Exception) {
+                Log.w(TAG, "Thumbnail pregeneration ended: ${e.message}")
+            }
+        }
+        thumbPregenThread = t
+        t.isDaemon = true
+        t.start()
+    }
+
+    fun stopThumbnailPregeneration() {
+        thumbPregenThread?.interrupt()
+        thumbPregenThread = null
+    }
+
+    private fun serveThumbnail(
+        output: OutputStream,
+        mediaId: String,
+        context: Context,
+        isHead: Boolean,
+        ifNoneMatchHeader: String? = null,
+        needDevCookie: String? = null
+    ) {
+        val safeFileName = mediaId.replace(Regex("[^a-zA-Z0-9._-]"), "_") + ".jpg"
+        val thumbsDir = File(context.cacheDir, "http_thumbs")
+        val cachedFile = File(thumbsDir, safeFileName)
+
+        val mediaList = loadMediaList(context)
+        val item = mediaList.find { it.id == mediaId || it.fileName == mediaId }
+
+        val lastMod = item?.directFile?.lastModified()?.takeIf { it > 0 }
+            ?: (item?.dateAdded?.times(1000L) ?: (if (cachedFile.exists()) cachedFile.lastModified() else 0L))
+        val size = item?.sizeBytes ?: (if (cachedFile.exists()) cachedFile.length() else 0L)
+        val etag = "\"${mediaId}_${size}_${lastMod}\""
+
+        // Check If-None-Match
+        if (!ifNoneMatchHeader.isNullOrBlank()) {
+            val cleanIfNone = ifNoneMatchHeader.trim()
+            if (cleanIfNone == etag || cleanIfNone == etag.trim('"') || cleanIfNone.contains(etag)) {
+                val header = StringBuilder("HTTP/1.1 304 Not Modified\r\n")
+                    .append("ETag: $etag\r\n")
+                    .append("Cache-Control: private, max-age=604800\r\n")
+                if (needDevCookie != null) {
+                    header.append("Set-Cookie: nx_dev=$needDevCookie; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly\r\n")
+                }
+                header.append("Connection: close\r\n\r\n")
+                output.write(header.toString().toByteArray(Charsets.UTF_8))
+                output.flush()
+                return
+            }
+        }
+
+        if (cachedFile.exists() && cachedFile.length() > 0) {
+            try {
+                val bytes = cachedFile.readBytes()
+                val header = StringBuilder("HTTP/1.1 200 OK\r\n")
+                    .append("Content-Type: image/jpeg\r\n")
+                    .append("Content-Length: ${bytes.size}\r\n")
+                    .append("Cache-Control: private, max-age=604800\r\n")
+                    .append("ETag: $etag\r\n")
+                if (needDevCookie != null) {
+                    header.append("Set-Cookie: nx_dev=$needDevCookie; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly\r\n")
+                }
+                header.append("Connection: close\r\n\r\n")
+                output.write(header.toString().toByteArray(Charsets.UTF_8))
+                if (!isHead) output.write(bytes)
+                output.flush()
+                return
+            } catch (e: Exception) {
+                Log.w(TAG, "Error reading cached thumbnail: ${e.message}")
+            }
+        }
+
+        if (item == null || !item.isVideo) {
+            val notFound = "Thumbnail not found".toByteArray(Charsets.UTF_8)
             sendResponse(output, 404, "text/plain; charset=UTF-8", notFound, isHead, needDevCookie = needDevCookie)
             return
         }
 
-        val baos = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 80, baos)
-        val bytes = baos.toByteArray()
+        val acquired = thumbSemaphore.tryAcquire(3, java.util.concurrent.TimeUnit.SECONDS)
+        if (!acquired) {
+            sendResponse(output, 503, "text/plain; charset=UTF-8", "Server busy".toByteArray(Charsets.UTF_8), isHead, needDevCookie = needDevCookie)
+            return
+        }
 
+        val bytes: ByteArray
         try {
-            if (!thumbsDir.exists()) thumbsDir.mkdirs()
-            cachedFile.writeBytes(bytes)
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed writing thumb cache: ${e.message}")
+            val raw = generateRawThumbnailBitmap(context, item)
+            if (raw == null) {
+                val notFound = "Thumbnail generation failed".toByteArray(Charsets.UTF_8)
+                sendResponse(output, 404, "text/plain; charset=UTF-8", notFound, isHead, needDevCookie = needDevCookie)
+                return
+            }
+            val scaled = Bitmap.createScaledBitmap(raw, 320, 180, true)
+            val baos = ByteArrayOutputStream()
+            scaled.compress(Bitmap.CompressFormat.JPEG, 75, baos)
+            bytes = baos.toByteArray()
+            try {
+                if (!thumbsDir.exists()) thumbsDir.mkdirs()
+                cachedFile.writeBytes(bytes)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed writing thumb cache: ${e.message}")
+            }
+        } finally {
+            thumbSemaphore.release()
         }
 
         val header = StringBuilder("HTTP/1.1 200 OK\r\n")
             .append("Content-Type: image/jpeg\r\n")
             .append("Content-Length: ${bytes.size}\r\n")
-            .append("Cache-Control: max-age=86400\r\n")
+            .append("Cache-Control: private, max-age=604800\r\n")
+            .append("ETag: $etag\r\n")
         if (needDevCookie != null) {
             header.append("Set-Cookie: nx_dev=$needDevCookie; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly\r\n")
         }
@@ -2652,8 +3226,9 @@ object LocalHttpShareServer {
         } catch (_: Exception) {
             Pair(0L, 0L)
         }
+        val pendingRegs = if (reqAuth.role == "admin") DynamicUserManager.getPendingCount(context) else 0
         val diskJson = "{\"total\":${stat.first},\"free\":${stat.second}}"
-        val json = "{\"ok\":true,\"online\":true,\"time\":$timeMs,\"wifi\":$wifiJson,\"me\":$meJson,\"disk\":$diskJson}"
+        val json = "{\"ok\":true,\"online\":true,\"time\":$timeMs,\"wifi\":$wifiJson,\"me\":$meJson,\"disk\":$diskJson,\"pendingRegs\":$pendingRegs}"
         val data = json.toByteArray(Charsets.UTF_8)
         sendResponse(output, 200, "application/json; charset=UTF-8", data, isHead = isHead, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
     }
@@ -2708,6 +3283,8 @@ object LocalHttpShareServer {
         needDevCookie: String? = null
     ) {
         loadDevicesIfNeeded(context)
+        DynamicUserManager.loadIfNeeded(context)
+
         val adminName = HttpServerConfig.getAdminUsername(context)
         val adminDefault = HttpServerConfig.isAdminPasswordDefault(context)
         val adminSessions = activeSessions.values.count { it.accountId == "admin" }
@@ -2728,10 +3305,13 @@ object LocalHttpShareServer {
             .filter { it > 0 }
             .maxOrNull()
 
-        val usedToday = UserLimitsManager.getUsedTodaySeconds(context)
-        val limitMin = UserLimitsManager.getLimitMinutes(context)
-        val remainingSec = UserLimitsManager.getRemainingSeconds(context)
-        val scheduleObj = UserLimitsManager.getScheduleJsonObject(context)
+        val userUsedToday = UserLimitsManager.getUsedTodaySeconds(context, "user")
+        val userLimitMin = UserLimitsManager.getLimitMinutes(context)
+        val userRemainingSec = UserLimitsManager.getRemainingSeconds(context, "user", userLimitMin)
+        val userScheduleObj = UserLimitsManager.getScheduleJsonObject(context)
+
+        val regOpen = DynamicUserManager.isRegistrationOpen(context)
+        val pendingRegs = if (reqAuth.role == "admin") DynamicUserManager.getPendingCount(context) else 0
 
         val sb = StringBuilder("{")
         sb.append("\"me\":{")
@@ -2739,6 +3319,8 @@ object LocalHttpShareServer {
         sb.append("\"role\":${jsonEscape(reqAuth.role)},")
         sb.append("\"name\":${jsonEscape(reqAuth.username)}")
         sb.append("},")
+        sb.append("\"registrationOpen\":$regOpen,")
+        sb.append("\"pendingRegs\":$pendingRegs,")
         sb.append("\"accounts\":[")
 
         // admin
@@ -2747,6 +3329,7 @@ object LocalHttpShareServer {
         sb.append("\"name\":${jsonEscape(adminName)},")
         sb.append("\"role\":\"admin\",")
         sb.append("\"passwordDefault\":$adminDefault,")
+        sb.append("\"deletable\":false,")
         sb.append("\"online\":$adminOnline,")
         sb.append("\"sessions\":$adminSessions,")
         sb.append("\"usedToday\":0,")
@@ -2762,14 +3345,46 @@ object LocalHttpShareServer {
         sb.append("\"name\":${jsonEscape(userName)},")
         sb.append("\"role\":\"user\",")
         sb.append("\"passwordDefault\":$userDefault,")
+        sb.append("\"deletable\":false,")
         sb.append("\"online\":$userOnline,")
         sb.append("\"sessions\":$userSessions,")
-        sb.append("\"usedToday\":$usedToday,")
-        sb.append("\"limitMin\":$limitMin,")
-        sb.append("\"remainingSec\":${remainingSec ?: "null"},")
-        sb.append("\"schedule\":${scheduleObj ?: "null"},")
+        sb.append("\"usedToday\":$userUsedToday,")
+        sb.append("\"limitMin\":$userLimitMin,")
+        sb.append("\"remainingSec\":${userRemainingSec ?: "null"},")
+        sb.append("\"schedule\":${userScheduleObj ?: "null"},")
         sb.append("\"lastLogin\":${userLastLogin ?: "null"}")
         sb.append("}")
+
+        // dynamic users (active only)
+        val activeUsers = DynamicUserManager.getActiveUsers(context)
+        for (dyn in activeUsers) {
+            sb.append(",")
+            val dynSessions = activeSessions.values.count { it.accountId == dyn.id }
+            val dynOnline = dynSessions > 0
+            val dynLastLogin = devices.values
+                .filter { it.account.equals(dyn.name, ignoreCase = true) }
+                .map { it.lastLogin }
+                .filter { it > 0 }
+                .maxOrNull()
+            val dynUsedToday = UserLimitsManager.getUsedTodaySeconds(context, dyn.id)
+            val dynRemainingSec = UserLimitsManager.getRemainingSeconds(context, dyn.id, dyn.limitMin)
+            val dynScheduleObj = if (dyn.schedule.mode == "off" && dyn.schedule.windows.isEmpty()) null else dyn.schedule.toJson()
+
+            sb.append("{")
+            sb.append("\"id\":${jsonEscape(dyn.id)},")
+            sb.append("\"name\":${jsonEscape(dyn.name)},")
+            sb.append("\"role\":\"user\",")
+            sb.append("\"passwordDefault\":false,")
+            sb.append("\"deletable\":true,")
+            sb.append("\"online\":$dynOnline,")
+            sb.append("\"sessions\":$dynSessions,")
+            sb.append("\"usedToday\":$dynUsedToday,")
+            sb.append("\"limitMin\":${dyn.limitMin},")
+            sb.append("\"remainingSec\":${dynRemainingSec ?: "null"},")
+            sb.append("\"schedule\":${dynScheduleObj ?: "null"},")
+            sb.append("\"lastLogin\":${dynLastLogin ?: "null"}")
+            sb.append("}")
+        }
 
         sb.append("]}")
 
@@ -2837,6 +3452,8 @@ object LocalHttpShareServer {
         }
         val isPassDef = if (reqAuth.id == "admin") HttpServerConfig.isAdminPasswordDefault(context) else HttpServerConfig.isUserPasswordDefault(context)
         val meJson = "{\"id\":${jsonEscape(reqAuth.id)},\"role\":${jsonEscape(reqAuth.role)},\"name\":${jsonEscape(reqAuth.username)},\"passwordDefault\":$isPassDef}"
+        val pendingRegs = if (reqAuth.role == "admin") DynamicUserManager.getPendingCount(context) else 0
+        val regOpen = DynamicUserManager.isRegistrationOpen(context)
 
         val jsonBuilder = StringBuilder("{")
         jsonBuilder.append("\"version\":${jsonEscape(versionName)},")
@@ -2848,6 +3465,8 @@ object LocalHttpShareServer {
         jsonBuilder.append("\"features\":{\"photos\":true,\"folders\":true},")
         jsonBuilder.append("\"wifi\":$wifiJson,")
         jsonBuilder.append("\"me\":$meJson,")
+        jsonBuilder.append("\"pendingRegs\":$pendingRegs,")
+        jsonBuilder.append("\"registrationOpen\":$regOpen,")
         jsonBuilder.append("\"stats\":{")
         jsonBuilder.append("\"videos\":$totalVideos,")
         jsonBuilder.append("\"audio\":$totalAudio,")
