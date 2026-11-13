@@ -85,7 +85,7 @@ jobs:
           test -s "$APK"
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -mindepth 2 -maxdepth 2 -type f -name apksigner | sort -V | tail -n 1)"
           test -n "$APKSIGNER"
-          "$APKSigner" verify --verbose --print-certs "$APK"
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
 
       - name: Upload Release APK Artifact
         if: github.event_name != 'pull_request'
