@@ -112,6 +112,7 @@ dependencies {
     implementation("com.google.accompanist:accompanist-swiperefresh:0.34.0")
 
     implementation("org.videolan.android:libvlc-all:3.6.0-eap13")
+    implementation("com.google.android.gms:play-services-cast-framework:21.5.0")
     implementation("org.apache.ftpserver:ftpserver-core:1.2.0")
     implementation("org.slf4j:slf4j-android:1.7.36")
     implementation("commons-net:commons-net:3.10.0")
