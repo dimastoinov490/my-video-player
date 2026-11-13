@@ -92,24 +92,31 @@ fun VideoLibraryScreen(
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { result ->
-        val granted = result.values.any { it }
+        // The video library only requires video access. Image/audio grants must not
+        // be treated as permission to query MediaStore.Video.
+        val granted = checkMediaPermissions(context)
         hasStoragePermission = granted
         if (granted) {
             loadVideosInternal(context, coroutineScope, onVideosLoaded = { videos = it }, onStatus = { scanStatusText = it }, onRefreshing = { isRefreshing = it }, onBanner = { showScanBanner = it })
+        } else {
+            scanStatusText = "Для просмотра видео необходимо разрешение на доступ к видеофайлам"
+            showScanBanner = false
+            isRefreshing = false
         }
     }
 
     fun loadVideos() {
-        if (!hasStoragePermission) {
+        if (!checkMediaPermissions(context)) {
+            hasStoragePermission = false
             requestMediaPermissions(permissionLauncher)
+            return
         }
+        hasStoragePermission = true
         loadVideosInternal(context, coroutineScope, onVideosLoaded = { videos = it }, onStatus = { scanStatusText = it }, onRefreshing = { isRefreshing = it }, onBanner = { showScanBanner = it })
     }
 
     LaunchedEffect(Unit) {
-        if (!hasStoragePermission) {
-            requestMediaPermissions(permissionLauncher)
-        }
+        // Request once; calling loadVideos() here also handles the granted case.
         loadVideos()
     }
 
@@ -155,6 +162,10 @@ fun VideoLibraryScreen(
                 onRefreshVideos = {
                     Toast.makeText(context, "Обновление списка видео…", Toast.LENGTH_SHORT).show()
                     coroutineScope.launch {
+                        if (!checkMediaPermissions(context)) {
+                            loadVideos()
+                            return@launch
+                        }
                         withContext(Dispatchers.IO) {
                             MediaStoreHelper.requestMediaScan(context)
                         }
@@ -206,29 +217,26 @@ private fun loadVideosInternal(
 
 private fun checkMediaPermissions(context: Context): Boolean {
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED &&
-        ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED
+        ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.READ_MEDIA_VIDEO
+        ) == PackageManager.PERMISSION_GRANTED
     } else {
-        ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+        ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        ) == PackageManager.PERMISSION_GRANTED
     }
 }
 
 private fun requestMediaPermissions(launcher: androidx.activity.result.ActivityResultLauncher<Array<String>>) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        launcher.launch(
-            arrayOf(
-                Manifest.permission.READ_MEDIA_VIDEO,
-                Manifest.permission.READ_MEDIA_AUDIO,
-                Manifest.permission.READ_MEDIA_IMAGES
-            )
-        )
+    val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        // Do not request unrelated audio/image access from the video library.
+        arrayOf(Manifest.permission.READ_MEDIA_VIDEO)
     } else {
-        launcher.launch(
-            arrayOf(
-                Manifest.permission.READ_EXTERNAL_STORAGE
-            )
-        )
+        arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
     }
+    launcher.launch(permissions)
 }
 
 @Composable
