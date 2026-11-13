@@ -91,14 +91,16 @@ object WifiDirectManager {
                                 onComplete(info)
                             } else {
                                 Log.w(TAG, "Wi-Fi Direct group did not provide usable credentials")
+                                try { manager.removeGroup(channel, null) } catch (_: Exception) { }
                                 fallbackToLocalHotspot(appContext, generation, onStatus, onComplete)
                             }
                         }
                     }
 
                     override fun onFailure(reason: Int) {
+                        if (generation != operationGeneration) return
                         Log.w(TAG, "WifiP2pManager createGroup failed ($reason), trying local-only hotspot")
-                        fallbackToLocalHotspot(appContext, onStatus, onComplete)
+                        fallbackToLocalHotspot(appContext, generation, onStatus, onComplete)
                     }
                 })
                 return
