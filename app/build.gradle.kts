@@ -11,6 +11,9 @@ val releaseKeyAlias = providers.environmentVariable("RELEASE_KEY_ALIAS").orNull
 val releaseKeyPassword = providers.environmentVariable("RELEASE_KEY_PASSWORD").orNull
 val hasReleaseSigning = listOf(releaseStoreFile, releaseStorePassword, releaseKeyAlias, releaseKeyPassword).all { !it.isNullOrBlank() }
 
+// Автоматический номер версии: берет номер из GitHub Actions, а для локальных сборок ставит 1
+val runNumber = System.getenv("GITHUB_RUN_NUMBER")?.toInt() ?: 1
+
 android {
     namespace = "com.example.videoplayer"
     compileSdk = 34
@@ -19,8 +22,8 @@ android {
         applicationId = "com.example.videoplayer"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = runNumber
+        versionName = "1.0.$runNumber"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "GEMINI_API_KEY", "\"\"")
     }
@@ -69,9 +72,6 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // Never sign production builds with the publicly-known Android debug key.
-            // Configure RELEASE_STORE_FILE, RELEASE_STORE_PASSWORD, RELEASE_KEY_ALIAS
-            // and RELEASE_KEY_PASSWORD in the build environment to sign release artifacts.
             if (hasReleaseSigning) {
                 signingConfig = signingConfigs.getByName("releaseConfig")
             }
@@ -96,7 +96,6 @@ android {
         }
     }
 }
-
 
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2024.09.00"))
