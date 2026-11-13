@@ -454,8 +454,12 @@ const draw=(id,arr,fn,off=2)=>{
 function renderVideos() {
   const listEl = document.getElementById('video-list');
   if (!listEl) return;
-  const items = (allVideos && allVideos.length > 0) ? allVideos : defaultSampleVideos;
+  const items = (allVideos && allVideos.length > 0) ? allVideos : (PREVIEW ? defaultSampleVideos : []);
   listEl.innerHTML = '';
+  if (items.length === 0) {
+    listEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted)">Видео пока нет</div>';
+    return;
+  }
   items.forEach(v => {
     const card = document.createElement('div');
     card.className = 'vcard';
@@ -503,12 +507,17 @@ function renderVideos() {
 }
 
 function renderAudio() {
-  const items = allAudios.length > 0 ? allAudios : [
+  const items = allAudios.length > 0 ? allAudios : (PREVIEW ? [
     { title: "Fire Man (Sefon.me)", artist: "MiyaGi & Эндшпиль • Download", meta: "03:37 • 8,3 MB", uri: "sample://audio1" },
     { title: "viber_message", artist: "<unknown> • Notifications", meta: "00:01 • 0,0 MB", uri: "sample://audio2" }
-  ];
+  ] : []);
   const countEl = document.getElementById('n-audio');
   if (countEl) countEl.textContent = items.length;
+  if (items.length === 0) {
+    const list = document.getElementById('l-audio');
+    if (list) list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted)">Аудиофайлов пока нет</div>';
+    return;
+  }
 
   draw('l-audio', items, (a, i) => `
     <div class="card" data-s="${esc(a.title + ' ' + (a.artist||''))}" data-uri="${esc(a.uri||'')}">
@@ -546,15 +555,20 @@ function renderAudio() {
 }
 
 function renderBrowse() {
-  const items = allFolders.length > 0 ? allFolders : [
+  const items = allFolders.length > 0 ? allFolders : (PREVIEW ? [
     { name: "DCIM", path: "/storage/emulated/0/DCIM", count: 3, isDir: true },
     { name: "Download", path: "/storage/emulated/0/Download", count: 15, isDir: true },
     { name: "Movies", path: "/storage/emulated/0/Movies", count: 3, isDir: true },
     { name: "Music", path: "/storage/emulated/0/Music", count: 2, isDir: true },
     { name: "Documents", path: "/storage/emulated/0/Documents", count: 0, isDir: true }
-  ];
+  ] : []);
   const countEl = document.getElementById('n-browse');
   if (countEl) countEl.textContent = items.length + " объектов";
+  if (items.length === 0) {
+    const list = document.getElementById('l-browse');
+    if (list) list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted)">Папка пуста или недоступна</div>';
+    return;
+  }
 
   draw('l-browse', items, (a, i) => `
     <div class="card" data-s="${esc(a.name)}" data-path="${esc(a.path||'')}" data-isdir="${a.isDir ? '1':'0'}">
@@ -583,9 +597,14 @@ function renderBrowse() {
 }
 
 function renderPlaylists() {
-  const items = allPlaylists.length > 0 ? allPlaylists : defaultPlaylists;
+  const items = allPlaylists.length > 0 ? allPlaylists : (PREVIEW ? defaultPlaylists : []);
   const countEl = document.getElementById('n-playlists-count');
   if (countEl) countEl.textContent = "Всего: " + items.length;
+  if (items.length === 0) {
+    const list = document.getElementById('l-playlists');
+    if (list) list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted)">Плейлистов пока нет</div>';
+    return;
+  }
 
   draw('l-playlists', items, (a, i) => `
     <div class="card" data-s="${esc(a.title)}" data-id="${esc(a.id||'')}" data-uri="${esc(a.uri||'')}">
@@ -986,6 +1005,7 @@ function closeSubs(instant){
 document.querySelectorAll('[data-back]').forEach(b=>b.addEventListener('click',()=>closeSubs()));
 window.nexoraBack = () => closeSubs();             // Android back button: window.nexoraBack() returns true if it closed a sub-page
 window.onShareState = () => { if (activeSub === 'share') renderShare(); };   // optional push from native
+window.onSettingsState = () => { if (activeSub === 'settings' || activeSub === 'share') renderSettings(); };
 
 /* ---------- Ещё: item click router ---------- */
 function openMoreItem(id){
