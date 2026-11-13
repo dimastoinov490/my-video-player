@@ -98,7 +98,7 @@ android {
 }
 
 dependencies {
-    implementation(platform("androidx.compose:compose-bom:2024.09.00"))
+    implementation(platform("androidx.compose:compose-bom:2026.09.00"))
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("androidx.activity:activity-compose:1.8.2")
@@ -109,9 +109,8 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
-    implementation("com.google.accompanist:accompanist-swiperefresh:0.34.0")
 
-    implementation("org.videolan.android:libvlc-all:3.6.0-eap13")
+    implementation("org.videolan.android:libvlc-all:3.7.7")
     implementation("com.google.android.gms:play-services-cast-framework:21.5.0")
     implementation("org.apache.ftpserver:ftpserver-core:1.2.0")
     implementation("org.slf4j:slf4j-android:1.7.36")
@@ -120,7 +119,7 @@ dependencies {
     implementation("androidx.fragment:fragment-ktx:1.6.2")
     implementation("com.google.zxing:core:3.5.3")
     implementation("androidx.palette:palette-ktx:1.0.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
 
     implementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
     implementation("org.bouncycastle:bcpkix-jdk18on:1.78.1")
