@@ -35,6 +35,8 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -73,6 +75,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.example.videoplayer.R
 import com.example.videoplayer.model.MediaStoreHelper
+import com.example.videoplayer.player.PlaybackTrack
 import com.example.videoplayer.player.VlcPlayerManager
 import com.example.videoplayer.ui.theme.ThemeConfigManager
 import kotlinx.coroutines.Dispatchers
@@ -212,6 +215,10 @@ fun PlayerScreen(
     var showTopOverflowMenu by remember { mutableStateOf(false) }
     var showMoreBottomSheet by remember { mutableStateOf(false) }
     var showSubtitlesDialog by remember { mutableStateOf(false) }
+    var audioTracks by remember { mutableStateOf(emptyList<PlaybackTrack>()) }
+    var subtitleTracks by remember { mutableStateOf(emptyList<PlaybackTrack>()) }
+    var selectedAudioTrack by remember { mutableIntStateOf(-1) }
+    var selectedSubtitleTrack by remember { mutableIntStateOf(-1) }
     var showCastDialog by remember { mutableStateOf(false) }
     var scaleMode by remember { mutableStateOf(VideoScaleMode.FIT) }
     var repeatMode by remember { mutableStateOf(VideoRepeatMode.OFF) }
@@ -381,11 +388,24 @@ fun PlayerScreen(
                 infoFeedbackText = "Включен резервный медиа-движок Android"
             }
         }
+        playerManager.onTracksChanged = {
+            coroutineScope.launch {
+                audioTracks = playerManager.getAudioTracks()
+                subtitleTracks = playerManager.getSubtitleTracks()
+                selectedAudioTrack = playerManager.getSelectedAudioTrack()
+                selectedSubtitleTrack = playerManager.getSelectedSubtitleTrack()
+            }
+        }
         playerManager.onTimeChanged = { time, length ->
             currentTimeMs = time
             if (length > 0) totalDurationMs = length
         }
-        onDispose {}
+        onDispose {
+            playerManager.onTracksChanged = null
+            playerManager.onStatusChanged = null
+            playerManager.onTimeChanged = null
+            playerManager.onVideoAspectChanged = null
+        }
     }
 
     BoxWithConstraints(
@@ -984,15 +1004,112 @@ fun PlayerScreen(
             }
         }
 
-        // Subtitles and Audio Dialog
+        // Real VLC audio and subtitle track selection.
         if (showSubtitlesDialog) {
+            LaunchedEffect(showSubtitlesDialog, useNativeFallback) {
+                if (showSubtitlesDialog && !useNativeFallback) {
+                    delay(350)
+                    audioTracks = playerManager.getAudioTracks()
+                    subtitleTracks = playerManager.getSubtitleTracks()
+                    selectedAudioTrack = playerManager.getSelectedAudioTrack()
+                    selectedSubtitleTrack = playerManager.getSelectedSubtitleTrack()
+                }
+            }
             AlertDialog(
                 onDismissRequest = { showSubtitlesDialog = false },
                 title = { Text("Субтитры и Аудио", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp) },
                 text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Звуковая дорожка: По умолчанию (Русский/Оригинал)", color = Color.LightGray, fontSize = 13.sp)
-                        Text("Субтитры: Вшитые (UTF-8) / Отключены", color = Color.LightGray, fontSize = 13.sp)
+                    Column(
+                        modifier = Modifier.heightIn(max = 380.dp).verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("Звуковая дорожка", color = Color(0xFF00D8FF), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        if (useNativeFallback) {
+                            Text("Выбор дорожек недоступен в резервном Android-плеере.", color = Color.LightGray, fontSize = 12.sp)
+                        } else if (audioTracks.isEmpty()) {
+                            Text("Звуковые дорожки пока не обнаружены.", color = Color.LightGray, fontSize = 12.sp)
+                        } else {
+                            audioTracks.forEach { track ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().clickable {
+                                        if (playerManager.selectAudioTrack(track.id)) {
+                                            selectedAudioTrack = track.id
+                                            infoFeedbackText = "Звуковая дорожка изменена"
+                                        } else {
+                                            infoFeedbackText = "Не удалось переключить дорожку"
+                                        }
+                                    }.padding(vertical = 3.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    RadioButton(
+                                        selected = selectedAudioTrack == track.id,
+                                        onClick = {
+                                            if (playerManager.selectAudioTrack(track.id)) {
+                                                selectedAudioTrack = track.id
+                                                infoFeedbackText = "Звуковая дорожка изменена"
+                                            } else infoFeedbackText = "Не удалось переключить дорожку"
+                                        },
+                                        colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF00D8FF))
+                                    )
+                                    Text(track.name.ifBlank { "Дорожка ${track.id}" }, color = Color.LightGray, fontSize = 12.sp)
+                                }
+                            }
+                        }
+
+                        Divider(color = Color(0x334A607A))
+                        Text("Субтитры", color = Color(0xFF00D8FF), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        if (useNativeFallback) {
+                            Text("Выбор субтитров недоступен в резервном Android-плеере.", color = Color.LightGray, fontSize = 12.sp)
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().clickable {
+                                    if (playerManager.selectSubtitleTrack(-1)) {
+                                        selectedSubtitleTrack = -1
+                                        infoFeedbackText = "Субтитры отключены"
+                                    } else infoFeedbackText = "Не удалось изменить субтитры"
+                                }.padding(vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = selectedSubtitleTrack == -1,
+                                    onClick = {
+                                        if (playerManager.selectSubtitleTrack(-1)) {
+                                            selectedSubtitleTrack = -1
+                                            infoFeedbackText = "Субтитры отключены"
+                                        } else infoFeedbackText = "Не удалось изменить субтитры"
+                                    },
+                                    colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF00D8FF))
+                                )
+                                Text("Отключены", color = Color.LightGray, fontSize = 12.sp)
+                            }
+                            if (subtitleTracks.isEmpty()) {
+                                Text("Встроенные субтитры не обнаружены.", color = Color.LightGray, fontSize = 12.sp)
+                            } else {
+                                subtitleTracks.forEach { track ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().clickable {
+                                            if (playerManager.selectSubtitleTrack(track.id)) {
+                                                selectedSubtitleTrack = track.id
+                                                infoFeedbackText = "Субтитры включены"
+                                            } else infoFeedbackText = "Не удалось включить субтитры"
+                                        }.padding(vertical = 3.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        RadioButton(
+                                            selected = selectedSubtitleTrack == track.id,
+                                            onClick = {
+                                                if (playerManager.selectSubtitleTrack(track.id)) {
+                                                    selectedSubtitleTrack = track.id
+                                                    infoFeedbackText = "Субтитры включены"
+                                                } else infoFeedbackText = "Не удалось включить субтитры"
+                                            },
+                                            colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF00D8FF))
+                                        )
+                                        Text(track.name.ifBlank { "Субтитры ${track.id}" }, color = Color.LightGray, fontSize = 12.sp)
+                                    }
+                                }
+                            }
+                        }
                     }
                 },
                 confirmButton = {
@@ -1011,10 +1128,11 @@ fun PlayerScreen(
                 onDismissRequest = { showCastDialog = false },
                 title = { Text("Беспроводная трансляция", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp) },
                 text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = Color(0xFF00D8FF))
-                        Text("Поиск приемников Google Cast / Miracast в локальной сети...", color = Color.LightGray, fontSize = 13.sp)
-                    }
+                    Text(
+                        "Подключение к Google Cast пока не реализовано. Miracast обычно запускается средствами системы Android — используйте пункт «Трансляция экрана» в быстрых настройках телефона.",
+                        color = Color.LightGray,
+                        fontSize = 13.sp
+                    )
                 },
                 confirmButton = {
                     TextButton(onClick = { showCastDialog = false }) {
