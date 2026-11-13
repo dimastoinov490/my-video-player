@@ -408,6 +408,50 @@ img.lz{opacity:0;transition:opacity .3s}img.lz.ld{opacity:1}
 .pbar{display:flex;align-items:center;gap:10px;padding:8px 12px;border-top:1px solid rgba(255,138,0,.25)}
 .pbar b{flex:1;min-width:0;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .toast{position:absolute;left:50%;bottom:78px;transform:translateX(-50%);z-index:70;padding:7px 14px;border-radius:12px;background:#1a0d05;border:1px solid var(--o2);color:var(--o1);font-size:12px;opacity:0;pointer-events:none;transition:opacity .25s}.toast.show{opacity:1}
+
+/* ---------- монитор активности (администратор) ---------- */
+.mon-sum{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-bottom:12px}
+.mon-kpi{padding:10px 12px;border-radius:14px;border:1px solid rgba(255,255,255,.11);background:linear-gradient(150deg,rgba(255,255,255,.07),rgba(255,255,255,.02))}
+.mon-kpi small{display:block;font-size:11px;color:#b9aa9a}
+.mon-kpi b{display:block;font-size:17px;font-weight:700;color:var(--o1);margin-top:3px;font-variant-numeric:tabular-nums}
+.mon-right{text-align:right;flex:none;min-width:110px}
+.mon-right b{display:block;font-size:13px;font-weight:700;color:var(--o1);font-variant-numeric:tabular-nums}
+.mon-right small{display:block;font-size:10.5px;color:#b9aa9a;margin-top:2px;font-variant-numeric:tabular-nums}
+.st-bdg{display:inline-block;padding:1px 8px;border-radius:9px;font-size:10px;font-weight:700}
+.st-watching{background:rgba(47,107,255,.22);color:#8fb2ff;border:1px solid rgba(47,107,255,.55)}
+.st-listening{background:rgba(168,85,247,.22);color:#d8b4fe;border:1px solid rgba(168,85,247,.55)}
+.st-downloading{background:rgba(47,224,93,.18);color:#7dec9a;border:1px solid rgba(47,224,93,.45)}
+.st-uploading{background:rgba(255,176,32,.2);color:#ffc966;border:1px solid rgba(255,176,32,.55)}
+.st-browsing{background:rgba(255,255,255,.09);color:#e9ddd0;border:1px solid rgba(255,255,255,.22)}
+.st-idle{background:rgba(255,255,255,.05);color:#9b9792;border:1px solid rgba(255,255,255,.12)}
+.mon-prog{height:4px;border-radius:3px;background:rgba(255,255,255,.1);overflow:hidden;margin-top:5px;max-width:240px}
+.mon-prog i{display:block;height:100%;background:linear-gradient(90deg,var(--o1),var(--o3))}
+/* ---------- диагностика локальной сети ---------- */
+.diag-card{margin-top:14px;padding:13px 14px;border-radius:16px;border:1px solid rgba(255,255,255,.1);background:linear-gradient(160deg,rgba(255,255,255,.06),rgba(255,255,255,.02))}
+.diag-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.diag-head h3{font-size:14.5px;font-weight:700;color:var(--o2)}
+.diag-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:10px 0}
+.diag-kpi{padding:9px 11px;border-radius:12px;border:1px solid rgba(255,255,255,.09);background:rgba(0,0,0,.28)}
+.diag-kpi small{display:block;font-size:10.5px;color:#b9aa9a}
+.diag-kpi b{display:block;font-size:15px;font-weight:700;color:var(--o1);margin-top:2px;font-variant-numeric:tabular-nums}
+.diag-kpi span{display:block;font-size:10.5px;color:#d6cfc7;margin-top:2px;font-variant-numeric:tabular-nums}
+.diag-calc{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:9px 11px;border-radius:12px;border:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.03);font-size:12px}
+.diag-res{margin-left:auto;font-weight:700;font-size:12px}
+.diag-res.ok{color:var(--green)}.diag-res.warn{color:#ffc966}.diag-res.bad{color:#ff8a78}
+.diag-check{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.08)}
+.diag-check .fld{width:170px;margin:0;height:32px}
+/* ---------- о сервере: расширенные карточки ---------- */
+.blk-srv-ext{display:none;margin-top:12px}
+.set.s-server .blk-srv-ext{display:block}
+.srv-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.srv-card{padding:11px 13px;border-radius:15px;border:1px solid rgba(255,255,255,.1);background:linear-gradient(160deg,rgba(255,255,255,.06),rgba(255,255,255,.02))}
+.srv-card h4{font-size:13px;font-weight:700;color:var(--o2);margin-bottom:6px}
+.srv-kv{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:11.5px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+.srv-kv:last-child{border-bottom:0}
+.srv-kv span{color:#b9aa9a}
+.srv-kv b{color:#fff;font-weight:600;text-align:right;word-break:break-word;font-variant-numeric:tabular-nums}
+.srv-bar{height:5px;border-radius:3px;background:rgba(255,255,255,.1);overflow:hidden;margin:3px 0 5px}
+.srv-bar i{display:block;height:100%;background:linear-gradient(90deg,var(--o1),var(--o3))}
 </style>
 </head>
 <body>
@@ -470,6 +514,7 @@ img.lz{opacity:0;transition:opacity .3s}img.lz.ld{opacity:1}
   <symbol id="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5.500 11a6.500 6.500 0 0 0 13 0M12 17.500V21M8.500 21h7"/></symbol>
   <symbol id="i-mail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.500"/><path d="M3.500 7l8.500 6 8.500-6"/></symbol>
   <symbol id="i-tools" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2.500"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18"/></symbol>
+  <symbol id="i-pulse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5-6.5L13.5 18l3-6H21"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.400" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></symbol>
 </defs></svg>
 
@@ -554,6 +599,44 @@ img.lz{opacity:0;transition:opacity .3s}img.lz.ld{opacity:1}
           </div>
           <p class="note" id="netCert"></p>
           <div style="display:flex;gap:10px;align-items:center;margin-top:8px"><button class="btn-main" id="netApply">Применить и перезапустить</button><span class="note" id="netNote" style="margin:0"></span></div>
+          <div class="diag-card" id="netDiag">
+            <div class="diag-head">
+              <h3>Диагностика локальной сети</h3>
+              <div style="display:flex;gap:7px;flex-wrap:wrap">
+                <button class="selbtn" id="diagLanBtn" type="button">Сканер устройств в сети</button>
+                <button class="btn-main" id="diagRunBtn" type="button">Запустить тест</button>
+              </div>
+            </div>
+            <p class="note" id="diagStatus" style="margin:0">Нажмите «Запустить тест» для замера задержки, скорости и нагрузки сервера</p>
+            <div class="diag-grid">
+              <div class="diag-kpi"><small>Пинг (мин / сред / макс)</small><b id="diagPing">—</b><span id="diagJitter">Джиттер: —</span></div>
+              <div class="diag-kpi"><small>От сервера (скачивание)</small><b id="diagDown">—</b><span id="diagDownSub">МБ/с: —</span></div>
+              <div class="diag-kpi"><small>На сервер (загрузка)</small><b id="diagUp">—</b><span id="diagUpSub">МБ/с: —</span></div>
+              <div class="diag-kpi"><small>Нагрузка сервера</small><b id="diagLoad">—</b><span id="diagLoadSub">Потоки / сессии: —</span></div>
+            </div>
+            <div class="diag-calc">
+              <span style="color:#b9aa9a">Потоки:</span>
+              <select class="sel" id="diagViewers">
+                <option value="1">1 зритель</option>
+                <option value="2" selected>2 зрителя</option>
+                <option value="3">3 зрителя</option>
+                <option value="4">4 зрителя</option>
+                <option value="5">5 зрителей</option>
+                <option value="6">6 зрителей</option>
+              </select>
+              <select class="sel" id="diagBitrate">
+                <option value="12">Full HD (~12 Мбит/с)</option>
+                <option value="25">4K UHD (~25 Мбит/с)</option>
+              </select>
+              <span class="diag-res" id="diagCalcRes">Запустите тест скорости</span>
+            </div>
+            <div class="diag-check" id="diagHostBox" style="display:none">
+              <span class="note" style="margin:0">Проверка узла LAN:</span>
+              <input class="fld" id="diagHost" placeholder="192.168.1.1" autocomplete="off">
+              <button class="selbtn" id="diagCheckBtn" type="button">Проверить</button>
+              <span class="note" id="diagHostRes" style="margin:0"></span>
+            </div>
+          </div>
         </div>
         <div class="blk-dev">
           <div class="seg" style="padding:0 0 10px"><button class="segb on" data-dtab="srv">Подключены к серверу</button><button class="segb" data-dtab="lan">Все в локальной сети</button></div>
@@ -579,6 +662,10 @@ img.lz{opacity:0;transition:opacity .3s}img.lz.ld{opacity:1}
           <div class="kv"><svg class="ico"><use href="#i-music" xlink:href="#i-music"/></svg><span>Аудио</span><span class="v" id="kvAud">-</span></div>
           <div class="kv"><svg class="ico"><use href="#i-save" xlink:href="#i-save"/></svg><span>Вещание</span><span class="v" id="kvFolder">-</span></div>
           <div class="kv"><svg class="ico"><use href="#i-lock" xlink:href="#i-lock"/></svg><span>Защита паролем</span><span class="v" id="kvAuth">-</span></div>
+        </div>
+        <div class="blk-srv-ext">
+          <div class="pt"><h3>Подробные параметры сервера</h3><small id="srvUpdated">Обновление каждые 5 с</small></div>
+          <div class="srv-grid" id="srvGrid"></div>
         </div>
         <div class="thanks blk-thanks"><svg class="ico"><use href="#i-heart" xlink:href="#i-heart"/></svg>Спасибо, что используете Nexora Media!</div>
         <a class="logout" id="logout" href="/logout"><svg class="ico"><use href="#i-out" xlink:href="#i-out"/></svg>Выйти</a>
@@ -632,6 +719,13 @@ img.lz{opacity:0;transition:opacity .3s}img.lz.ld{opacity:1}
       <div class="cpad" id="calcPad"></div>
     </div></div></div>
   </div></section>
+
+  <!-- МОНИТОР (только администратор) -->
+  <section class="pane" id="v-monitor"><div class="page">
+    <div class="head"><h2><svg class="ico"><use href="#i-pulse" xlink:href="#i-pulse"/></svg>Монитор активности</h2><small id="monSub" style="margin-left:auto;color:#b9aa9a;font-size:12px">Обновление каждые 1.5 с</small></div>
+    <div class="mon-sum" id="monTotals"></div>
+    <div class="devs" id="monList"></div>
+  </div></section>
 </div>
 
 <nav class="nav" id="nav"><div class="glass snap" id="glass"></div></nav>
@@ -643,6 +737,7 @@ img.lz{opacity:0;transition:opacity .3s}img.lz.ld{opacity:1}
   <button class="dm" data-go="settings" data-sub="net"><svg class="ico"><use href="#i-globe" xlink:href="#i-globe"/></svg>Сеть</button>
   <button class="dm" data-go="settings" data-sub="devices"><svg class="ico"><use href="#i-phone" xlink:href="#i-phone"/></svg>Устройства</button>
   <button class="dm" data-go="accounts"><svg class="ico"><use href="#i-user" xlink:href="#i-user"/></svg>Учётные записи</button>
+  <button class="dm" id="dmMonitor" data-go="monitor" style="display:none"><svg class="ico"><use href="#i-pulse" xlink:href="#i-pulse"/></svg>Монитор</button>
   <button class="dm" data-go="mail"><svg class="ico"><use href="#i-mail" xlink:href="#i-mail"/></svg>Письмо<span class="un" id="dmBadge" style="display:none"></span></button>
   <button class="dm" data-go="tools"><svg class="ico"><use href="#i-tools" xlink:href="#i-tools"/></svg>Инструменты</button>
   <button class="dm" data-go="settings" data-sub="server"><svg class="ico"><use href="#i-info" xlink:href="#i-info"/></svg>О сервере</button>
@@ -761,6 +856,7 @@ var DEMO_MODE=!window.NEXORA;
 var ME=D.me||{role:'user',id:'user',name:''};
 if(DEMO_MODE){ var adm=/[?&]admin=1/.test(location.search); ME={role:adm?'admin':'user',id:adm?'admin':'user',name:adm?'admin':'user'}; }   /* для просмотра без сервера: ?admin=1 */
 var isAdmin=(ME.role==='admin');
+if($('dmMonitor')) $('dmMonitor').style.display=isAdmin?'':'none';
 function post(url,obj){
   if(DEMO_MODE) return demoPost(url,obj);
   return fetch(url,{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json','X-Nexora':'1'},body:JSON.stringify(obj||{})}).then(function(r){
@@ -785,13 +881,52 @@ function api(url){
   });
 }
 function demoApi(url){
-  return new Promise(function(res){ setTimeout(function(){
+  return new Promise(function(res,rej){ setTimeout(function(){
+    if(url.indexOf('/api/monitor')===0){
+      if(!isAdmin){ var er=new Error('admin_required'); er.code='admin_required'; return rej(er); }
+      var mn=Date.now();
+      return res({
+        users:[
+          {login:'admin',role:'admin',device:'Edge · Windows',ip:'192.168.1.40',state:'watching',file:'RogueOne.mp4',watchedSec:620,posSec:1840,durSec:7990,speedBps:3407872,downBps:3407872,upBps:0,bytes:214958080,since:mn-65*60000},
+          {login:'demo',role:'user',device:'Chrome · Android',ip:'192.168.1.23',state:'downloading',file:'Furious6.mp4',watchedSec:0,posSec:0,durSec:0,speedBps:5767168,downBps:5767168,upBps:0,bytes:78643200,since:mn-12*60000},
+          {login:'anna',role:'user',device:'Safari · iPad',ip:'192.168.1.57',state:'browsing',file:'',watchedSec:45,posSec:0,durSec:0,speedBps:16384,downBps:16384,upBps:0,bytes:940000,since:mn-4*60000}
+        ],
+        totals:{downBps:9191424,upBps:0,active:3,totalDownBytes:1048576000,totalUpBytes:8388608}
+      });
+    }
+    if(url.indexOf('/api/server/info')===0){
+      if(!isAdmin){ var esi=new Error('admin_required'); esi.code='admin_required'; return rej(esi); }
+      var sn=Date.now();
+      return res({
+        server:{version:D.version||'1.0',protocol:'http',port:8765,address:D.address||'http://192.168.1.64:8765',uptimeSec:5420,startedAt:sn-5420000,threads:3,activeSessions:3,devicesCount:4,onlineDevicesCount:2},
+        device:{manufacturer:'Samsung',model:'Galaxy S23',device:'dm1q',androidVersion:'14',sdkInt:34,abis:'arm64-v8a, armeabi-v7a',vlcVersion:'3.6.0-eap13'},
+        wifi:{ssid:'Home_WiFi_5G',ip:'192.168.1.64',linkSpeedMbps:866,frequencyMhz:5180,rssi:-54,level:4},
+        interfaces:[{label:'Wi-Fi (wlan0)',ip:'192.168.1.64'},{label:'Точка доступа (ap0)',ip:'192.168.43.1'}],
+        storage:{total:128*1073741824,free:46.2*1073741824,used:81.8*1073741824,mediaBytes:(D.stats&&D.stats.storageBytes)||894784853},
+        memory:{total:8*1073741824,avail:3.1*1073741824,used:4.9*1073741824,lowMemory:false},
+        battery:{level:84,charging:true},
+        traffic:{downBytes:984210432,upBytes:12582912,totalBytes:996793344,downBps:5242880,upBps:131072,activeTransfers:2},
+        ftp:{running:false,port:2121,address:'ftp://192.168.1.64:2121'}
+      });
+    }
+    if(url.indexOf('/api/status')===0){
+      return res({ok:true,online:true,time:Date.now(),wifi:{level:4,rssi:-54},me:{id:ME.id,role:ME.role,name:ME.name},disk:DISK||{total:64*1073741824,free:32*1073741824},pendingRegs:isAdmin?2:0,version:D.version||'1.0',uptimeSec:5420,protocol:'http',port:8765,devicesCount:4,mediaBytes:(D.stats&&D.stats.storageBytes)||894784853});
+    }
     if(url.indexOf('/api/devices')===0){
       var n=Date.now();
       return res({now:n,devices:[
         {id:'a',name:'Chrome · Android',kind:'phone',ip:'192.168.1.23',account:'demo',role:'user',online:true,me:true,blocked:false,sessionStart:n-12*60000,lastLogin:n-12*60000,firstSeen:n-86400000*3,lastSeen:n},
         {id:'b',name:'Edge · Windows',kind:'pc',ip:'192.168.1.40',account:'admin',role:'admin',online:true,me:false,blocked:false,sessionStart:n-65*60000,lastLogin:n-65*60000,firstSeen:n-86400000*9,lastSeen:n-2000},
         {id:'c',name:'Safari · iPad',kind:'tablet',ip:'192.168.1.57',account:'demo',role:'user',online:false,me:false,blocked:true,sessionStart:n-7200000,lastLogin:n-9000000,firstSeen:n-86400000,lastSeen:n-7000000}]});
+    }
+    if(url.indexOf('/api/net/load')===0) return res({activeTransfers:2,downBps:5242880,upBps:131072,threads:3,sessions:3});
+    if(url.indexOf('/api/net/check')===0){
+      if(!isAdmin){ var ec=new Error('admin_required'); ec.code='admin_required'; return rej(ec); }
+      var hm=url.match(/host=([^&]+)/), host=hm?decodeURIComponent(hm[1]).trim():'';
+      if(!/^(10\.(25[0-5]|2[0-4]\d|1?\d\d?)\.(25[0-5]|2[0-4]\d|1?\d\d?)\.(25[0-5]|2[0-4]\d|1?\d\d?)|172\.(1[6-9]|2\d|3[01])\.(25[0-5]|2[0-4]\d|1?\d\d?)\.(25[0-5]|2[0-4]\d|1?\d\d?)|192\.168\.(25[0-5]|2[0-4]\d|1?\d\d?)\.(25[0-5]|2[0-4]\d|1?\d\d?))$/.test(host)){
+        var eh=new Error('bad_host'); eh.code='bad_host'; return rej(eh);
+      }
+      return res({ok:true,host:host,reachable:true,rttMs:4,openPorts:[80,443]});
     }
     if(url.indexOf('/api/net')===0) return res({protocol:'http',ipMode:'auto',ip:'192.168.1.64',portMode:'auto',port:8765,strict:false,ips:[{label:'Wi-Fi (wlan0)',ip:'192.168.1.64'},{label:'Точка доступа (ap0)',ip:'192.168.43.1'}],ports:[8765,8080,8888,9000],cert:{fingerprint:'AB:12:CD:34:EF:56',expires:Date.now()+86400000*300}});
     if(url.indexOf('/api/lan/devices')===0) return res({scanning:false,progress:100,finished:Date.now()-60000,subnet:'192.168.1.0/24',devices:[
@@ -806,8 +941,8 @@ function demoApi(url){
     if(url.indexOf('/api/registrations')===0) return res({requests:[{id:'r1',login:'petya',t:Date.now()-3600000,ip:'192.168.1.77',name:'Chrome · Android'},{id:'r2',login:'masha',t:Date.now()-900000,ip:'192.168.1.81',name:'Safari · iPhone'}]});
     if(url.indexOf('/api/accounts')===0) return res({me:{id:ME.id,role:ME.role,name:ME.name},registrationOpen:true,pendingRegs:2,accounts:[
       {id:'admin',name:'admin',role:'admin',passwordDefault:true,online:ME.id==='admin',sessions:ME.id==='admin'?1:0,usedToday:0,limitMin:0,remainingSec:null,schedule:null,lastLogin:ME.id==='admin'?Date.now()-600000:null},
-      {id:'user',name:'user',role:'user',passwordDefault:false,deletable:false,online:true,sessions:1,usedToday:4320,limitMin:120,remainingSec:2880,schedule:{mode:'allow',windows:[{days:[1,2,3,4,5],from:'08:00',to:'22:00'}]},lastLogin:Date.now()-3600000},
-      {id:'u2',name:'anna',role:'user',passwordDefault:false,deletable:true,online:false,sessions:0,usedToday:1800,limitMin:0,remainingSec:null,schedule:null,lastLogin:Date.now()-86400000}]});
+      {id:'user',name:'user',role:'user',passwordDefault:false,deletable:false,hasSecretQuestion:true,secretQuestion:'Город рождения',online:true,sessions:1,usedToday:4320,limitMin:120,remainingSec:2880,schedule:{mode:'allow',windows:[{days:[1,2,3,4,5],from:'08:00',to:'22:00'}]},lastLogin:Date.now()-3600000},
+      {id:'u2',name:'anna',role:'user',passwordDefault:false,deletable:true,hasSecretQuestion:false,secretQuestion:'',online:false,sessions:0,usedToday:1800,limitMin:0,remainingSec:null,schedule:null,lastLogin:Date.now()-86400000}]});
     if(url.indexOf('/api/photos')===0){
       var m=url.match(/album=([^&]+)/);
       if(!m) return res({albums:[{id:'1',name:'Screenshots',count:14,cover:0},{id:'2',name:'DCIM',count:128,cover:0},{id:'3',name:'Download',count:9,cover:0},{id:'4',name:'Pictures',count:33,cover:0}]});
@@ -889,13 +1024,24 @@ function fsRow(it,i){
 }
 
 /* ---------- плеер ---------- */
-var VW={list:null,idx:0};
+var VW={list:null,idx:0,beatTimer:0};
+function stopBeat(){ clearInterval(VW.beatTimer); VW.beatTimer=0; }
 function showViewer(o){
+  stopBeat();
   var v=$('pv'), a=$('pa'), im=$('pi');
   v.pause(); a.pause(); v.style.display='none'; a.style.display='none'; im.style.display='none';
   $('pt').textContent=o.title||''; $('pd').href=o.dl; $('pd').setAttribute('download',o.name||'');
   if(o.kind==='photo'){ im.style.display='block'; im.src=o.url; }
-  else { var el=o.kind==='video'?v:a; el.style.display='block'; el.src=o.url; el.load(); var p=el.play(); if(p&&p.catch) p.catch(function(){}); }
+  else {
+    var el=o.kind==='video'?v:a; el.style.display='block'; el.src=o.url; el.load();
+    var sendBeat=function(){
+      if($('modal').className.indexOf('show')<0||el.paused||el.ended) return;
+      post('/api/monitor/beat',{file:o.name||o.title||'',pos:el.currentTime||0,dur:(isFinite(el.duration)?el.duration:0)||0,kind:o.kind}).catch(function(){});
+    };
+    el.onplay=sendBeat;
+    VW.beatTimer=setInterval(sendBeat,5000);
+    var p=el.play(); if(p&&p.catch) p.catch(function(){});
+  }
   $('pprev').style.display=$('pnext').style.display=(VW.list&&VW.list.length>1)?'flex':'none';
   $('modal').className='modal show';
 }
@@ -915,7 +1061,7 @@ function openFsFile(i){
   showViewer({title:it.name,name:it.name,url:u,dl:u+'&dl=1',kind:it.kind});
 }
 function stepPhoto(d){ if(!VW.list||!VW.list.length) return; openPhoto((VW.idx+d+VW.list.length)%VW.list.length); }
-function closePlayer(){playerFs(false); var v=$('pv'),a=$('pa'),im=$('pi'); v.pause(); a.pause(); v.removeAttribute('src'); a.removeAttribute('src'); im.removeAttribute('src'); v.load(); a.load(); $('modal').className='modal';}
+function closePlayer(){stopBeat(); playerFs(false); var v=$('pv'),a=$('pa'),im=$('pi'); v.pause(); a.pause(); v.removeAttribute('src'); a.removeAttribute('src'); im.removeAttribute('src'); v.load(); a.load(); $('modal').className='modal';}
 $('pprev').addEventListener('click',function(){stepPhoto(-1);});
 $('pnext').addEventListener('click',function(){stepPhoto(1);});
 $('pc').addEventListener('click',closePlayer);
@@ -968,8 +1114,9 @@ function moveGlass(i,instant){
   glass.style.width=w+'px'; glass.style.transform='translateX('+x+'px)';
   if(instant){ void glass.offsetWidth; glass.classList.remove('snap'); }
 }
-var ORDER=['home','videos','audio','photos','folders','settings','mail','tools','accounts'], GO_TOK=0;
+var ORDER=['home','videos','audio','photos','folders','settings','mail','tools','accounts','monitor'], GO_TOK=0;
 function go(name){
+  if(name==='monitor'&&!isAdmin) name='home';
   var k=ORDER.indexOf(name); if(k<0){ name='home'; k=0; }
   var ti=-1; TABS.forEach(function(t,n){ if(t[0]===name) ti=n; });
   if(ti>=0) cur=ti;
@@ -983,7 +1130,7 @@ function go(name){
   requestAnimationFrame(function(){ requestAnimationFrame(function(){
     if(tok!==GO_TOK) return;
     ORDER.forEach(function(nm,n){
-      var p=$('v-'+nm); p.style.setProperty('--tx', n<k?'-34px':(n>k?'34px':'0px'));
+      var p=$('v-'+nm); if(!p) return; p.style.setProperty('--tx', n<k?'-34px':(n>k?'34px':'0px'));
       p.classList.toggle('on',n===k); if(n===k) p.scrollTop=0;
     });
     var pp=$('v-'+name); tilt3d(pp); setTimeout(function(){ refresh3d(pp); },900);
@@ -991,6 +1138,8 @@ function go(name){
     if(name==='folders') loadDir(FS.path);
     if(name==='mail') startMail(); else stopMail();
     if(name==='accounts') startAcc(); else stopAcc();
+    if(name==='monitor') startMonitor(); else stopMonitor();
+    if(name==='settings' && $('setBox').className.indexOf('s-server')>-1) startServerInfo(); else stopServerInfo();
   }); });
 }
 window.addEventListener('hashchange',function(){go(location.hash.slice(1)||'home');});
@@ -1001,13 +1150,109 @@ $('menuBtn').addEventListener('click',function(){$('drawer').classList.add('show
 $('scrim').addEventListener('click',closeDrawer);
 $('statusBtn').addEventListener('click',function(e){e.stopPropagation(); $('pop').classList.toggle('show');});
 document.addEventListener('click',function(){$('pop').classList.remove('show');});
+var SRV={timer:0};
+function fmtUptime(sec){
+  sec=Math.max(0,Math.floor(Number(sec)||0));
+  var d=Math.floor(sec/86400), h=Math.floor((sec%86400)/3600), m=Math.floor((sec%3600)/60), s=sec%60, out=[];
+  if(d) out.push(d+' д');
+  if(h||d) out.push(h+' ч');
+  out.push(m+' мин '+s+' с');
+  return out.join(' ');
+}
+function srvKv(k,v){ return '<div class="srv-kv"><span>'+esc(k)+'</span><b>'+esc((v==null||v==='')?'—':v)+'</b></div>'; }
+function renderSrvAdmin(j){
+  var g=$('srvGrid'); if(!g) return;
+  var s=j.server||{}, dev=j.device||{}, w=j.wifi||{}, st=j.storage||{}, mem=j.memory||{}, bat=j.battery||{}, tr=j.traffic||{}, ftp=j.ftp||{};
+  if($('ver')&&s.version) $('ver').textContent=s.version;
+  if($('srvUpdated')) $('srvUpdated').textContent='Обновлено в '+new Date().toLocaleTimeString('ru-RU');
+  var ramPct=mem.total>0? Math.min(100,Math.round((mem.used/mem.total)*100)) : 0;
+  var diskPct=st.total>0? Math.min(100,Math.round((st.used/st.total)*100)) : 0;
+  var freqStr=w.frequencyMhz>0? (w.frequencyMhz+' МГц ('+(w.frequencyMhz>=4900?'5 ГГц':'2.4 ГГц')+')') : '—';
+  var ifStr=(j.interfaces||[]).map(function(x){return x.label+': '+x.ip;}).join(', ')||'—';
+  var batStr=bat.level!=null? (bat.level+'%'+(bat.charging?' · зарядка':' · от батареи')) : '—';
+  g.innerHTML=
+    '<div class="srv-card"><h4>Сервер</h4>'+
+      srvKv('Протокол и порт',String(s.protocol||'http').toUpperCase()+' · '+(s.port||'—'))+
+      srvKv('Время работы',fmtUptime(s.uptimeSec))+
+      srvKv('Потоки / Сессии',(s.threads||0)+' / '+(s.activeSessions||0))+
+      srvKv('Устройства (онлайн / всего)',(s.onlineDevicesCount||0)+' / '+(s.devicesCount||0))+
+    '</div>'+
+    '<div class="srv-card"><h4>Устройство и система</h4>'+
+      srvKv('Модель',[dev.manufacturer,dev.model].filter(Boolean).join(' ')||'Android')+
+      srvKv('Android','Android '+(dev.androidVersion||'—')+' (SDK '+(dev.sdkInt||'—')+')')+
+      srvKv('Архитектура',dev.abis||'—')+
+      srvKv('Плеер libVLC',dev.vlcVersion||'3.6.0')+
+      srvKv('Батарея',batStr)+
+    '</div>'+
+    '<div class="srv-card"><h4>Сеть и Wi-Fi</h4>'+
+      srvKv('Сеть (SSID)',w.ssid||'скрыто / не подключено')+
+      srvKv('IP Wi-Fi',w.ip||'—')+
+      srvKv('Скорость канала',w.linkSpeedMbps>0?(w.linkSpeedMbps+' Мбит/с'):'—')+
+      srvKv('Частота',freqStr)+
+      srvKv('Сигнал (RSSI)',w.rssi!=null?(w.rssi+' дБм'):'—')+
+      srvKv('Интерфейсы',ifStr)+
+    '</div>'+
+    '<div class="srv-card"><h4>Память и диск</h4>'+
+      srvKv('ОЗУ занято / всего',mem.total>0?(fmtSize(mem.used)+' / '+fmtSize(mem.total)+' ('+ramPct+'%)'):'—')+
+      (mem.total>0?'<div class="srv-bar"><i style="width:'+ramPct+'%"></i></div>':'')+
+      srvKv('Диск занято / всего',st.total>0?(fmtSize(st.used)+' / '+fmtSize(st.total)+' ('+diskPct+'%)'):'—')+
+      (st.total>0?'<div class="srv-bar"><i style="width:'+diskPct+'%"></i></div>':'')+
+      srvKv('Свободно на диске',st.free>0?fmtSize(st.free):'—')+
+      srvKv('Медиафайлы',st.mediaBytes>0?fmtSize(st.mediaBytes):totalMem())+
+    '</div>'+
+    '<div class="srv-card"><h4>Нагрузка и трафик</h4>'+
+      srvKv('Активные передачи',tr.activeTransfers||0)+
+      srvKv('Отдача / Приём сейчас',fmtSpeed(tr.downBps||0)+' / '+fmtSpeed(tr.upBps||0))+
+      srvKv('Отдано за сеанс',fmtSize(tr.downBytes||0))+
+      srvKv('Принято за сеанс',fmtSize(tr.upBytes||0))+
+      srvKv('Суммарный трафик',fmtSize(tr.totalBytes||0))+
+    '</div>'+
+    '<div class="srv-card"><h4>FTP-сервер</h4>'+
+      srvKv('Статус FTP',ftp.running?'Запущен':'Остановлен')+
+      srvKv('Порт FTP',ftp.port||2121)+
+      srvKv('Адрес FTP',ftp.running?(ftp.address||'—'):'Неактивен')+
+    '</div>';
+}
+function renderSrvPublic(j){
+  var g=$('srvGrid'); if(!g) return;
+  if($('ver')&&j.version) $('ver').textContent=j.version;
+  if($('srvUpdated')) $('srvUpdated').textContent='Обновлено в '+new Date().toLocaleTimeString('ru-RU');
+  var disk=j.disk||DISK||{total:0,free:0};
+  g.innerHTML=
+    '<div class="srv-card"><h4>Состояние сервера</h4>'+
+      srvKv('Версия ПО',j.version||D.version||'1.0')+
+      srvKv('Протокол и порт',String(j.protocol||'http').toUpperCase()+' · '+(j.port||D.port||'—'))+
+      srvKv('Время работы',fmtUptime(j.uptimeSec||0))+
+      srvKv('Устройств на сервере',j.devicesCount!=null?j.devicesCount:'—')+
+    '</div>'+
+    '<div class="srv-card"><h4>Хранилище</h4>'+
+      srvKv('Свободно / Всего',disk.total>0?(fmtSize(disk.free)+' / '+fmtSize(disk.total)):'—')+
+      srvKv('Медиафайлы',j.mediaBytes>0?fmtSize(j.mediaBytes):totalMem())+
+    '</div>';
+}
+function loadServerInfo(){
+  if(isAdmin){
+    api('/api/server/info').then(renderSrvAdmin).catch(function(){ api('/api/status').then(renderSrvPublic).catch(function(){}); });
+  }else{
+    api('/api/status').then(renderSrvPublic).catch(function(){});
+  }
+}
+function startServerInfo(){
+  stopServerInfo();
+  loadServerInfo();
+  SRV.timer=setInterval(function(){
+    if($('v-settings').classList.contains('on') && $('setBox').className.indexOf('s-server')>-1) loadServerInfo();
+  },5000);
+}
+function stopServerInfo(){ clearInterval(SRV.timer); SRV.timer=0; }
 function setSub(name){
   var m={server:' s-server',app:' s-app',devices:' s-dev',net:' s-net'};
   $('setBox').className='set'+(m[name]||'');
   Array.prototype.forEach.call(document.querySelectorAll('.sm,.dm'),function(b){ b.classList.toggle('on',b.getAttribute('data-sub')===name); });
-  clearInterval(devTimer); clearTimeout(LAN.timer);
+  clearInterval(devTimer); clearTimeout(LAN.timer); stopServerInfo();
   if(name==='devices') devTab(DEVTAB);
-  if(name==='net') loadNet();
+  if(name==='net'){ loadNet(); initNetDiagnostics(); }
+  if(name==='server') startServerInfo();
 }
 $('copyBtn').addEventListener('click',function(){
   var t=D.address||'';
@@ -1167,7 +1412,7 @@ function opErr(e){
   if(c==='bad_current') return 'Неверный текущий пароль';
   if(c==='login_taken') return 'Такой логин уже используется';
   if(c==='bad_setup_password') return 'Неверный пароль создания администратора';
-  if(c==='rate_limited') return 'Слишком много попыток. Подождите несколько минут';
+  if(c==='rate_limited') return (e&&e.retryAfterSec)? ('Слишком часто. Повторите через '+e.retryAfterSec+' с') : 'Слишком много попыток. Подождите несколько минут';
   if(c==='exists') return 'Такая учётная запись уже есть';
   if(c==='weak_password') return 'Пароль слишком короткий (от 6 символов)';
   if(c==='bad_name') return 'Логин: 3-32 символа, буквы, цифры, точка, дефис, подчёркивание';
@@ -1175,6 +1420,10 @@ function opErr(e){
   if(c==='exists_target') return 'Файл с таким именем уже есть';
   if(c==='bad_name_file') return 'Недопустимое имя';
   if(c==='no_access') return 'Нет доступа к файлам. Разрешите приложению доступ ко всем файлам';
+  if(c==='bad_secret') return 'Укажите секретный вопрос и ответ (минимум 3 символа)';
+  if(c==='not_allowed') return 'Для этой учётной записи действие недоступно';
+  if(c==='bad_host') return 'Разрешены только локальные IPv4-адреса (10.x, 172.16-31.x, 192.168.x)';
+  if(c==='too_large') return 'Превышен допустимый размер тестовых данных';
   return 'Не удалось выполнить действие';
 }
 /* ---------- УЧЁТНЫЕ ЗАПИСИ: админ, пользователь и созданные пользователи; панели раскрываются под карточкой ---------- */
@@ -1194,6 +1443,7 @@ function setBadge(n){
 function renderAcc(j){
   ACC.list=j.accounts||[]; ACC.reg=(j.registrationOpen!==false); ACC.pend=j.pendingRegs||0;
   if(j.me){ ME.id=j.me.id; ME.role=j.me.role; if(j.me.name) ME.name=j.me.name; isAdmin=(ME.role==='admin'); }
+  if($('dmMonitor')) $('dmMonitor').style.display=isAdmin?'':'none';
   $('accMe').textContent='Вы: '+(ME.name||'')+' · '+(isAdmin?'администратор':'пользователь');
   $('accNew').style.display=isAdmin?'':'none'; $('regBar').style.display=isAdmin?'':'none'; $('regSw').classList.toggle('on',ACC.reg);
   if(isAdmin) setBadge(ACC.pend);
@@ -1208,7 +1458,7 @@ function renderAcc(j){
     return '<div><div class="dev i3d'+(first?' in':'')+(a.online?' on':'')+'" style="--n:'+Math.min(i,10)+'"><div class="di">'+ic(a.role==='admin'?'shield':'user')+'<i></i></div><div class="dm2"><b>'+esc(a.name)+' '+
       (a.role==='admin'?'<span class="bdg adm">администратор</span>':'<span class="bdg usr">пользователь</span>')+(me?' <span class="bdg me">это вы</span>':'')+(a.passwordDefault?' <span class="bdg blk">стандартный пароль</span>':'')+'</b>'+
       '<small>'+(a.online?'В сети · сессий: '+(a.sessions||1):'Не в сети')+(a.lastLogin?' · последний вход: '+fmtDT(a.lastLogin):'')+'</small>'+
-      (a.role==='admin'?'':'<small>Сегодня на сервере: '+fmtDur(a.usedToday||0)+' · Осталось: '+left+'</small><small>'+esc(schedText(a.schedule))+'</small>')+'</div>'+
+      (a.role==='admin'?'':'<small>Сегодня на сервере: '+fmtDur(a.usedToday||0)+' · Осталось: '+left+'</small><small>'+esc(schedText(a.schedule))+'</small><small>Секретный вопрос: '+(a.hasSecretQuestion?esc(a.secretQuestion||'задан'):'не задан (восстановление отключено)')+'</small>')+'</div>'+
       '<div class="accb">'+(canCred?'<button class="selbtn" data-accedit="'+esc(a.id)+'">'+ic('edit')+'Логин и пароль</button>':'')+(canLim?'<button class="selbtn" data-acclim="'+esc(a.id)+'">'+ic('anim')+'Ограничения</button>':'')+(canDel?'<button class="selbtn dng" data-accdel="'+esc(a.id)+'">'+ic('trash')+'Удалить</button>':'')+'</div></div>'+
       '<div class="accp" id="ap-'+esc(a.id)+'"></div></div>';
   }).join('');
@@ -1232,32 +1482,62 @@ function apSave(btn){
   if(!ACC.cb) return; btn.disabled=true;
   ACC.cb(function(){ closeAccPanel(); loadAcc(); },function(msg){ var e=document.getElementById('apErr'); if(e) e.textContent=msg; btn.disabled=false; });
 }
+var SECRET_QS=['Девичья фамилия матери','Кличка первого питомца','Город рождения','Любимая книга'];
+function secretSelHtml(selId,cusId,curQ){
+  var isP=curQ&&SECRET_QS.indexOf(curQ)>-1, isC=curQ&&!isP;
+  var opts='<option value="">Не менять секретный вопрос</option>'+SECRET_QS.map(function(q){ return '<option value="'+esc(q)+'"'+(curQ===q?' selected':'')+'>'+esc(q)+'</option>'; }).join('')+'<option value="__custom"'+(isC?' selected':'')+'>Свой вопрос…</option>';
+  return '<select class="fld" id="'+selId+'">'+opts+'</select><input class="fld" id="'+cusId+'" placeholder="Введите свой секретный вопрос" value="'+(isC?esc(curQ):'')+'" style="display:'+(isC?'':'none')+'" maxlength="120" autocomplete="off">';
+}
+function bindSecSel(selId,cusId){
+  var sel=$(selId), cus=$(cusId); if(!sel||!cus) return;
+  sel.onchange=function(){ cus.style.display=(sel.value==='__custom')?'':'none'; if(sel.value==='__custom') cus.focus(); };
+}
+function readSecPair(selId,cusId,a1Id,a2Id){
+  var sel=$(selId), cus=$(cusId), a1=$(a1Id), a2=$(a2Id); if(!sel||!a1||!a2) return {active:false};
+  var q=(sel.value==='__custom')?(cus?cus.value.trim():''):sel.value, ans=a1.value.trim(), ans2=a2.value.trim();
+  var any=!!(sel.value&&(sel.value!==(sel.getAttribute('data-init')||'')||ans||ans2))||!!(ans||ans2);
+  if(!any) return {active:false};
+  if(!q||q.length<3) return {error:'Укажите секретный вопрос (от 3 символов)'};
+  if(!ans||ans.replace(/\s+/g,' ').length<3) return {error:'Ответ на секретный вопрос — минимум 3 символа'};
+  if(ans.toLowerCase().replace(/\s+/g,' ')!==ans2.toLowerCase().replace(/\s+/g,' ')) return {error:'Ответы на секретный вопрос не совпадают'};
+  return {active:true,question:q,answer:ans};
+}
 function accCredPanel(a){
-  var me=(a.id===ME.id), cur=me?'Текущий пароль':(isAdmin?'Ваш пароль администратора или текущий пароль этой учётной записи':'Текущий пароль');
-  openAccPanel(a.id,'cred','Логин и пароль: '+a.name,a.passwordDefault?'Пароль ещё не менялся: введите стандартный пароль (он показан в приложении на странице раздачи).':'Введите текущий пароль, чтобы подтвердить смену.',
+  var me=(a.id===ME.id), isReg=(a.role!=='admin'), cur=me?'Текущий пароль':(isAdmin?'Ваш пароль администратора или текущий пароль этой учётной записи':'Текущий пароль');
+  var secHtml=isReg? '<label class="flb">Восстановление пароля (секретный вопрос)</label>'+secretSelHtml('fSecSel','fSecCustom',a.secretQuestion||'')+'<input class="fld" id="fSecA" type="password" placeholder="Новый ответ (пусто = не менять, мин. 3 симв.)" autocomplete="off"><input class="fld" id="fSecA2" type="password" placeholder="Повторите ответ" autocomplete="off">' : '';
+  var p=openAccPanel(a.id,'cred','Логин и пароль: '+a.name,a.passwordDefault?'Пароль ещё не менялся: введите стандартный пароль (он показан в приложении на странице раздачи).':'Введите текущий пароль, чтобы подтвердить смену.',
     '<input class="fld" id="fCur" type="password" placeholder="'+esc(cur)+'" autocomplete="off">'+
     '<input class="fld" id="fLogin" placeholder="Новый логин" value="'+esc(a.name)+'" autocomplete="off" autocapitalize="none" spellcheck="false">'+
     '<input class="fld" id="fNew" type="password" placeholder="Новый пароль (пусто = не менять)" autocomplete="new-password">'+
-    '<input class="fld" id="fNew2" type="password" placeholder="Повторите новый пароль" autocomplete="new-password">','Сохранить',function(done,fail){
-    var c=$('fCur').value, l=$('fLogin').value.trim(), p=$('fNew').value, p2=$('fNew2').value;
+    '<input class="fld" id="fNew2" type="password" placeholder="Повторите новый пароль" autocomplete="new-password">'+secHtml,'Сохранить',function(done,fail){
+    var c=$('fCur').value, l=$('fLogin').value.trim(), pass=$('fNew').value, p2=$('fNew2').value;
     if(!c){ fail('Введите текущий пароль'); return; }
     if(!/^[A-Za-z0-9._-]{3,32}$/.test(l)){ fail('Логин: 3-32 символа, буквы, цифры, точка, дефис, подчёркивание'); return; }
-    if(p&&p!==p2){ fail('Новые пароли не совпадают'); return; }
-    if(l===a.name&&!p){ fail('Ничего не изменено'); return; }
-    post('/api/accounts/update',{id:a.id,currentPassword:c,newLogin:(l!==a.name?l:null),newPassword:p||null}).then(function(r){
+    if(pass&&pass!==p2){ fail('Новые пароли не совпадают'); return; }
+    var sec=isReg? readSecPair('fSecSel','fSecCustom','fSecA','fSecA2') : {active:false};
+    if(sec.error){ fail(sec.error); return; }
+    if(l===a.name&&!pass&&!sec.active){ fail('Ничего не изменено'); return; }
+    var payload={id:a.id,currentPassword:c,newLogin:(l!==a.name?l:null),newPassword:pass||null};
+    if(sec.active){ payload.secretQuestion=sec.question; payload.secretAnswer=sec.answer; }
+    post('/api/accounts/update',payload).then(function(r){
       if(me&&r&&r.name) ME.name=r.name; toast('Данные сохранены'); $('accList')._h=''; done();
     }).catch(function(e){ var k=e&&e.code; fail(k==='bad_current'?'Неверный текущий пароль':k==='login_taken'?'Такой логин уже используется':k==='weak_password'?'Пароль слишком короткий':k==='bad_login'?'Недопустимый логин':k==='nothing_to_change'?'Ничего не изменено':opErr(e)); });
   });
+  if(p&&isReg){ var s=$('fSecSel'); if(s) s.setAttribute('data-init',s.value); bindSecSel('fSecSel','fSecCustom'); }
 }
 function accCreatePanel(){
-  openAccPanel('create','create','Новая учётная запись пользователя','Пользователь сразу сможет войти. Права: только просмотр и скачивание.',
-    '<input class="fld" id="cLogin" placeholder="Логин (3-32 символа)" autocomplete="off" autocapitalize="none" spellcheck="false"><input class="fld" id="cPass" type="password" placeholder="Пароль (от 4 символов)" autocomplete="new-password"><input class="fld" id="cPass2" type="password" placeholder="Повторите пароль" autocomplete="new-password">','Создать',function(done,fail){
-    var l=$('cLogin').value.trim(), p=$('cPass').value, p2=$('cPass2').value;
+  var p=openAccPanel('create','create','Новая учётная запись пользователя','Пользователь сразу сможет войти. Права: только просмотр и скачивание.',
+    '<input class="fld" id="cLogin" placeholder="Логин (3-32 символа)" autocomplete="off" autocapitalize="none" spellcheck="false"><input class="fld" id="cPass" type="password" placeholder="Пароль (от 4 символов)" autocomplete="new-password"><input class="fld" id="cPass2" type="password" placeholder="Повторите пароль" autocomplete="new-password">'+
+    '<label class="flb">Секретный вопрос для сброса пароля (необязательно)</label>'+secretSelHtml('cSecSel','cSecCustom','')+'<input class="fld" id="cSecA" type="password" placeholder="Ответ на секретный вопрос (от 3 символов)" autocomplete="off"><input class="fld" id="cSecA2" type="password" placeholder="Повторите ответ" autocomplete="off">','Создать',function(done,fail){
+    var l=$('cLogin').value.trim(), pass=$('cPass').value, p2=$('cPass2').value;
     if(!/^[A-Za-z0-9._-]{3,32}$/.test(l)){ fail('Логин: 3-32 символа, буквы, цифры, точка, дефис, подчёркивание'); return; }
-    if(p.length<4){ fail('Пароль слишком короткий'); return; } if(p!==p2){ fail('Пароли не совпадают'); return; }
-    post('/api/accounts/create',{name:l,password:p}).then(function(){ toast('Учётная запись создана'); $('accList')._h=''; done(); })
+    if(pass.length<4){ fail('Пароль слишком короткий'); return; } if(pass!==p2){ fail('Пароли не совпадают'); return; }
+    var sec=readSecPair('cSecSel','cSecCustom','cSecA','cSecA2'); if(sec.error){ fail(sec.error); return; }
+    var payload={name:l,password:pass}; if(sec.active){ payload.secretQuestion=sec.question; payload.secretAnswer=sec.answer; }
+    post('/api/accounts/create',payload).then(function(){ toast('Учётная запись создана'); $('accList')._h=''; done(); })
     .catch(function(e){ fail(e&&e.code==='login_taken'?'Такой логин уже используется':e&&e.code==='weak_password'?'Пароль слишком короткий':e&&e.code==='bad_name'?'Недопустимый логин':opErr(e)); });
   });
+  if(p) bindSecSel('cSecSel','cSecCustom');
 }
 function winRow(w){
   var days=[1,2,3,4,5,6,0].map(function(d){ var on=(!w.days||!w.days.length||w.days.indexOf(d)>-1); return '<button class="dchip'+(on?' on':'')+'" data-d="'+d+'" type="button">'+DAYN[d]+'</button>'; }).join('');
@@ -1437,6 +1717,183 @@ $('netApply').addEventListener('click',function(){
     .catch(function(e){ var c=e&&e.code; toast(c==='port_busy'?'Порт занят':c==='bad_ip'?'Этот IP недоступен':c==='bad_port'?'Недопустимый порт':c==='admin_required'?'Нужны права администратора':'Не удалось применить'); });
   });
 });
+
+/* ---------- ДИАГНОСТИКА ЛОКАЛЬНОЙ СЕТИ ---------- */
+var DIAG={running:false,downMbps:0,demoDownAt:0,demoUpAt:0};
+function initNetDiagnostics(){
+  if($('diagHostBox')) $('diagHostBox').style.display=isAdmin?'flex':'none';
+  loadNetLoad();
+  updateStreamCalc();
+}
+function updateStreamCalc(){
+  var el=$('diagCalcRes'), vw=$('diagViewers'), br=$('diagBitrate');
+  if(!el||!vw||!br) return;
+  if(!DIAG.downMbps){ el.className='diag-res'; el.textContent='Запустите тест для расчёта'; return; }
+  var n=parseInt(vw.value,10)||1, per=parseInt(br.value,10)||12, need=n*per, maxS=Math.floor(DIAG.downMbps/per);
+  if(DIAG.downMbps>=need*1.25){ el.className='diag-res ok'; el.textContent='Хватит с запасом (нужно '+need+' Мбит/с · до '+maxS+' потоков)'; }
+  else if(DIAG.downMbps>=need){ el.className='diag-res warn'; el.textContent='Впритык (нужно '+need+' Мбит/с · максимум ~'+maxS+')'; }
+  else{ el.className='diag-res bad'; el.textContent='Недостаточно: нужно '+need+' Мбит/с (хватит на '+maxS+')'; }
+}
+function loadNetLoad(){
+  api('/api/net/load').then(function(j){
+    if($('diagLoad')) $('diagLoad').textContent=(j.activeTransfers||0)+' передач';
+    if($('diagLoadSub')) $('diagLoadSub').textContent='Потоки: '+(j.threads||0)+' · Сессии: '+(j.sessions||0)+' · ↓'+fmtSpeed(j.downBps||0)+' ↑'+fmtSpeed(j.upBps||0);
+  }).catch(function(){});
+}
+function diagSleep(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
+async function runNetDiagTest(){
+  if(DIAG.running) return;
+  DIAG.running=true;
+  var btn=$('diagRunBtn'), st=$('diagStatus');
+  if(btn) btn.disabled=true;
+  try{
+    var rtts=[];
+    for(var i=0;i<20;i++){
+      if(st) st.textContent='Проверка задержки: пакет '+(i+1)+' из 20…';
+      var t0=nowMs();
+      if(DEMO_MODE){ await diagSleep(12+Math.random()*14); }
+      else{
+        var rp=await fetch('/api/net/ping?n='+i+'&t='+Date.now(),{credentials:'same-origin',cache:'no-store'});
+        if(rp.status===401){ location.replace('/'); return; }
+        await rp.text();
+      }
+      rtts.push(Math.max(0.2,nowMs()-t0));
+    }
+    var minR=Math.min.apply(null,rtts), maxR=Math.max.apply(null,rtts), sumR=0, jSum=0;
+    for(var k=0;k<rtts.length;k++){ sumR+=rtts[k]; if(k>0) jSum+=Math.abs(rtts[k]-rtts[k-1]); }
+    var avgR=sumR/rtts.length, jitter=rtts.length>1? jSum/(rtts.length-1) : 0;
+    if($('diagPing')) $('diagPing').textContent=minR.toFixed(1)+' / '+avgR.toFixed(1)+' / '+maxR.toFixed(1)+' мс';
+    if($('diagJitter')) $('diagJitter').textContent='Джиттер: '+jitter.toFixed(1)+' мс';
+
+    if(st) st.textContent='Тест скорости от сервера (8 МБ)…';
+    var downBytes=8*1048576, downMs=280;
+    if(DEMO_MODE){
+      var nd=Date.now();
+      if(nd-DIAG.demoDownAt<10000){ var ed=new Error('rate_limited'); ed.code='rate_limited'; ed.retryAfterSec=Math.ceil((10000-(nd-DIAG.demoDownAt))/1000); throw ed; }
+      DIAG.demoDownAt=nd; await diagSleep(320); downMs=260+Math.random()*60;
+    }else{
+      var td0=nowMs();
+      var rd=await fetch('/api/net/speed/down?size='+downBytes+'&t='+Date.now(),{credentials:'same-origin',cache:'no-store'});
+      if(rd.status===401){ location.replace('/'); return; }
+      if(!rd.ok){
+        var jd=null; try{ jd=await rd.json(); }catch(_){}
+        var e1=new Error((jd&&jd.error)||('HTTP '+rd.status)); e1.code=jd&&jd.error; e1.retryAfterSec=jd&&jd.retryAfterSec; throw e1;
+      }
+      var buf=await rd.arrayBuffer();
+      downMs=Math.max(1,nowMs()-td0);
+      downBytes=buf.byteLength||downBytes;
+    }
+    var downMBps=downBytes/(downMs/1000)/1048576, downMbps=(downBytes*8)/(downMs/1000)/1000000;
+    DIAG.downMbps=downMbps;
+    if($('diagDown')) $('diagDown').textContent=downMbps.toFixed(1)+' Мбит/с';
+    if($('diagDownSub')) $('diagDownSub').textContent='МБ/с: '+downMBps.toFixed(2)+' ('+fmtSize(downBytes)+')';
+    updateStreamCalc();
+
+    if(st) st.textContent='Тест скорости на сервер (4 МБ)…';
+    var upBytes=4*1048576, upMs=220;
+    if(DEMO_MODE){
+      var nu=Date.now();
+      if(nu-DIAG.demoUpAt<10000){ var eu=new Error('rate_limited'); eu.code='rate_limited'; eu.retryAfterSec=Math.ceil((10000-(nu-DIAG.demoUpAt))/1000); throw eu; }
+      DIAG.demoUpAt=nu; await diagSleep(240); upMs=210+Math.random()*50;
+    }else{
+      var payload=new Uint8Array(upBytes);
+      for(var p=0;p<upBytes;p+=4096) payload[p]=(p*31)&0xff;
+      var tu0=nowMs();
+      var ru=await fetch('/api/net/speed/up',{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/octet-stream','X-Nexora':'1'},body:payload});
+      if(ru.status===401){ location.replace('/'); return; }
+      var ju=null; try{ ju=await ru.json(); }catch(_){}
+      if(!ru.ok){ var e2=new Error((ju&&ju.error)||('HTTP '+ru.status)); e2.code=ju&&ju.error; e2.retryAfterSec=ju&&ju.retryAfterSec; throw e2; }
+      upMs=Math.max(1,(ju&&ju.ms)?Number(ju.ms):(nowMs()-tu0));
+      upBytes=(ju&&ju.bytes)?Number(ju.bytes):upBytes;
+    }
+    var upMBps=upBytes/(upMs/1000)/1048576, upMbps=(upBytes*8)/(upMs/1000)/1000000;
+    if($('diagUp')) $('diagUp').textContent=upMbps.toFixed(1)+' Мбит/с';
+    if($('diagUpSub')) $('diagUpSub').textContent='МБ/с: '+upMBps.toFixed(2)+' ('+fmtSize(upBytes)+')';
+    loadNetLoad();
+    if(st) st.textContent='Тест завершён в '+new Date().toLocaleTimeString('ru-RU');
+  }catch(e){
+    var msg=opErr(e);
+    if(st) st.textContent=msg;
+    toast(msg);
+  }finally{
+    DIAG.running=false;
+    if(btn) btn.disabled=false;
+  }
+}
+$('diagRunBtn').addEventListener('click',runNetDiagTest);
+$('diagLanBtn').addEventListener('click',function(){ DEVTAB='lan'; setSub('devices'); });
+$('diagViewers').addEventListener('change',updateStreamCalc);
+$('diagBitrate').addEventListener('change',updateStreamCalc);
+$('diagCheckBtn').addEventListener('click',function(){
+  if(!isAdmin) return;
+  var host=($('diagHost').value||'').trim(), out=$('diagHostRes'), btn=$('diagCheckBtn');
+  if(!host){ toast('Введите локальный IPv4-адрес'); return; }
+  btn.disabled=true; out.textContent='Проверка…';
+  api('/api/net/check?host='+encodeURIComponent(host)).then(function(j){
+    var ports=(j.openPorts&&j.openPorts.length)? (' · открытые порты: '+j.openPorts.join(', ')) : ' · стандартные порты закрыты';
+    var rtt=j.rttMs!=null? (' ('+j.rttMs+' мс)') : '';
+    out.textContent=(j.reachable?'Доступен':'Не отвечает')+rtt+ports;
+  }).catch(function(e){ var m=opErr(e); out.textContent=m; toast(m); })
+  .finally(function(){ btn.disabled=false; });
+});
+
+/* ---------- МОНИТОР АКТИВНОСТИ (только администратор) ---------- */
+var MON={timer:0};
+var MON_STATES={watching:'Смотрит',listening:'Слушает',downloading:'Скачивает',uploading:'Загружает',browsing:'Просмотр',idle:'Неактивен'};
+function fmtSpeed(bps){
+  bps=Math.max(0,Number(bps)||0);
+  if(bps>=1048576) return (bps/1048576).toFixed(2)+' МБ/с';
+  if(bps>=1024) return (bps/1024).toFixed(1)+' КБ/с';
+  return Math.round(bps)+' Б/с';
+}
+function fmtSecClock(s){
+  s=Math.max(0,Math.floor(Number(s)||0));
+  var h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sec=s%60;
+  return h>0? (h+':'+p2(m)+':'+p2(sec)) : (m+':'+p2(sec));
+}
+function startMonitor(){
+  stopMonitor();
+  if(!isAdmin) return;
+  loadMonitor();
+  MON.timer=setInterval(function(){
+    if($('v-monitor')&&$('v-monitor').classList.contains('on')&&isAdmin) loadMonitor();
+  },1500);
+}
+function stopMonitor(){ clearInterval(MON.timer); MON.timer=0; }
+function loadMonitor(){
+  api('/api/monitor').then(renderMonitor).catch(function(e){
+    if($('monList')) $('monList').innerHTML=emptyHtml('pulse',opErr(e));
+  });
+}
+function renderMonitor(j){
+  if(!$('v-monitor')||!$('v-monitor').classList.contains('on')) return;
+  var tot=j.totals||{}, list=j.users||[];
+  if($('monTotals')){
+    $('monTotals').innerHTML=
+      '<div class="mon-kpi"><small>Активных</small><b>'+(tot.active||0)+' / '+list.length+'</b></div>'+
+      '<div class="mon-kpi"><small>Отдача (вниз)</small><b>'+fmtSpeed(tot.downBps||0)+'</b></div>'+
+      '<div class="mon-kpi"><small>Приём (вверх)</small><b>'+fmtSpeed(tot.upBps||0)+'</b></div>'+
+      '<div class="mon-kpi"><small>Всего трафика</small><b>'+fmtSize((tot.totalDownBytes||0)+(tot.totalUpBytes||0))+'</b></div>';
+  }
+  var el=$('monList');
+  if(!el) return;
+  var html=list.length? list.map(function(u){
+    var st=u.state||'browsing', lbl=MON_STATES[st]||st, on=(st!=='idle');
+    var devName=u.device||'Устройство';
+    var k=/Windows|Mac|Linux|Edge/i.test(devName)?'pc':(/iPad|Tablet/i.test(devName)?'tablet':'phone');
+    var role=u.role==='admin'?'<span class="bdg adm">админ</span>':'<span class="bdg usr">пользователь</span>';
+    var posStr=(u.durSec>0)? (fmtSecClock(u.posSec)+' / '+fmtSecClock(u.durSec)) : (u.posSec>0?fmtSecClock(u.posSec):'');
+    var pct=(u.durSec>0)? Math.min(100,Math.max(0,(u.posSec/u.durSec)*100)) : 0;
+    var fileLine=u.file? '<small>Файл: <b>'+esc(u.file)+'</b>'+(posStr?' · '+posStr:'')+'</small>' : '';
+    var progLine=((st==='watching'||st==='listening')&&u.durSec>0)? '<div class="mon-prog"><i style="width:'+pct.toFixed(1)+'%"></i></div>' : '';
+    var timeLine='Вход: '+fmtDT(u.since)+(u.watchedSec?' · Просмотрено: '+fmtDur(u.watchedSec):'');
+    return '<div class="dev'+(on?' on':'')+'"><div class="di">'+ic(k)+'<i></i></div><div class="dm2">'+
+      '<b>'+esc(u.login||'гость')+' '+role+' <span class="st-bdg st-'+esc(st)+'">'+esc(lbl)+'</span></b>'+
+      '<small>'+esc(devName)+' · IP: '+esc(u.ip||'—')+'</small>'+fileLine+progLine+'<small>'+timeLine+'</small></div>'+
+      '<div class="mon-right"><b>'+fmtSpeed(u.speedBps||0)+'</b><small>Трафик: '+fmtSize(u.bytes||0)+'</small></div></div>';
+  }).join('') : emptyHtml('pulse','Сейчас активных пользователей нет');
+  el.innerHTML=html;
+}
 
 /* ---------- ПИСЬМО: текст, голос и файлы между пользователями сервера ---------- */
 var MAIL={peer:null,peers:[],lastId:0,timer:0,tick:0,rec:null,chunks:[],t0:0};

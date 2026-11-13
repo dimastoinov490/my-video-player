@@ -6,6 +6,7 @@ import android.app.Activity
 import android.app.PictureInPictureParams
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
@@ -50,6 +51,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
@@ -64,13 +66,21 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.example.videoplayer.R
 import com.example.videoplayer.model.MediaStoreHelper
 import com.example.videoplayer.player.VlcPlayerManager
 import com.example.videoplayer.ui.theme.ThemeConfigManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 import java.net.URLDecoder
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -147,9 +157,38 @@ fun resolveVideoTitle(context: Context, uriString: String): String {
     return if (fallback.isBlank()) "Видео" else fallback
 }
 
+private fun isPrivateIpv4Host(host: String): Boolean {
+    val parts = host.split('.')
+    if (parts.size != 4) return false
+    val octets = parts.map { it.toIntOrNull() ?: return false }
+    if (octets.any { it !in 0..255 }) return false
+    val b0 = octets[0]
+    val b1 = octets[1]
+    return b0 == 10 || (b0 == 172 && b1 in 16..31) || (b0 == 192 && b1 == 168)
+}
+
+private fun extractLanMonitorBeatEndpoint(videoUri: String): String? {
+    if (!videoUri.startsWith("http://", ignoreCase = true) && !videoUri.startsWith("https://", ignoreCase = true)) {
+        return null
+    }
+    return try {
+        val uri = Uri.parse(videoUri)
+        val scheme = uri.scheme?.lowercase() ?: return null
+        val host = uri.host?.lowercase() ?: return null
+        val isLocal = host == "localhost" || host == "127.0.0.1" || isPrivateIpv4Host(host)
+        if (!isLocal) return null
+        val port = uri.port
+        val authority = if (port > 0) "$host:$port" else host
+        "$scheme://$authority/api/monitor/beat"
+    } catch (_: Throwable) {
+        null
+    }
+}
+
 @Composable
 fun PlayerScreen(
     videoUri: String,
+    isInPipMode: Boolean = false,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -214,6 +253,9 @@ fun PlayerScreen(
         onBack()
     }
 
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     DisposableEffect(Unit) {
         val window = activity?.window
         window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -223,10 +265,35 @@ fun PlayerScreen(
                 val lp = act.window.attributes
                 lp.screenBrightness = initialWindowBrightness
                 act.window.attributes = lp
+                val ctrl = WindowCompat.getInsetsController(act.window, act.window.decorView)
+                ctrl.show(WindowInsetsCompat.Type.systemBars())
             }
             try {
                 playerManager.release()
             } catch (_: Throwable) {}
+        }
+    }
+
+    LaunchedEffect(isLandscape, isInPipMode) {
+        activity?.let { act ->
+            val ctrl = WindowCompat.getInsetsController(act.window, act.window.decorView)
+            ctrl.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            if (isLandscape && !isInPipMode) {
+                ctrl.hide(WindowInsetsCompat.Type.systemBars())
+            } else {
+                ctrl.show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+    }
+
+    LaunchedEffect(isInPipMode) {
+        if (isInPipMode) {
+            showControls = false
+            showBrightnessGauge = false
+            showVolumeGauge = false
+            showSpeedMenu = false
+            showTopOverflowMenu = false
+            showMoreBottomSheet = false
         }
     }
 
@@ -247,6 +314,45 @@ fun PlayerScreen(
         if (infoFeedbackText != null) {
             delay(2200)
             infoFeedbackText = null
+        }
+    }
+
+    val beatPosMs by rememberUpdatedState(currentTimeMs)
+    val beatDurMs by rememberUpdatedState(totalDurationMs)
+    val beatTitle by rememberUpdatedState(resolvedTitle)
+    val monitorBeatUrl = remember(videoUri) { extractLanMonitorBeatEndpoint(videoUri) }
+
+    LaunchedEffect(isPlaying, monitorBeatUrl) {
+        val endpoint = monitorBeatUrl ?: return@LaunchedEffect
+        if (!isPlaying) return@LaunchedEffect
+        delay(1000L)
+        while (isPlaying) {
+            withContext(Dispatchers.IO) {
+                var conn: HttpURLConnection? = null
+                try {
+                    val payload = JSONObject().apply {
+                        put("file", beatTitle)
+                        put("pos", beatPosMs / 1000.0)
+                        put("dur", beatDurMs / 1000.0)
+                        put("kind", "video")
+                    }.toString().toByteArray(Charsets.UTF_8)
+                    conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+                        requestMethod = "POST"
+                        connectTimeout = 2000
+                        readTimeout = 2000
+                        doOutput = true
+                        setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+                        setRequestProperty("X-Nexora", "1")
+                        setFixedLengthStreamingMode(payload.size)
+                    }
+                    conn.outputStream.use { it.write(payload) }
+                    conn.responseCode
+                } catch (_: Throwable) {
+                } finally {
+                    try { conn?.disconnect() } catch (_: Throwable) {}
+                }
+            }
+            delay(5000L)
         }
     }
 
@@ -464,7 +570,7 @@ fun PlayerScreen(
 
         // 2. OVERLAY CONTROLS (Exact layout from player_screen_v3.html)
         AnimatedVisibility(
-            visible = showControls,
+            visible = showControls && !isInPipMode,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier.fillMaxSize()

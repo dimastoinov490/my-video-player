@@ -372,9 +372,14 @@ svg.ic{width:1em;height:1em;display:block}
     <div class="card static item" style="--i:4"><div class="tile"><svg class="ic"><use href="#i-hist"/></svg></div>
       <div class="body"><div class="t">Отображать буферизацию</div><div class="s" style="white-space:normal">Показывать состояние буферизации во время воспроизведения</div></div>
       <button class="sw" data-set="show_buffering_status" role="switch" aria-checked="false"><i></i></button></div>
-    <div class="card static item" style="--i:5"><div class="tile"><svg class="ic"><use href="#i-rot"/></svg></div>
-      <div class="body"><div class="t">Автоповорот</div><div class="s" style="white-space:normal">Переворачивать экран при смене ориентации</div></div>
-      <button class="sw" data-set="auto_rotate" role="switch" aria-checked="false"><i></i></button></div>
+    <div class="row item" style="--i:5"><b>Ориентация экрана</b><span class="caps">Применяется сразу</span></div>
+    <div class="card static col item" style="--i:6">
+      <div style="display:flex;align-items:center;gap:calc(20*var(--u))">
+        <div class="tile"><svg class="ic"><use href="#i-rot"/></svg></div>
+        <div class="body"><div class="t">Режим ориентации</div><div class="s" style="white-space:normal">По умолчанию для библиотеки — портрет; в автоповороте видео в альбоме открывается на весь экран</div></div>
+      </div>
+      <div id="l-orientations" style="display:flex;flex-direction:column;gap:calc(12*var(--u))"></div>
+    </div>
 
     <div class="row item" style="--i:11"><b>О приложении</b></div>
     <div class="card static item" style="--i:12"><div class="tile"><svg class="ic"><use href="#i-info"/></svg></div>
@@ -837,7 +842,7 @@ const $ = id => document.getElementById(id);
 const mock = {
   share: { running:false, url:'http://192.168.1.23:8080', port:8080, error:'', authRequired:false, username:'admin', password:'1234', folder:'all', serverStyle:'nexora_media',
            wifi:{ enabled:false, ssid:'Nexora-Direct-Share', pass:'nexora8888', qrPayload:'WIFI:T:WPA;S:Nexora-Direct-Share;P:nexora8888;;', status:'' } },
-  settings: { hw_accel:true, bg_play:false, show_buffering_status:true, auto_rotate:true }
+  settings: { hw_accel:true, bg_play:false, show_buffering_status:true, auto_rotate:false, orientation_mode:'portrait' }
 };
 const FOLDERS = [
   ['all','Вся библиотека (Видео и Музыка)'], ['movies','Папка Movies (Фильмы)'], ['downloads','Папка Downloads (Загрузки)'],
@@ -925,18 +930,40 @@ $('btn-open').addEventListener('click', ()=> openExternal(getShare().url || ''))
 buildFolders();
 
 /* ---------- Настройки плеера ---------- */
+const ORIENTATION_MODES = [
+  ['system', 'Системная (как в телефоне)'],
+  ['sensor', 'Автоповорот по датчику'],
+  ['portrait', 'Только портрет'],
+  ['landscape', 'Только альбом']
+];
+function buildOrientations(){
+  const box = $('l-orientations');
+  if (!box) return;
+  box.innerHTML = ORIENTATION_MODES.map((m) =>
+    `<div class="card" data-ori="${m[0]}" style="padding:calc(18*var(--u)) calc(22*var(--u))"><div class="body"><div class="t" style="white-space:normal;font-size:calc(27*var(--u))">${esc(m[1])}</div></div><div class="rd">${ic('check')}</div></div>`
+  ).join('');
+  box.querySelectorAll('[data-ori]').forEach((el) => {
+    el.addEventListener('click', () => setSetting('orientation_mode', el.dataset.ori));
+  });
+}
 function getSettings(){
   if (PREVIEW) return mock.settings;
   try { return JSON.parse(callB('getSettings') || '{}'); } catch(e){ return {}; }
 }
 function setSetting(k, v){
-  if (PREVIEW) mock.settings[k] = (v==='true') ? true : (v==='false') ? false : v; else callB('setSetting', k, String(v));
+  if (PREVIEW) {
+    mock.settings[k] = (v==='true') ? true : (v==='false') ? false : v;
+    if (k === 'orientation_mode') mock.settings.auto_rotate = (v === 'sensor' || v === 'system');
+  } else callB('setSetting', k, String(v));
   renderSettings();
 }
 function renderSettings(){
   const s = getSettings();
   document.querySelectorAll('[data-set]').forEach(b=>setSw(b, !!s[b.dataset.set]));
+  const ori = s.orientation_mode || 'portrait';
+  document.querySelectorAll('#l-orientations [data-ori]').forEach(c=>c.classList.toggle('sel', c.dataset.ori === ori));
 }
+buildOrientations();
 document.querySelectorAll('[data-set]').forEach(b=>b.addEventListener('click',()=>setSetting(b.dataset.set, String(!getSettings()[b.dataset.set]))));
 
 /* ---------- open / close sub-pages (same slide + rise animation) ---------- */

@@ -32,7 +32,10 @@ data class DynamicUser(
     var ip: String = "",
     var deviceName: String = "",
     var limitMin: Int = 0,
-    var schedule: UserSchedule = UserSchedule()
+    var schedule: UserSchedule = UserSchedule(),
+    var secretQuestion: String? = null,
+    var secretAnswerSalt: String? = null,
+    var secretAnswerHash: String? = null
 ) {
     fun toJson(): JSONObject {
         val obj = JSONObject()
@@ -49,6 +52,9 @@ data class DynamicUser(
         obj.put("deviceName", deviceName)
         obj.put("limitMin", limitMin)
         obj.put("schedule", schedule.toJson())
+        if (!secretQuestion.isNullOrBlank()) obj.put("secretQuestion", secretQuestion)
+        if (!secretAnswerSalt.isNullOrBlank()) obj.put("secretAnswerSalt", secretAnswerSalt)
+        if (!secretAnswerHash.isNullOrBlank()) obj.put("secretAnswerHash", secretAnswerHash)
         return obj
     }
 
@@ -71,6 +77,9 @@ data class DynamicUser(
             val limitMin = obj.optInt("limitMin", 0)
             val scheduleObj = obj.optJSONObject("schedule")
             val schedule = UserSchedule.fromJson(scheduleObj)
+            val secretQuestion = if (obj.has("secretQuestion") && !obj.isNull("secretQuestion")) obj.optString("secretQuestion").trim().ifEmpty { null } else null
+            val secretAnswerSalt = if (obj.has("secretAnswerSalt") && !obj.isNull("secretAnswerSalt")) obj.optString("secretAnswerSalt").trim().ifEmpty { null } else null
+            val secretAnswerHash = if (obj.has("secretAnswerHash") && !obj.isNull("secretAnswerHash")) obj.optString("secretAnswerHash").trim().ifEmpty { null } else null
 
             return DynamicUser(
                 id = id,
@@ -85,7 +94,10 @@ data class DynamicUser(
                 ip = ip,
                 deviceName = deviceName,
                 limitMin = limitMin,
-                schedule = schedule
+                schedule = schedule,
+                secretQuestion = secretQuestion,
+                secretAnswerSalt = secretAnswerSalt,
+                secretAnswerHash = secretAnswerHash
             )
         }
     }
@@ -98,6 +110,16 @@ object DynamicUserManager {
     private const val KEY_REGISTRATION_OPEN = "registration_open"
     private const val KEY_FIXED_USER_PREV_SALT = "fixed_user_prev_salt"
     private const val KEY_FIXED_USER_PREV_HASH = "fixed_user_prev_hash"
+    private const val KEY_FIXED_USER_SECRET_Q = "fixed_user_secret_question"
+    private const val KEY_FIXED_USER_SECRET_SALT = "fixed_user_secret_salt"
+    private const val KEY_FIXED_USER_SECRET_HASH = "fixed_user_secret_hash"
+
+    val PRESET_SECRET_QUESTIONS = listOf(
+        "Девичья фамилия матери",
+        "Кличка первого питомца",
+        "Город рождения",
+        "Любимая книга"
+    )
 
     private val usersMap = ConcurrentHashMap<String, DynamicUser>()
     @Volatile private var isLoaded = false
@@ -179,6 +201,49 @@ object DynamicUserManager {
             .apply()
     }
 
+    fun normalizeSecretAnswer(answer: String): String {
+        return answer.trim().lowercase().replace(Regex("\\s+"), " ")
+    }
+
+    fun hashSecretAnswer(answer: String): Pair<String, String> {
+        val normalized = normalizeSecretAnswer(answer)
+        val saltBytes = HttpServerConfig.generateSalt()
+        val hashBytes = HttpServerConfig.hashPassword(normalized.toCharArray(), saltBytes)
+        return Pair(HttpServerConfig.bytesToHex(saltBytes), HttpServerConfig.bytesToHex(hashBytes))
+    }
+
+    fun verifySecretAnswer(answer: String, saltHex: String?, hashHex: String?): Boolean {
+        val normalized = normalizeSecretAnswer(answer)
+        if (normalized.length < 3) return false
+        return verifyPasswordWithSaltHash(normalized, saltHex, hashHex)
+    }
+
+    fun getFixedUserSecretQuestion(context: Context): String? {
+        return getPrefs(context).getString(KEY_FIXED_USER_SECRET_Q, null)?.trim()?.ifEmpty { null }
+    }
+
+    fun getFixedUserSecretSalt(context: Context): String? {
+        return getPrefs(context).getString(KEY_FIXED_USER_SECRET_SALT, null)
+    }
+
+    fun getFixedUserSecretHash(context: Context): String? {
+        return getPrefs(context).getString(KEY_FIXED_USER_SECRET_HASH, null)
+    }
+
+    fun setFixedUserSecret(context: Context, question: String, answer: String) {
+        val (saltHex, hashHex) = hashSecretAnswer(answer)
+        getPrefs(context).edit()
+            .putString(KEY_FIXED_USER_SECRET_Q, question.trim())
+            .putString(KEY_FIXED_USER_SECRET_SALT, saltHex)
+            .putString(KEY_FIXED_USER_SECRET_HASH, hashHex)
+            .apply()
+    }
+
+    fun dummyQuestionForLogin(login: String): String {
+        val idx = kotlin.math.abs(login.trim().lowercase().hashCode()) % PRESET_SECRET_QUESTIONS.size
+        return PRESET_SECRET_QUESTIONS[idx]
+    }
+
     fun getAllUsers(context: Context): List<DynamicUser> {
         loadIfNeeded(context)
         return usersMap.values.toList()
@@ -224,11 +289,20 @@ object DynamicUserManager {
     }
 
     @Synchronized
-    fun createUser(context: Context, name: String, password: String): DynamicUser {
+    fun createUser(
+        context: Context,
+        name: String,
+        password: String,
+        secretQuestion: String? = null,
+        secretAnswer: String? = null
+    ): DynamicUser {
         loadIfNeeded(context)
         val saltBytes = HttpServerConfig.generateSalt()
         val hashBytes = HttpServerConfig.hashPassword(password.toCharArray(), saltBytes)
         val id = "u_" + UUID.randomUUID().toString().replace("-", "").take(10)
+        val secretPair = if (!secretQuestion.isNullOrBlank() && !secretAnswer.isNullOrBlank()) {
+            hashSecretAnswer(secretAnswer)
+        } else null
         val user = DynamicUser(
             id = id,
             name = name.trim(),
@@ -238,7 +312,10 @@ object DynamicUserManager {
             prevHash = null,
             status = "active",
             created = System.currentTimeMillis(),
-            approvedAt = System.currentTimeMillis()
+            approvedAt = System.currentTimeMillis(),
+            secretQuestion = secretQuestion?.trim()?.ifEmpty { null },
+            secretAnswerSalt = secretPair?.first,
+            secretAnswerHash = secretPair?.second
         )
         usersMap[id] = user
         saveToDisk(context)
@@ -246,10 +323,19 @@ object DynamicUserManager {
     }
 
     @Synchronized
-    fun registerPendingUser(context: Context, login: String, password: String, ip: String, deviceName: String): DynamicUser {
+    fun registerPendingUser(
+        context: Context,
+        login: String,
+        password: String,
+        ip: String,
+        deviceName: String,
+        secretQuestion: String,
+        secretAnswer: String
+    ): DynamicUser {
         loadIfNeeded(context)
         val saltBytes = HttpServerConfig.generateSalt()
         val hashBytes = HttpServerConfig.hashPassword(password.toCharArray(), saltBytes)
+        val (secSalt, secHash) = hashSecretAnswer(secretAnswer)
         val id = "u_" + UUID.randomUUID().toString().replace("-", "").take(10)
         val user = DynamicUser(
             id = id,
@@ -262,7 +348,10 @@ object DynamicUserManager {
             created = System.currentTimeMillis(),
             approvedAt = null,
             ip = ip,
-            deviceName = deviceName
+            deviceName = deviceName,
+            secretQuestion = secretQuestion.trim(),
+            secretAnswerSalt = secSalt,
+            secretAnswerHash = secHash
         )
         usersMap[id] = user
         saveToDisk(context)
@@ -323,6 +412,18 @@ object DynamicUserManager {
             user.salt = HttpServerConfig.bytesToHex(saltBytes)
             user.hash = HttpServerConfig.bytesToHex(hashBytes)
         }
+        saveToDisk(context)
+        return true
+    }
+
+    @Synchronized
+    fun updateSecretQuestion(context: Context, id: String, question: String, answer: String): Boolean {
+        loadIfNeeded(context)
+        val user = usersMap[id] ?: return false
+        val (secSalt, secHash) = hashSecretAnswer(answer)
+        user.secretQuestion = question.trim()
+        user.secretAnswerSalt = secSalt
+        user.secretAnswerHash = secHash
         saveToDisk(context)
         return true
     }

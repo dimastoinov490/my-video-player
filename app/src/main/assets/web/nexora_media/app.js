@@ -189,7 +189,7 @@
       bad_current: 'Неверный текущий пароль',
       login_taken: 'Такой логин уже используется',
       bad_setup_password: 'Неверный пароль создания администратора',
-      rate_limited: 'Слишком много попыток. Подождите несколько минут',
+      rate_limited: (e && e.retryAfterSec) ? `Слишком часто. Повторите через ${e.retryAfterSec} с` : 'Слишком много попыток. Подождите несколько минут',
       exists: 'Такая учётная запись уже есть',
       weak_password: 'Пароль слишком короткий (от 4–6 символов)',
       bad_name: 'Логин: 3–32 символа, буквы, цифры, точка, дефис, подчёркивание',
@@ -197,6 +197,10 @@
       exists_target: 'Файл с таким именем уже есть',
       bad_name_file: 'Недопустимое имя',
       no_access: 'Нет доступа к файлам. Разрешите приложению доступ ко всем файлам',
+      bad_secret: 'Укажите секретный вопрос и ответ (минимум 3 символа)',
+      not_allowed: 'Для этой учётной записи действие недоступно',
+      bad_host: 'Разрешены только локальные IPv4-адреса (10.x, 172.16–31.x, 192.168.x)',
+      too_large: 'Превышен допустимый размер тестовых данных',
     };
     return map[c] || 'Не удалось выполнить действие';
   }
@@ -251,8 +255,48 @@
   }
 
   function demoApi(url) {
-    return new Promise((res) => setTimeout(() => {
+    return new Promise((res, rej) => setTimeout(() => {
       const n = Date.now();
+      if (url.startsWith('/api/monitor')) {
+        if (!isAdmin) { const er = new Error('admin_required'); er.code = 'admin_required'; return rej(er); }
+        return res({
+          users: [
+            { login: 'admin', role: 'admin', device: 'Edge · Windows', ip: '192.168.1.40', state: 'watching', file: 'BLADE RACER.mp4', watchedSec: 425, posSec: 1240, durSec: 4028, speedBps: 3145728, downBps: 3145728, upBps: 0, bytes: 184549376, since: n - 65 * 60000 },
+            { login: 'demo', role: 'user', device: 'Chrome · Android', ip: '192.168.1.23', state: 'downloading', file: 'семейный-архив-2025.mp4', watchedSec: 0, posSec: 0, durSec: 0, speedBps: 5452595, downBps: 5452595, upBps: 0, bytes: 64225280, since: n - 12 * 60000 },
+            { login: 'petya', role: 'user', device: 'Safari · iPad', ip: '192.168.1.57', state: 'browsing', file: '', watchedSec: 90, posSec: 0, durSec: 0, speedBps: 18432, downBps: 18432, upBps: 0, bytes: 1254000, since: n - 4 * 60000 },
+          ],
+          totals: { downBps: 8616755, upBps: 0, active: 3, totalDownBytes: 984210432, totalUpBytes: 12582912 },
+        });
+      }
+      if (url.startsWith('/api/server/info')) {
+        if (!isAdmin) { const er = new Error('admin_required'); er.code = 'admin_required'; return rej(er); }
+        return res({
+          server: { version: D.version || '1.0', protocol: 'http', port: 8765, address: D.address || 'http://192.168.1.64:8765', uptimeSec: 5420, startedAt: n - 5420000, threads: 3, activeSessions: 3, devicesCount: 4, onlineDevicesCount: 2 },
+          device: { manufacturer: 'Samsung', model: 'Galaxy S23', device: 'dm1q', androidVersion: '14', sdkInt: 34, abis: 'arm64-v8a, armeabi-v7a', vlcVersion: '3.6.0-eap13' },
+          wifi: { ssid: 'Home_WiFi_5G', ip: '192.168.1.64', linkSpeedMbps: 866, frequencyMhz: 5180, rssi: -54, level: 4 },
+          interfaces: [{ label: 'Wi-Fi (wlan0)', ip: '192.168.1.64' }, { label: 'Точка доступа (ap0)', ip: '192.168.43.1' }],
+          storage: { total: 128 * 1073741824, free: 46.2 * 1073741824, used: 81.8 * 1073741824, mediaBytes: (D.stats && D.stats.storageBytes) || 894784853 },
+          memory: { total: 8 * 1073741824, avail: 3.1 * 1073741824, used: 4.9 * 1073741824, lowMemory: false },
+          battery: { level: 84, charging: true },
+          traffic: { downBytes: 984210432, upBytes: 12582912, totalBytes: 996793344, downBps: 5242880, upBps: 131072, activeTransfers: 2 },
+          ftp: { running: false, port: 2121, address: 'ftp://192.168.1.64:2121' },
+        });
+      }
+      if (url.startsWith('/api/status')) {
+        return res({
+          ok: true, online: true, time: n,
+          wifi: { level: 4, rssi: -54 },
+          me: ME,
+          disk: DEMO_DATA.disk,
+          pendingRegs: isAdmin ? 1 : 0,
+          version: D.version || '1.0',
+          uptimeSec: 5420,
+          protocol: 'http',
+          port: 8765,
+          devicesCount: 4,
+          mediaBytes: (D.stats && D.stats.storageBytes) || 894784853,
+        });
+      }
       if (url.startsWith('/api/devices')) {
         return res({
           now: n,
@@ -262,6 +306,18 @@
             { id: 'c', name: 'Safari · iPad', kind: 'tablet', ip: '192.168.1.57', account: 'demo', role: 'user', online: false, me: false, blocked: true, sessionStart: n - 7200000, lastLogin: n - 9000000, lastSeen: n - 7000000 },
           ],
         });
+      }
+      if (url.startsWith('/api/net/load')) {
+        return res({ activeTransfers: 2, downBps: 5242880, upBps: 131072, threads: 3, sessions: 3 });
+      }
+      if (url.startsWith('/api/net/check')) {
+        if (!isAdmin) { const er = new Error('admin_required'); er.code = 'admin_required'; return rej(er); }
+        const hm = url.match(/host=([^&]+)/);
+        const host = hm ? decodeURIComponent(hm[1]).trim() : '';
+        if (!/^(10\.(25[0-5]|2[0-4]\d|1?\d\d?)\.(25[0-5]|2[0-4]\d|1?\d\d?)\.(25[0-5]|2[0-4]\d|1?\d\d?)|172\.(1[6-9]|2\d|3[01])\.(25[0-5]|2[0-4]\d|1?\d\d?)\.(25[0-5]|2[0-4]\d|1?\d\d?)|192\.168\.(25[0-5]|2[0-4]\d|1?\d\d?)\.(25[0-5]|2[0-4]\d|1?\d\d?))$/.test(host)) {
+          const er = new Error('bad_host'); er.code = 'bad_host'; return rej(er);
+        }
+        return res({ ok: true, host, reachable: true, rttMs: 4, openPorts: [80, 443] });
       }
       if (url.startsWith('/api/net')) {
         return res({
@@ -308,7 +364,7 @@
           me: ME, registrationOpen: true, pendingRegs: 1,
           accounts: [
             { id: 'admin', name: 'admin', role: 'admin', passwordDefault: true, online: ME.id === 'admin', sessions: 1, usedToday: 0, limitMin: 0, remainingSec: null, schedule: null, lastLogin: n - 600000 },
-            { id: 'user', name: 'user', role: 'user', passwordDefault: false, deletable: false, online: true, sessions: 1, usedToday: 4320, limitMin: 120, remainingSec: 2880, schedule: { mode: 'allow', windows: [{ days: [1, 2, 3, 4, 5], from: '08:00', to: '22:00' }] }, lastLogin: n - 3600000 },
+            { id: 'user', name: 'user', role: 'user', passwordDefault: false, deletable: false, hasSecretQuestion: true, secretQuestion: 'Город рождения', online: true, sessions: 1, usedToday: 4320, limitMin: 120, remainingSec: 2880, schedule: { mode: 'allow', windows: [{ days: [1, 2, 3, 4, 5], from: '08:00', to: '22:00' }] }, lastLogin: n - 3600000 },
           ],
         });
       }
@@ -424,6 +480,8 @@
   const FS = { path: null, root: null, items: [], selOn: false, sel: {} };
   const DEV = { tab: 'srv', timer: 0, lanTimer: 0 };
   const NET = { data: null, proto: 'http', strict: false };
+  const MON = { timer: 0 };
+  const ABOUT = { timer: 0 };
   const ACC = { timer: 0, list: [], open: null, cb: null, reg: D.registrationOpen !== false, pend: D.pendingRegs || 0 };
   const MAIL = { peer: null, peers: [], me: {}, lastId: 0, timer: 0, tick: 0, rec: null, chunks: [], t0: 0 };
   const DAYN = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
@@ -432,6 +490,8 @@
   function stopSubTimers() {
     clearInterval(DEV.timer); DEV.timer = 0;
     clearTimeout(DEV.lanTimer); DEV.lanTimer = 0;
+    clearInterval(MON.timer); MON.timer = 0;
+    clearInterval(ABOUT.timer); ABOUT.timer = 0;
     clearInterval(ACC.timer); ACC.timer = 0;
     clearInterval(MAIL.timer); MAIL.timer = 0;
   }
@@ -486,6 +546,7 @@
         ['tools', 'tools', 'Инструменты'],
         ['about', 'info', 'О сервере'],
       ];
+      if (isAdmin) subs.splice(4, 0, ['monitor', 'pulse', 'Монитор']);
       return `
       <div class="settings-shell">
         <div class="sec-head" style="margin-bottom:6px"><h2>Настройки</h2></div>
@@ -704,6 +765,7 @@
     const panel = byId('setPanel');
     if (!panel) return;
     stopSubTimers();
+    if (state.sub === 'monitor' && !isAdmin) state.sub = 'general';
     $$('.set-tab').forEach((b) => {
       const on = b.dataset.sub === state.sub;
       b.classList.toggle('on', on);
@@ -732,8 +794,50 @@
     } else if (state.sub === 'net') {
       panel.innerHTML = `
         <div class="sub-bar"><h3>Сеть сервера</h3><small class="nx-note" id="netState">Загрузка…</small></div>
-        <div class="settings" id="netBody"><p class="empty">Загрузка параметров сети…</p></div>`;
+        <div class="settings" id="netBody"><p class="empty">Загрузка параметров сети…</p></div>
+        <div class="diag-card glass" id="netDiag">
+          <div class="diag-head">
+            <div>
+              <h3>Диагностика локальной сети</h3>
+              <p class="nx-note">Замер задержки (20 пакетов), скорости скачивания/загрузки и текущей нагрузки сервера</p>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="nx-btn" id="diagLanBtn" type="button">Сканер устройств в сети</button>
+              <button class="nx-btn primary" id="diagRunBtn" type="button">Запустить тест</button>
+            </div>
+          </div>
+          <small class="nx-note" id="diagStatus">Нажмите «Запустить тест» для проверки локального канала</small>
+          <div class="diag-grid">
+            <div class="diag-kpi"><small>Пинг (мин / сред / макс)</small><b id="diagPing">—</b><span id="diagJitter">Джиттер: —</span></div>
+            <div class="diag-kpi"><small>От сервера (скачивание)</small><b id="diagDown">—</b><span id="diagDownSub">МБ/с: —</span></div>
+            <div class="diag-kpi"><small>На сервер (загрузка)</small><b id="diagUp">—</b><span id="diagUpSub">МБ/с: —</span></div>
+            <div class="diag-kpi"><small>Нагрузка сервера</small><b id="diagLoad">—</b><span id="diagLoadSub">Потоки / сессии: —</span></div>
+          </div>
+          <div class="diag-calc">
+            <label for="diagViewers">Одновременные потоки:</label>
+            <select class="nx-select" id="diagViewers">
+              <option value="1">1 зритель</option>
+              <option value="2" selected>2 зрителя</option>
+              <option value="3">3 зрителя</option>
+              <option value="4">4 зрителя</option>
+              <option value="5">5 зрителей</option>
+              <option value="6">6 зрителей</option>
+            </select>
+            <select class="nx-select" id="diagBitrate">
+              <option value="12">Full HD (~12 Мбит/с)</option>
+              <option value="25">4K UHD (~25 Мбит/с)</option>
+            </select>
+            <span class="diag-res" id="diagCalcRes">Запустите тест скорости</span>
+          </div>
+          <div class="diag-check" id="diagHostBox" style="${isAdmin ? '' : 'display:none'}">
+            <label class="nx-note" for="diagHost">Проверка узла LAN (только локальный IP):</label>
+            <input class="nx-input" id="diagHost" placeholder="192.168.1.1" autocomplete="off">
+            <button class="nx-btn" id="diagCheckBtn" type="button">Проверить</button>
+            <small class="nx-note" id="diagHostRes"></small>
+          </div>
+        </div>`;
       loadNet();
+      initNetDiagnostics();
     } else if (state.sub === 'devices') {
       panel.innerHTML = `
         <div class="sub-bar">
@@ -800,28 +904,225 @@
       startMail();
     } else if (state.sub === 'tools') {
       renderTools(panel);
+    } else if (state.sub === 'monitor') {
+      panel.innerHTML = `
+        <div class="sub-bar">
+          <h3>Монитор активности</h3>
+          <small class="nx-note" id="monUpdated">Обновление каждые 1.5 с</small>
+        </div>
+        <div class="mon-sum" id="monTotals"></div>
+        <div class="dev-list" id="monList"><p class="empty">Загрузка…</p></div>`;
+      loadMonitor();
+      MON.timer = setInterval(() => {
+        if (state.view === 'settings' && state.sub === 'monitor' && isAdmin) loadMonitor();
+      }, 1500);
     } else if (state.sub === 'about') {
-      const vCount = (D.stats && D.stats.videos != null) ? D.stats.videos : videos.length;
-      const aCount = (D.stats && D.stats.audio != null) ? D.stats.audio : audios.length;
-      const pCount = (D.stats && D.stats.photos != null) ? D.stats.photos : 0;
       panel.innerHTML = `
         <div class="set-head-card glass">
           <svg class="logo"><use href="#i-logo"/></svg>
-          <div><h3>Nexora <span>Media</span></h3><p class="nx-note">Версия ${esc(D.version || '1.0')}</p></div>
-          ${D.authRequired ? `<a class="nx-btn" href="/logout" style="margin-left:auto">${ico('out')}Выйти</a>` : ''}
+          <div><h3>Nexora <span>Media</span></h3><p class="nx-note">Версия <span id="aboutVer">${esc(D.version || '1.0')}</span> · <span id="aboutUpd">Обновление каждые 5 с</span></p></div>
+          <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+            <button class="nx-btn" data-copyaddr>${ico('copy')}Копировать адрес</button>
+            ${D.authRequired ? `<a class="nx-btn" href="/logout">${ico('out')}Выйти</a>` : ''}
+          </div>
         </div>
-        <div class="kv-list glass">
-          <div class="kv-row">${ico('globe')}<span class="kv-lbl">Wi-Fi сервер</span><span class="kv-val ${state.online ? 'ok' : ''}">${state.online ? 'Активен' : 'Нет связи'}</span></div>
-          <div class="kv-row">${ico('globe')}<span class="kv-lbl">Адрес сервера</span><span class="kv-val">${esc(D.address || location.host || '—')}</span><button class="nx-btn" data-copyaddr>${ico('copy')}Копировать</button></div>
-          <div class="kv-row">${ico('db')}<span class="kv-lbl">Память медиа</span><span class="kv-val">${esc(totalMem())}</span></div>
-          <div class="kv-row">${ico('film')}<span class="kv-lbl">Видео</span><span class="kv-val">${vCount} файлов</span></div>
-          <div class="kv-row">${ico('note')}<span class="kv-lbl">Аудио</span><span class="kv-val">${aCount} файлов</span></div>
-          <div class="kv-row">${ico('image')}<span class="kv-lbl">Фото</span><span class="kv-val">${pCount} шт.</span></div>
-          <div class="kv-row">${ico('folder')}<span class="kv-lbl">Вещание</span><span class="kv-val">${esc(D.folder || 'Все папки')}</span></div>
-          <div class="kv-row">${ico('lock')}<span class="kv-lbl">Защита паролем</span><span class="kv-val">${D.authRequired ? 'Включена' : 'Выключена'}</span></div>
-        </div>
+        <div class="srv-grid" id="srvGrid"><p class="empty">Загрузка сведений о сервере…</p></div>
         <div class="thanks-card glass">${ico('heart')}<span>Спасибо, что используете Nexora Media!</span></div>`;
+      loadServerAbout();
+      ABOUT.timer = setInterval(() => {
+        if (state.view === 'settings' && state.sub === 'about') loadServerAbout();
+      }, 5000);
     }
+  }
+
+  function fmtUptime(sec) {
+    sec = Math.max(0, Math.floor(Number(sec) || 0));
+    const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    const parts = [];
+    if (d) parts.push(`${d} д`);
+    if (h || d) parts.push(`${h} ч`);
+    parts.push(`${m} мин ${s} с`);
+    return parts.join(' ');
+  }
+  function srvKv(k, v) {
+    return `<div class="srv-kv"><span>${esc(k)}</span><b>${esc(v == null || v === '' ? '—' : v)}</b></div>`;
+  }
+  function renderServerAboutAdmin(j) {
+    const grid = byId('srvGrid');
+    if (!grid || state.view !== 'settings' || state.sub !== 'about') return;
+    const s = j.server || {}, dev = j.device || {}, w = j.wifi || {}, st = j.storage || {}, mem = j.memory || {}, bat = j.battery || {}, tr = j.traffic || {}, ftp = j.ftp || {};
+    const vCount = (D.stats && D.stats.videos != null) ? D.stats.videos : videos.length;
+    const aCount = (D.stats && D.stats.audio != null) ? D.stats.audio : audios.length;
+    const pCount = (D.stats && D.stats.photos != null) ? D.stats.photos : 0;
+    if (byId('aboutVer') && s.version) byId('aboutVer').textContent = s.version;
+    if (byId('aboutUpd')) byId('aboutUpd').textContent = `Обновлено в ${new Date().toLocaleTimeString('ru-RU')}`;
+    const ramPct = mem.total > 0 ? Math.min(100, Math.round((mem.used / mem.total) * 100)) : 0;
+    const diskPct = st.total > 0 ? Math.min(100, Math.round((st.used / st.total) * 100)) : 0;
+    const freqStr = w.frequencyMhz > 0 ? `${w.frequencyMhz} МГц (${w.frequencyMhz >= 4900 ? '5 ГГц' : '2.4 ГГц'})` : '—';
+    const ifacesStr = (j.interfaces || []).map((x) => `${x.label}: ${x.ip}`).join(', ') || '—';
+    const batStr = bat.level != null ? `${bat.level}%${bat.charging ? ' · зарядка' : ' · от батареи'}` : '—';
+    grid.innerHTML = `
+      <div class="srv-card glass">
+        <h4>Сервер</h4>
+        ${srvKv('Статус', state.online ? 'Активен' : 'Нет связи')}
+        ${srvKv('Версия ПО', s.version || '1.0')}
+        ${srvKv('Протокол и порт', `${String(s.protocol || 'http').toUpperCase()} · ${s.port || '—'}`)}
+        ${srvKv('Адрес', s.address || D.address || location.host)}
+        ${srvKv('Время работы', fmtUptime(s.uptimeSec))}
+        ${srvKv('Потоки / Сессии', `${s.threads || 0} / ${s.activeSessions || 0}`)}
+        ${srvKv('Устройства (онлайн / всего)', `${s.onlineDevicesCount || 0} / ${s.devicesCount || 0}`)}
+        ${srvKv('Вещание', D.folder || 'Все папки')}
+        ${srvKv('Защита паролем', D.authRequired ? 'Включена' : 'Выключена')}
+      </div>
+      <div class="srv-card glass">
+        <h4>Устройство и система</h4>
+        ${srvKv('Модель', [dev.manufacturer, dev.model].filter(Boolean).join(' ') || 'Android')}
+        ${srvKv('Android', `Android ${dev.androidVersion || '—'} (SDK ${dev.sdkInt || '—'})`)}
+        ${srvKv('Архитектура', dev.abis || '—')}
+        ${srvKv('Плеер libVLC', dev.vlcVersion || '3.6.0')}
+        ${srvKv('Батарея', batStr)}
+      </div>
+      <div class="srv-card glass">
+        <h4>Сеть и Wi-Fi</h4>
+        ${srvKv('Wi-Fi сеть (SSID)', w.ssid || 'скрыто / не подключено')}
+        ${srvKv('IP Wi-Fi', w.ip || '—')}
+        ${srvKv('Скорость канала', w.linkSpeedMbps > 0 ? `${w.linkSpeedMbps} Мбит/с` : '—')}
+        ${srvKv('Частота', freqStr)}
+        ${srvKv('Сигнал (RSSI)', w.rssi != null ? `${w.rssi} дБм (${w.level != null ? w.level + '/4' : '—'})` : '—')}
+        ${srvKv('Интерфейсы', ifacesStr)}
+      </div>
+      <div class="srv-card glass">
+        <h4>Память и диск</h4>
+        ${srvKv('ОЗУ занято / всего', mem.total > 0 ? `${fmtSize(mem.used)} / ${fmtSize(mem.total)} (${ramPct}%)` : '—')}
+        ${mem.total > 0 ? `<div class="srv-bar"><i style="width:${ramPct}%"></i></div>` : ''}
+        ${srvKv('Диск занято / всего', st.total > 0 ? `${fmtSize(st.used)} / ${fmtSize(st.total)} (${diskPct}%)` : '—')}
+        ${st.total > 0 ? `<div class="srv-bar"><i style="width:${diskPct}%"></i></div>` : ''}
+        ${srvKv('Свободно на диске', st.free > 0 ? fmtSize(st.free) : '—')}
+        ${srvKv('Медиафайлы', st.mediaBytes > 0 ? fmtSize(st.mediaBytes) : totalMem())}
+        ${srvKv('Библиотека', `${vCount} видео · ${aCount} аудио · ${pCount} фото`)}
+      </div>
+      <div class="srv-card glass">
+        <h4>Нагрузка и трафик</h4>
+        ${srvKv('Активные передачи', tr.activeTransfers || 0)}
+        ${srvKv('Отдача сейчас', fmtSpeed(tr.downBps || 0))}
+        ${srvKv('Приём сейчас', fmtSpeed(tr.upBps || 0))}
+        ${srvKv('Отдано за сеанс', fmtSize(tr.downBytes || 0))}
+        ${srvKv('Принято за сеанс', fmtSize(tr.upBytes || 0))}
+        ${srvKv('Суммарный трафик', fmtSize(tr.totalBytes || 0))}
+      </div>
+      <div class="srv-card glass">
+        <h4>FTP-сервер</h4>
+        ${srvKv('Статус FTP', ftp.running ? 'Запущен' : 'Остановлен')}
+        ${srvKv('Порт FTP', ftp.port || 2121)}
+        ${srvKv('Адрес FTP', ftp.running ? (ftp.address || '—') : 'Неактивен')}
+      </div>`;
+  }
+  function renderServerAboutPublic(j) {
+    const grid = byId('srvGrid');
+    if (!grid || state.view !== 'settings' || state.sub !== 'about') return;
+    const vCount = (D.stats && D.stats.videos != null) ? D.stats.videos : videos.length;
+    const aCount = (D.stats && D.stats.audio != null) ? D.stats.audio : audios.length;
+    const pCount = (D.stats && D.stats.photos != null) ? D.stats.photos : 0;
+    const disk = j.disk || DISK || { total: 0, free: 0 };
+    const mediaStr = j.mediaBytes > 0 ? fmtSize(j.mediaBytes) : totalMem();
+    if (byId('aboutVer') && j.version) byId('aboutVer').textContent = j.version;
+    if (byId('aboutUpd')) byId('aboutUpd').textContent = `Обновлено в ${new Date().toLocaleTimeString('ru-RU')}`;
+    grid.innerHTML = `
+      <div class="srv-card glass">
+        <h4>Сервер</h4>
+        ${srvKv('Wi-Fi сервер', state.online ? 'Активен' : 'Нет связи')}
+        ${srvKv('Версия', j.version || D.version || '1.0')}
+        ${srvKv('Протокол и порт', `${String(j.protocol || 'http').toUpperCase()} · ${j.port || D.port || '—'}`)}
+        ${srvKv('Адрес сервера', D.address || location.host || '—')}
+        ${srvKv('Время работы', fmtUptime(j.uptimeSec || 0))}
+        ${srvKv('Устройств на сервере', j.devicesCount != null ? j.devicesCount : '—')}
+        ${srvKv('Вещание', D.folder || 'Все папки')}
+        ${srvKv('Защита паролем', D.authRequired ? 'Включена' : 'Выключена')}
+      </div>
+      <div class="srv-card glass">
+        <h4>Хранилище и медиа</h4>
+        ${srvKv('Свободно / Всего', disk.total > 0 ? `${fmtSize(disk.free)} / ${fmtSize(disk.total)}` : '—')}
+        ${srvKv('Память медиа', mediaStr)}
+        ${srvKv('Видео', `${vCount} файлов`)}
+        ${srvKv('Аудио', `${aCount} файлов`)}
+        ${srvKv('Фото', `${pCount} шт.`)}
+      </div>`;
+  }
+  function loadServerAbout() {
+    if (isAdmin) {
+      api('/api/server/info').then(renderServerAboutAdmin).catch(() => {
+        api('/api/status').then(renderServerAboutPublic).catch(() => {});
+      });
+    } else {
+      api('/api/status').then(renderServerAboutPublic).catch(() => {});
+    }
+  }
+
+  /* ---------- МОНИТОР АКТИВНОСТИ (только администратор) ---------- */
+  const MON_STATES = {
+    watching: 'Смотрит',
+    listening: 'Слушает',
+    downloading: 'Скачивает',
+    uploading: 'Загружает',
+    browsing: 'Просмотр',
+    idle: 'Неактивен',
+  };
+  function fmtSpeed(bps) {
+    bps = Math.max(0, Number(bps) || 0);
+    if (bps >= 1048576) return (bps / 1048576).toFixed(2) + ' МБ/с';
+    if (bps >= 1024) return (bps / 1024).toFixed(1) + ' КБ/с';
+    return Math.round(bps) + ' Б/с';
+  }
+  function fmtSecClock(s) {
+    s = Math.max(0, Math.floor(Number(s) || 0));
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+    return h > 0 ? `${h}:${two(m)}:${two(sec)}` : `${m}:${two(sec)}`;
+  }
+  function loadMonitor() {
+    api('/api/monitor').then((j) => {
+      if (state.view !== 'settings' || state.sub !== 'monitor') return;
+      const tot = j.totals || {}, list = j.users || [];
+      const tb = byId('monTotals'), el = byId('monList');
+      if (tb) {
+        tb.innerHTML = `
+          <div class="mon-kpi glass"><small>Активных сессий</small><b>${tot.active || 0} / ${list.length}</b></div>
+          <div class="mon-kpi glass"><small>Отдача (вниз)</small><b>${fmtSpeed(tot.downBps || 0)}</b></div>
+          <div class="mon-kpi glass"><small>Приём (вверх)</small><b>${fmtSpeed(tot.upBps || 0)}</b></div>
+          <div class="mon-kpi glass"><small>Трафик сервера</small><b>${fmtSize((tot.totalDownBytes || 0) + (tot.totalUpBytes || 0))}</b></div>`;
+      }
+      if (el) {
+        el.innerHTML = list.length ? list.map((u) => {
+          const st = u.state || 'browsing';
+          const lbl = MON_STATES[st] || st;
+          const isOn = st !== 'idle';
+          const devName = u.device || 'Устройство';
+          const icoName = /Windows|Mac|Linux|Edge/i.test(devName) ? 'pc' : (/iPad|Tablet/i.test(devName) ? 'tablet' : 'phone');
+          const role = u.role === 'admin' ? '<span class="bdg adm">админ</span>' : '<span class="bdg usr">пользователь</span>';
+          const posStr = (u.durSec > 0) ? `${fmtSecClock(u.posSec)} / ${fmtSecClock(u.durSec)}` : (u.posSec > 0 ? fmtSecClock(u.posSec) : '');
+          const pct = (u.durSec > 0) ? Math.min(100, Math.max(0, (u.posSec / u.durSec) * 100)) : 0;
+          const fileLine = u.file ? `<small>Файл: <b>${esc(u.file)}</b>${posStr ? ` · ${posStr}` : ''}</small>` : '';
+          const progLine = (st === 'watching' || st === 'listening') && u.durSec > 0 ? `<div class="mon-prog"><i style="width:${pct.toFixed(1)}%"></i></div>` : '';
+          const timeLine = `Вход: ${fmtDT(u.since)}${u.watchedSec ? ` · Просмотрено: ${fmtDur(u.watchedSec)}` : ''}`;
+          return `<div class="mon-card glass ${isOn ? 'on' : ''}">
+            <div class="dev-ico">${ico(icoName)}<span class="dev-dot"></span></div>
+            <div class="dev-meta">
+              <b>${esc(u.login || 'гость')} ${role} <span class="st-bdg st-${esc(st)}">${esc(lbl)}</span></b>
+              <small>${esc(devName)} · IP: ${esc(u.ip || '—')}</small>
+              ${fileLine}
+              ${progLine}
+              <small>${timeLine}</small>
+            </div>
+            <div class="mon-right">
+              <b>${fmtSpeed(u.speedBps || 0)}</b>
+              <small>Трафик: ${fmtSize(u.bytes || 0)}</small>
+            </div>
+          </div>`;
+        }).join('') : '<p class="empty">Сейчас активных пользователей нет</p>';
+      }
+    }).catch((e) => {
+      const el = byId('monList');
+      if (el) el.innerHTML = `<p class="empty">${esc(opErr(e))}</p>`;
+    });
   }
 
   /* ---------- СЕТЬ ---------- */
@@ -905,6 +1206,183 @@
         });
       });
     };
+  }
+
+  /* ---------- ДИАГНОСТИКА ЛОКАЛЬНОЙ СЕТИ ---------- */
+  const DIAG = { running: false, downMbps: 0, demoDownAt: 0, demoUpAt: 0 };
+  function initNetDiagnostics() {
+    const runBtn = byId('diagRunBtn');
+    const lanBtn = byId('diagLanBtn');
+    const chkBtn = byId('diagCheckBtn');
+    const vw = byId('diagViewers');
+    const br = byId('diagBitrate');
+    if (runBtn) runBtn.onclick = runNetDiagTest;
+    if (lanBtn) lanBtn.onclick = () => { DEV.tab = 'lan'; state.sub = 'devices'; renderSettingsSub(); };
+    if (chkBtn) chkBtn.onclick = runHostCheck;
+    if (vw) vw.onchange = updateStreamCalc;
+    if (br) br.onchange = updateStreamCalc;
+    loadNetLoad();
+    updateStreamCalc();
+  }
+  function updateStreamCalc() {
+    const el = byId('diagCalcRes');
+    const vw = byId('diagViewers');
+    const br = byId('diagBitrate');
+    if (!el || !vw || !br) return;
+    if (!DIAG.downMbps) {
+      el.className = 'diag-res';
+      el.textContent = 'Запустите тест для расчёта потоков';
+      return;
+    }
+    const n = parseInt(vw.value, 10) || 1;
+    const per = parseInt(br.value, 10) || 12;
+    const need = n * per;
+    const maxStreams = Math.floor(DIAG.downMbps / per);
+    if (DIAG.downMbps >= need * 1.25) {
+      el.className = 'diag-res ok';
+      el.textContent = `Хватит с запасом (нужно ${need} Мбит/с · до ${maxStreams} потоков)`;
+    } else if (DIAG.downMbps >= need) {
+      el.className = 'diag-res warn';
+      el.textContent = `Впритык (нужно ${need} Мбит/с · максимум ~${maxStreams})`;
+    } else {
+      el.className = 'diag-res bad';
+      el.textContent = `Недостаточно: нужно ${need} Мбит/с (хватит на ${maxStreams})`;
+    }
+  }
+  function loadNetLoad() {
+    api('/api/net/load').then((j) => {
+      const ld = byId('diagLoad'), sub = byId('diagLoadSub');
+      if (ld) ld.textContent = `${j.activeTransfers || 0} передач`;
+      if (sub) sub.textContent = `Потоки: ${j.threads || 0} · Сессии: ${j.sessions || 0} · ↓${fmtSpeed(j.downBps || 0)} ↑${fmtSpeed(j.upBps || 0)}`;
+    }).catch(() => {});
+  }
+  async function runNetDiagTest() {
+    if (DIAG.running) return;
+    DIAG.running = true;
+    const btn = byId('diagRunBtn'), st = byId('diagStatus');
+    if (btn) btn.disabled = true;
+    try {
+      // 1. 20 sequential pings
+      const rtts = [];
+      for (let i = 0; i < 20; i++) {
+        if (st) st.textContent = `Проверка задержки: пакет ${i + 1} из 20…`;
+        const t0 = performance.now();
+        if (DEMO_MODE) {
+          await new Promise((r) => setTimeout(r, 12 + Math.random() * 14));
+        } else {
+          const r = await fetch(`/api/net/ping?n=${i}&t=${Date.now()}`, { credentials: 'same-origin', cache: 'no-store' });
+          if (r.status === 401) { location.replace('/'); return; }
+          await r.text();
+        }
+        rtts.push(Math.max(0.2, performance.now() - t0));
+      }
+      const minR = Math.min(...rtts), maxR = Math.max(...rtts);
+      const avgR = rtts.reduce((a, b) => a + b, 0) / rtts.length;
+      let jSum = 0;
+      for (let i = 1; i < rtts.length; i++) jSum += Math.abs(rtts[i] - rtts[i - 1]);
+      const jitter = rtts.length > 1 ? jSum / (rtts.length - 1) : 0;
+      if (byId('diagPing')) byId('diagPing').textContent = `${minR.toFixed(1)} / ${avgR.toFixed(1)} / ${maxR.toFixed(1)} мс`;
+      if (byId('diagJitter')) byId('diagJitter').textContent = `Джиттер: ${jitter.toFixed(1)} мс`;
+
+      // 2. Download speed (8 MB)
+      if (st) st.textContent = 'Тест скорости от сервера (8 МБ)…';
+      let downBytes = 8 * 1048576, downMs = 280;
+      if (DEMO_MODE) {
+        const now = Date.now();
+        if (now - DIAG.demoDownAt < 10000) {
+          const e = new Error('rate_limited'); e.code = 'rate_limited'; e.retryAfterSec = Math.ceil((10000 - (now - DIAG.demoDownAt)) / 1000); throw e;
+        }
+        DIAG.demoDownAt = now;
+        await new Promise((r) => setTimeout(r, 320));
+        downMs = 260 + Math.random() * 60;
+      } else {
+        const t0 = performance.now();
+        const r = await fetch(`/api/net/speed/down?size=${downBytes}&t=${Date.now()}`, { credentials: 'same-origin', cache: 'no-store' });
+        if (r.status === 401) { location.replace('/'); return; }
+        if (!r.ok) {
+          let j = null; try { j = await r.json(); } catch (_) {}
+          const e = new Error((j && j.error) || ('HTTP ' + r.status));
+          e.code = j && j.error; e.retryAfterSec = j && j.retryAfterSec;
+          throw e;
+        }
+        const buf = await r.arrayBuffer();
+        downMs = Math.max(1, performance.now() - t0);
+        downBytes = buf.byteLength || downBytes;
+      }
+      const downMBps = downBytes / (downMs / 1000) / 1048576;
+      const downMbps = (downBytes * 8) / (downMs / 1000) / 1000000;
+      DIAG.downMbps = downMbps;
+      if (byId('diagDown')) byId('diagDown').textContent = `${downMbps.toFixed(1)} Мбит/с`;
+      if (byId('diagDownSub')) byId('diagDownSub').textContent = `МБ/с: ${downMBps.toFixed(2)} (${fmtSize(downBytes)})`;
+      updateStreamCalc();
+
+      // 3. Upload speed (4 MB)
+      if (st) st.textContent = 'Тест скорости на сервер (4 МБ)…';
+      let upBytes = 4 * 1048576, upMs = 220;
+      if (DEMO_MODE) {
+        const now = Date.now();
+        if (now - DIAG.demoUpAt < 10000) {
+          const e = new Error('rate_limited'); e.code = 'rate_limited'; e.retryAfterSec = Math.ceil((10000 - (now - DIAG.demoUpAt)) / 1000); throw e;
+        }
+        DIAG.demoUpAt = now;
+        await new Promise((r) => setTimeout(r, 240));
+        upMs = 210 + Math.random() * 50;
+      } else {
+        const payload = new Uint8Array(upBytes);
+        for (let i = 0; i < upBytes; i += 4096) payload[i] = (i * 31) & 0xff;
+        const t0 = performance.now();
+        const r = await fetch('/api/net/speed/up', {
+          method: 'POST',
+          credentials: 'same-origin',
+          cache: 'no-store',
+          headers: { 'Content-Type': 'application/octet-stream', 'X-Nexora': '1' },
+          body: payload,
+        });
+        if (r.status === 401) { location.replace('/'); return; }
+        let j = null; try { j = await r.json(); } catch (_) {}
+        if (!r.ok) {
+          const e = new Error((j && j.error) || ('HTTP ' + r.status));
+          e.code = j && j.error; e.retryAfterSec = j && j.retryAfterSec;
+          throw e;
+        }
+        upMs = Math.max(1, (j && j.ms) ? Number(j.ms) : (performance.now() - t0));
+        upBytes = (j && j.bytes) ? Number(j.bytes) : upBytes;
+      }
+      const upMBps = upBytes / (upMs / 1000) / 1048576;
+      const upMbps = (upBytes * 8) / (upMs / 1000) / 1000000;
+      if (byId('diagUp')) byId('diagUp').textContent = `${upMbps.toFixed(1)} Мбит/с`;
+      if (byId('diagUpSub')) byId('diagUpSub').textContent = `МБ/с: ${upMBps.toFixed(2)} (${fmtSize(upBytes)})`;
+
+      // 4. Load snapshot
+      loadNetLoad();
+      if (st) st.textContent = `Тест завершён в ${new Date().toLocaleTimeString('ru-RU')}`;
+    } catch (e) {
+      const msg = opErr(e);
+      if (st) st.textContent = msg;
+      toast(msg);
+    } finally {
+      DIAG.running = false;
+      if (btn) btn.disabled = false;
+    }
+  }
+  function runHostCheck() {
+    if (!isAdmin) return;
+    const inp = byId('diagHost'), out = byId('diagHostRes'), btn = byId('diagCheckBtn');
+    const host = (inp && inp.value || '').trim();
+    if (!host) { toast('Введите локальный IPv4-адрес'); return; }
+    if (btn) btn.disabled = true;
+    if (out) out.textContent = 'Проверка…';
+    api(`/api/net/check?host=${encodeURIComponent(host)}`).then((j) => {
+      const ports = (j.openPorts && j.openPorts.length) ? ` · открытые порты: ${j.openPorts.join(', ')}` : ' · стандартные порты закрыты';
+      const rtt = j.rttMs != null ? ` (${j.rttMs} мс)` : '';
+      if (out) out.textContent = j.reachable ? `Доступен${rtt}${ports}` : `Не отвечает${ports}`;
+    }).catch((e) => {
+      const msg = opErr(e);
+      if (out) out.textContent = msg;
+      toast(msg);
+    }).finally(() => {
+      if (btn) btn.disabled = false;
+    });
   }
 
   /* ---------- УСТРОЙСТВА И LAN ---------- */
@@ -1055,7 +1533,7 @@
           <div class="dev-meta">
             <b>${esc(a.name)} ${a.role === 'admin' ? '<span class="bdg adm">администратор</span>' : '<span class="bdg usr">пользователь</span>'}${me ? '<span class="bdg me">это вы</span>' : ''}${a.passwordDefault ? '<span class="bdg blk">стандартный пароль</span>' : ''}</b>
             <small>${a.online ? `В сети · сессий: ${a.sessions || 1}` : 'Не в сети'}${a.lastLogin ? ` · последний вход: ${fmtDT(a.lastLogin)}` : ''}</small>
-            ${a.role === 'admin' ? '' : `<small>Сегодня: ${fmtDur(a.usedToday || 0)} · Осталось: ${left} · ${esc(schedText(a.schedule))}</small>`}
+            ${a.role === 'admin' ? '' : `<small>Сегодня: ${fmtDur(a.usedToday || 0)} · Осталось: ${left} · ${esc(schedText(a.schedule))}</small><small>Секретный вопрос: ${a.hasSecretQuestion ? esc(a.secretQuestion || 'задан') : 'не задан (восстановление отключено)'}</small>`}
           </div>
           <div class="dev-act">
             ${canCred ? `<button class="nx-btn" data-accedit="${esc(a.id)}">${ico('edit')}Логин и пароль</button>` : ''}
@@ -1095,45 +1573,107 @@
     p.classList.add('open');
     return p;
   }
+  const SECRET_QS = [
+    'Девичья фамилия матери',
+    'Кличка первого питомца',
+    'Город рождения',
+    'Любимая книга',
+  ];
+  function secretSelectHtml(selId, cusId, curQ) {
+    const isPreset = curQ && SECRET_QS.includes(curQ);
+    const isCustom = curQ && !isPreset;
+    const opts = ['<option value="">Не менять секретный вопрос</option>']
+      .concat(SECRET_QS.map((q) => `<option value="${esc(q)}"${curQ === q ? ' selected' : ''}>${esc(q)}</option>`))
+      .concat([`<option value="__custom"${isCustom ? ' selected' : ''}>Свой вопрос…</option>`])
+      .join('');
+    return `<select class="nx-input" id="${selId}">${opts}</select>
+      <input class="nx-input" id="${cusId}" placeholder="Введите свой секретный вопрос" value="${isCustom ? esc(curQ) : ''}" style="display:${isCustom ? '' : 'none'}" maxlength="120" autocomplete="off">`;
+  }
+  function bindSecretSelect(p, selId, cusId) {
+    const sel = byId(selId), cus = byId(cusId);
+    if (!sel || !cus) return;
+    sel.onchange = () => {
+      cus.style.display = sel.value === '__custom' ? '' : 'none';
+      if (sel.value === '__custom') cus.focus();
+    };
+  }
+  function readSecretPair(selId, cusId, ansId, ans2Id) {
+    const sel = byId(selId), cus = byId(cusId), a1 = byId(ansId), a2 = byId(ans2Id);
+    if (!sel || !a1 || !a2) return { active: false };
+    const q = sel.value === '__custom' ? (cus ? cus.value.trim() : '') : sel.value;
+    const ans = a1.value.trim(), ans2 = a2.value.trim();
+    const anyTyped = !!(sel.value && (sel.value !== (sel.dataset.initial || '') || ans || ans2)) || !!(ans || ans2);
+    if (!anyTyped) return { active: false };
+    if (!q || q.length < 3) return { error: 'Укажите секретный вопрос (от 3 символов)' };
+    if (!ans || ans.replace(/\s+/g, ' ').length < 3) return { error: 'Ответ на секретный вопрос — минимум 3 символа' };
+    if (ans.toLowerCase().replace(/\s+/g, ' ') !== ans2.toLowerCase().replace(/\s+/g, ' ')) return { error: 'Ответы на секретный вопрос не совпадают' };
+    return { active: true, question: q, answer: ans };
+  }
   function accCredPanel(a) {
     const me = a.id === ME.id;
+    const isRegUser = a.role !== 'admin';
     const curPh = me ? 'Текущий пароль' : (isAdmin ? 'Ваш пароль администратора или текущий пароль' : 'Текущий пароль');
-    openAccPanel(
+    const secHtml = isRegUser
+      ? `<label>Восстановление пароля (секретный вопрос)</label>
+         ${secretSelectHtml('fSecSel', 'fSecCustom', a.secretQuestion || '')}
+         <input class="nx-input" id="fSecA" type="password" placeholder="Новый ответ (пусто = не менять, мин. 3 симв.)" autocomplete="off">
+         <input class="nx-input" id="fSecA2" type="password" placeholder="Повторите ответ" autocomplete="off">`
+      : '';
+    const p = openAccPanel(
       a.id, 'cred', `Логин и пароль: ${a.name}`,
       a.passwordDefault ? 'Пароль ещё не менялся: введите стандартный пароль из приложения.' : 'Введите текущий пароль для подтверждения.',
       `<input class="nx-input" id="fCur" type="password" placeholder="${esc(curPh)}" autocomplete="off">
        <input class="nx-input" id="fLogin" placeholder="Новый логин" value="${esc(a.name)}" autocomplete="off" autocapitalize="none" spellcheck="false">
        <input class="nx-input" id="fNew" type="password" placeholder="Новый пароль (пусто = не менять)" autocomplete="new-password">
-       <input class="nx-input" id="fNew2" type="password" placeholder="Повторите новый пароль" autocomplete="new-password">`,
+       <input class="nx-input" id="fNew2" type="password" placeholder="Повторите новый пароль" autocomplete="new-password">
+       ${secHtml}`,
       'Сохранить',
       (done, fail) => {
-        const c = byId('fCur').value, l = byId('fLogin').value.trim(), p = byId('fNew').value, p2 = byId('fNew2').value;
+        const c = byId('fCur').value, l = byId('fLogin').value.trim(), pass = byId('fNew').value, p2 = byId('fNew2').value;
         if (!c) { fail('Введите текущий пароль'); return; }
         if (!/^[A-Za-z0-9._-]{3,32}$/.test(l)) { fail('Логин: 3–32 символа (буквы, цифры, . _ -)'); return; }
-        if (p && p !== p2) { fail('Новые пароли не совпадают'); return; }
-        if (l === a.name && !p) { fail('Ничего не изменено'); return; }
-        post('/api/accounts/update', { id: a.id, currentPassword: c, newLogin: l !== a.name ? l : null, newPassword: p || null })
+        if (pass && pass !== p2) { fail('Новые пароли не совпадают'); return; }
+        const sec = isRegUser ? readSecretPair('fSecSel', 'fSecCustom', 'fSecA', 'fSecA2') : { active: false };
+        if (sec.error) { fail(sec.error); return; }
+        if (l === a.name && !pass && !sec.active) { fail('Ничего не изменено'); return; }
+        const payload = { id: a.id, currentPassword: c, newLogin: l !== a.name ? l : null, newPassword: pass || null };
+        if (sec.active) { payload.secretQuestion = sec.question; payload.secretAnswer = sec.answer; }
+        post('/api/accounts/update', payload)
           .then((r) => { if (me && r && r.name) ME.name = r.name; toast('Данные сохранены'); done(); })
           .catch((e) => fail(opErr(e)));
       }
     );
+    if (p && isRegUser) {
+      const sel = byId('fSecSel');
+      if (sel) sel.dataset.initial = sel.value;
+      bindSecretSelect(p, 'fSecSel', 'fSecCustom');
+    }
   }
   function accCreatePanel() {
-    openAccPanel(
+    const p = openAccPanel(
       'create', 'create', 'Новая учётная запись',
       'Пользователь сразу сможет войти. Права: только просмотр и скачивание.',
       `<input class="nx-input" id="cLogin" placeholder="Логин (3–32 символа)" autocomplete="off" autocapitalize="none" spellcheck="false">
        <input class="nx-input" id="cPass" type="password" placeholder="Пароль (от 4 символов)" autocomplete="new-password">
-       <input class="nx-input" id="cPass2" type="password" placeholder="Повторите пароль" autocomplete="new-password">`,
+       <input class="nx-input" id="cPass2" type="password" placeholder="Повторите пароль" autocomplete="new-password">
+       <label>Секретный вопрос для сброса пароля (необязательно)</label>
+       ${secretSelectHtml('cSecSel', 'cSecCustom', '')}
+       <input class="nx-input" id="cSecA" type="password" placeholder="Ответ на секретный вопрос (от 3 символов)" autocomplete="off">
+       <input class="nx-input" id="cSecA2" type="password" placeholder="Повторите ответ" autocomplete="off">`,
       'Создать',
       (done, fail) => {
-        const l = byId('cLogin').value.trim(), p = byId('cPass').value, p2 = byId('cPass2').value;
+        const l = byId('cLogin').value.trim(), pass = byId('cPass').value, p2 = byId('cPass2').value;
         if (!/^[A-Za-z0-9._-]{3,32}$/.test(l)) { fail('Логин: 3–32 символа (буквы, цифры, . _ -)'); return; }
-        if (p.length < 4) { fail('Пароль слишком короткий'); return; }
-        if (p !== p2) { fail('Пароли не совпадают'); return; }
-        post('/api/accounts/create', { name: l, password: p }).then(() => { toast('Учётная запись создана'); done(); }).catch((e) => fail(opErr(e)));
+        if (pass.length < 4) { fail('Пароль слишком короткий'); return; }
+        if (pass !== p2) { fail('Пароли не совпадают'); return; }
+        const sec = readSecretPair('cSecSel', 'cSecCustom', 'cSecA', 'cSecA2');
+        if (sec.error) { fail(sec.error); return; }
+        const payload = { name: l, password: pass };
+        if (sec.active) { payload.secretQuestion = sec.question; payload.secretAnswer = sec.answer; }
+        post('/api/accounts/create', payload).then(() => { toast('Учётная запись создана'); done(); }).catch((e) => fail(opErr(e)));
       }
     );
+    if (p) bindSecretSelect(p, 'cSecSel', 'cSecCustom');
   }
   function winRowHtml(w) {
     const days = [1, 2, 3, 4, 5, 6, 0].map((d) => {
@@ -1670,8 +2210,13 @@
 
   /* ---------- плеер (видео, аудио, фото + навигация + полный экран) ---------- */
   const dlgPlayer = byId('player'), pBody = byId('pBody');
-  const PVW = { list: null, idx: 0 };
+  const PVW = { list: null, idx: 0, beatTimer: 0 };
+  function stopPlayerBeat() {
+    clearInterval(PVW.beatTimer);
+    PVW.beatTimer = 0;
+  }
   function openMedia(opts) {
+    stopPlayerBeat();
     byId('pTitle').textContent = opts.title || '';
     byId('pMeta').textContent = opts.meta || '';
     const prev = byId('pPrev'), next = byId('pNext'), fs = byId('pFs'), dl = byId('pDl');
@@ -1685,9 +2230,23 @@
     pBody.innerHTML = opts.html;
     if (!dlgPlayer.open) dlgPlayer.showModal();
     const m = $('video,audio', pBody);
-    if (m && state.settings.autoplay) m.play().catch(() => {});
+    if (m) {
+      const sendBeat = () => {
+        if (!dlgPlayer.open || m.paused || m.ended) return;
+        post('/api/monitor/beat', {
+          file: opts.name || opts.title || '',
+          pos: m.currentTime || 0,
+          dur: (isFinite(m.duration) ? m.duration : 0) || 0,
+          kind: opts.kind,
+        }).catch(() => {});
+      };
+      m.addEventListener('play', sendBeat);
+      PVW.beatTimer = setInterval(sendBeat, 5000);
+      if (state.settings.autoplay) m.play().catch(() => {});
+    }
   }
   function closePlayer() {
+    stopPlayerBeat();
     const m = $('video,audio', pBody);
     if (m) m.pause();
     dlgPlayer.classList.remove('full');
@@ -1751,7 +2310,7 @@
   byId('pNext').onclick = () => { if (PVW.list && PVW.list.length) openPhoto((PVW.idx + 1) % PVW.list.length); };
   byId('pFs').onclick = () => dlgPlayer.classList.toggle('full');
   dlgPlayer.addEventListener('click', (e) => { if (e.target === dlgPlayer) closePlayer(); });
-  dlgPlayer.addEventListener('cancel', () => setTimeout(() => { pBody.innerHTML = ''; PVW.list = null; }, 0));
+  dlgPlayer.addEventListener('cancel', () => setTimeout(() => { stopPlayerBeat(); pBody.innerHTML = ''; PVW.list = null; }, 0));
 
   /* ---------- глобальные клики и события ---------- */
   document.addEventListener('click', (e) => {
@@ -1958,7 +2517,8 @@
   };
   const [initV, initSub] = parseHash();
   state.view = ['home', 'video', 'audio', 'photo', 'folders', 'settings'].includes(initV) ? initV : 'home';
-  state.sub = ['general', 'net', 'devices', 'accounts', 'mail', 'tools', 'about'].includes(initSub) ? initSub : 'general';
+  const validSubs = isAdmin ? ['general', 'net', 'devices', 'accounts', 'monitor', 'mail', 'tools', 'about'] : ['general', 'net', 'devices', 'accounts', 'mail', 'tools', 'about'];
+  state.sub = validSubs.includes(initSub) ? initSub : 'general';
   addEventListener('hashchange', () => {
     const [v, s] = parseHash();
     go(v, s);

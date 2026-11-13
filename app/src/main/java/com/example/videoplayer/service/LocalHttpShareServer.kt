@@ -144,13 +144,44 @@ object LocalHttpShareServer {
 
     private var requestedManageStorageOnce = false
 
+    private data class TrackCtx(
+        val key: String,
+        val sessionToken: String?,
+        val deviceId: String,
+        val login: String,
+        val role: String,
+        val device: String,
+        val ip: String
+    )
+
+    private fun makeTrackCtx(reqAuth: RequestAuth, clientDevId: String, clientIp: String, userAgent: String): TrackCtx {
+        val devName = parseBrowserAndOs(userAgent).ifBlank { "Устройство" }
+        val login = reqAuth.username.ifBlank { "гость" }
+        val role = reqAuth.role.ifBlank { "user" }
+        return TrackCtx(
+            key = ActivityTracker.makeKey(reqAuth.sessionToken, reqAuth.id, clientDevId),
+            sessionToken = reqAuth.sessionToken,
+            deviceId = clientDevId,
+            login = login,
+            role = role,
+            device = devName,
+            ip = clientIp
+        )
+    }
+
+    private fun removeSession(token: String) {
+        activeSessions.remove(token)
+        ActivityTracker.removeBySession(token)
+    }
+
     fun clearSessions() {
         activeSessions.clear()
+        ActivityTracker.clearAll()
     }
 
     fun closeAdminSessions() {
         activeSessions.values.filter { it.role == "admin" || it.accountId == "admin" }.forEach {
-            activeSessions.remove(it.token)
+            removeSession(it.token)
         }
     }
 
@@ -161,6 +192,9 @@ object LocalHttpShareServer {
         private set
     var lastErrorMessage: String? = null
         private set
+    @Volatile
+    var serverStartTimeMs: Long = 0L
+        private set
 
     @Volatile
     var currentBoundIp: String? = null
@@ -168,6 +202,7 @@ object LocalHttpShareServer {
 
     val pendingUploads = ConcurrentHashMap<String, FileUploadMeta>()
 
+    private val activeRequestThreads = java.util.concurrent.atomic.AtomicInteger(0)
     private val threadPool = Executors.newCachedThreadPool()
 
     @Synchronized
@@ -272,6 +307,8 @@ object LocalHttpShareServer {
             currentPort = boundPort
             isRunning = true
             lastErrorMessage = null
+            serverStartTimeMs = System.currentTimeMillis()
+            ActivityTracker.resetTotals()
 
             startWifiPoller(context)
             startThumbnailPregeneration(context)
@@ -429,7 +466,12 @@ object LocalHttpShareServer {
             try {
                 val client = socket.accept()
                 threadPool.execute {
-                    handleClient(client, context)
+                    activeRequestThreads.incrementAndGet()
+                    try {
+                        handleClient(client, context)
+                    } finally {
+                        activeRequestThreads.decrementAndGet()
+                    }
                 }
             } catch (_: SocketException) {
                 break
@@ -517,12 +559,12 @@ object LocalHttpShareServer {
             val clientDevId = if (existingDevId.isNullOrBlank()) UUID.randomUUID().toString() else existingDevId
             val needDevCookie = if (existingDevId.isNullOrBlank()) clientDevId else null
 
-            // Public routes: /api/captcha, /api/register, /api/forgot (available without auth, blocked check, or authRequired)
+            // Public routes: /api/captcha, /api/register, /api/forgot/question, /api/forgot (available without auth, blocked check, or authRequired)
             if (decodedPath == "/api/captcha" && (method == "GET" || method == "HEAD")) {
                 handleCaptcha(output, clientIp, method == "HEAD", needDevCookie)
                 return
             }
-            if ((decodedPath == "/api/register" || decodedPath == "/api/forgot") && method == "POST") {
+            if ((decodedPath == "/api/register" || decodedPath == "/api/forgot" || decodedPath == "/api/forgot/question") && method == "POST") {
                 if (xNexoraHeader != "1") {
                     sendResponse(output, 400, "application/json; charset=UTF-8", "{\"error\":\"bad_request\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
                     return
@@ -538,10 +580,10 @@ object LocalHttpShareServer {
                 val bodyString = String(bodyBytes, 0, readTotal, Charsets.UTF_8)
                 val bodyJson = try { JSONObject(bodyString) } catch (_: Exception) { JSONObject() }
 
-                if (decodedPath == "/api/register") {
-                    handleRegister(output, context, bodyJson, clientIp, userAgent, needDevCookie)
-                } else {
-                    handleForgot(output, context, bodyJson, clientIp, needDevCookie)
+                when (decodedPath) {
+                    "/api/register" -> handleRegister(output, context, bodyJson, clientIp, userAgent, needDevCookie)
+                    "/api/forgot/question" -> handleForgotQuestion(output, context, bodyJson, clientIp, needDevCookie)
+                    else -> handleForgot(output, context, bodyJson, clientIp, needDevCookie)
                 }
                 return
             }
@@ -557,10 +599,31 @@ object LocalHttpShareServer {
             val authRequired = HttpServerConfig.isAuthRequired(context)
             val sessionToken = extractCookie(cookieHeader, "nx_session")
             val reqAuth = resolveRequestAuth(sessionToken, authHeader, authRequired, context)
+            val trackCtx = makeTrackCtx(reqAuth, clientDevId, clientIp, userAgent)
 
             // Touch device if authorized
             if (reqAuth.isAuthorized) {
                 touchDevice(context, clientDevId, clientIp, userAgent, reqAuth.username, reqAuth.role, isLogin = false)
+                val skipBrowse = decodedPath == "/api/status" ||
+                    decodedPath == "/api/server/info" ||
+                    decodedPath == "/api/monitor" ||
+                    decodedPath == "/api/monitor/beat" ||
+                    decodedPath == "/api/net/ping" ||
+                    decodedPath == "/api/net/load" ||
+                    decodedPath.startsWith("/api/net/speed/") ||
+                    decodedPath == "/api/net/check" ||
+                    decodedPath == "/logout"
+                if (!skipBrowse && method in listOf("GET", "HEAD", "POST")) {
+                    ActivityTracker.onBrowse(
+                        key = trackCtx.key,
+                        sessionToken = trackCtx.sessionToken,
+                        deviceId = trackCtx.deviceId,
+                        login = trackCtx.login,
+                        role = trackCtx.role,
+                        device = trackCtx.device,
+                        ip = trackCtx.ip
+                    )
+                }
             }
 
             // Restrictions enforcement for user role
@@ -573,7 +636,7 @@ object LocalHttpShareServer {
                     if (dyn != null && dyn.status == "active") {
                         Pair(dyn.schedule, dyn.limitMin)
                     } else {
-                        if (!sessionToken.isNullOrEmpty()) activeSessions.remove(sessionToken)
+                        if (!sessionToken.isNullOrEmpty()) removeSession(sessionToken)
                         send401WithoutAuth(output, needDevCookie)
                         return
                     }
@@ -581,7 +644,7 @@ object LocalHttpShareServer {
 
                 if (!UserLimitsManager.isScheduleAllowed(schedule)) {
                     if (!sessionToken.isNullOrEmpty()) {
-                        activeSessions.remove(sessionToken)
+                        removeSession(sessionToken)
                     }
                     sendResponse(
                         output, 403, "application/json; charset=UTF-8",
@@ -594,7 +657,7 @@ object LocalHttpShareServer {
                 }
                 if (UserLimitsManager.isTimeLimitExceeded(context, accountId, limitMin)) {
                     if (!sessionToken.isNullOrEmpty()) {
-                        activeSessions.remove(sessionToken)
+                        removeSession(sessionToken)
                     }
                     sendResponse(
                         output, 403, "application/json; charset=UTF-8",
@@ -616,7 +679,7 @@ object LocalHttpShareServer {
                         }
                         session.lastActiveTime = now
                         if (UserLimitsManager.isTimeLimitExceeded(context, accountId, limitMin)) {
-                            activeSessions.remove(sessionToken)
+                            removeSession(sessionToken)
                             sendResponse(
                                 output, 403, "application/json; charset=UTF-8",
                                 "{\"error\":\"time_limit\"}".toByteArray(Charsets.UTF_8),
@@ -757,6 +820,15 @@ object LocalHttpShareServer {
                                 lastActiveTime = System.currentTimeMillis()
                             )
                             touchDevice(context, clientDevId, clientIp, userAgent, authResult.username, authResult.role, isLogin = true)
+                            ActivityTracker.onBrowse(
+                                key = ActivityTracker.makeKey(token, authResult.id, clientDevId),
+                                sessionToken = token,
+                                deviceId = clientDevId,
+                                login = authResult.username,
+                                role = authResult.role,
+                                device = parseBrowserAndOs(userAgent).ifBlank { "Устройство" },
+                                ip = clientIp
+                            )
 
                             val json = "{\"ok\":true,\"id\":${jsonEscape(authResult.id)},\"role\":${jsonEscape(authResult.role)},\"name\":${jsonEscape(authResult.username)}}".toByteArray(Charsets.UTF_8)
                             val headers = mutableListOf(
@@ -772,7 +844,7 @@ object LocalHttpShareServer {
                     }
                     decodedPath == "/logout" -> {
                         if (!sessionToken.isNullOrEmpty()) {
-                            activeSessions.remove(sessionToken)
+                            removeSession(sessionToken)
                         }
                         sendRedirect(output, "/", needDevCookie = needDevCookie, extraHeaders = listOf("Set-Cookie: nx_session=; Path=/; Max-Age=0"))
                     }
@@ -797,7 +869,7 @@ object LocalHttpShareServer {
                         } else {
                             val idParam = extractQueryParam(queryString, "id")
                                 ?: decodedPath.removePrefix("/stream/").removePrefix("/")
-                            serveMediaContent(output, idParam, rangeHeader, context, asDownload = false, isHead = isHead, needDevCookie = needDevCookie)
+                            serveMediaContent(output, idParam, rangeHeader, context, asDownload = false, isHead = isHead, needDevCookie = needDevCookie, trackCtx = trackCtx)
                         }
                     }
                     decodedPath == "/download" || decodedPath.startsWith("/download/") -> {
@@ -806,7 +878,7 @@ object LocalHttpShareServer {
                         } else {
                             val idParam = extractQueryParam(queryString, "id")
                                 ?: decodedPath.removePrefix("/download/").removePrefix("/")
-                            serveMediaContent(output, idParam, rangeHeader, context, asDownload = true, isHead = isHead, needDevCookie = needDevCookie)
+                            serveMediaContent(output, idParam, rangeHeader, context, asDownload = true, isHead = isHead, needDevCookie = needDevCookie, trackCtx = trackCtx)
                         }
                     }
                     decodedPath == "/thumb" || decodedPath.startsWith("/thumb/") -> {
@@ -815,7 +887,7 @@ object LocalHttpShareServer {
                         } else {
                             val idParam = extractQueryParam(queryString, "id")
                                 ?: decodedPath.removePrefix("/thumb/").removePrefix("/")
-                            serveThumbnail(output, idParam, context, isHead, ifNoneMatchHeader, needDevCookie)
+                            serveThumbnail(output, idParam, context, isHead, ifNoneMatchHeader, needDevCookie, trackCtx = trackCtx)
                         }
                     }
                     decodedPath == "/api/registrations" -> {
@@ -843,13 +915,13 @@ object LocalHttpShareServer {
                             if (authRequired && !reqAuth.isAuthorized) {
                                 send401WithoutAuth(output, needDevCookie)
                             } else {
-                                servePhotoThumbnail(output, idParam, context, isHead, needDevCookie)
+                                servePhotoThumbnail(output, idParam, context, isHead, needDevCookie, trackCtx = trackCtx)
                             }
                         } else {
                             if (authRequired && !reqAuth.isAuthorized) {
                                 send401WithAuth(output, needDevCookie)
                             } else {
-                                servePhotoOriginal(output, idParam, isDl, context, isHead, needDevCookie)
+                                servePhotoOriginal(output, idParam, isDl, context, isHead, needDevCookie, trackCtx = trackCtx)
                             }
                         }
                     }
@@ -871,7 +943,7 @@ object LocalHttpShareServer {
                         } else {
                             val pathParam = extractQueryParam(queryString, "path")
                             val isDl = extractQueryParam(queryString, "dl") == "1"
-                            serveFsFile(output, pathParam, rangeHeader, isDl, context, isHead, needDevCookie)
+                            serveFsFile(output, pathParam, rangeHeader, isDl, context, isHead, needDevCookie, trackCtx = trackCtx)
                         }
                     }
                     decodedPath == "/api/status" -> {
@@ -879,6 +951,48 @@ object LocalHttpShareServer {
                             send401WithoutAuth(output, needDevCookie)
                         } else {
                             serveApiStatus(output, context, reqAuth, isHead, needDevCookie)
+                        }
+                    }
+                    decodedPath == "/api/server/info" -> {
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
+                        } else if (reqAuth.role != "admin") {
+                            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"admin_required\"}".toByteArray(Charsets.UTF_8), isHead = isHead, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        } else {
+                            loadDevicesIfNeeded(context)
+                            val now = System.currentTimeMillis()
+                            val onlineDevs = devices.values.count { (now - it.lastSeen) <= 15000L }
+                            val infoJson = ServerInfoHelper.getAdminServerInfoJson(
+                                context = context,
+                                protocol = HttpServerConfig.getProtocol(context),
+                                port = currentPort,
+                                address = getServerUrl(context),
+                                startedAtMs = serverStartTimeMs,
+                                activeThreads = activeRequestThreads.get(),
+                                activeSessions = activeSessions.size,
+                                devicesCount = devices.size,
+                                onlineDevicesCount = onlineDevs,
+                                polledSignal = getWifiSignal()
+                            )
+                            sendResponse(
+                                output,
+                                200,
+                                "application/json; charset=UTF-8",
+                                infoJson.toString().toByteArray(Charsets.UTF_8),
+                                isHead = isHead,
+                                extraHeaders = listOf("Cache-Control: no-store"),
+                                needDevCookie = needDevCookie
+                            )
+                        }
+                    }
+                    decodedPath == "/api/monitor" -> {
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
+                        } else if (reqAuth.role != "admin") {
+                            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"admin_required\"}".toByteArray(Charsets.UTF_8), isHead = isHead, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        } else {
+                            val snap = ActivityTracker.getSnapshotJson().toString().toByteArray(Charsets.UTF_8)
+                            sendResponse(output, 200, "application/json; charset=UTF-8", snap, isHead = isHead, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
                         }
                     }
                     decodedPath == "/api/devices" -> {
@@ -912,6 +1026,60 @@ object LocalHttpShareServer {
                             send401WithoutAuth(output, needDevCookie)
                         } else {
                             serveApiNet(output, context, isHead, needDevCookie)
+                        }
+                    }
+                    decodedPath == "/api/net/ping" -> {
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
+                        } else {
+                            sendResponse(output, 200, "text/plain; charset=UTF-8", byteArrayOf('1'.code.toByte()), isHead = isHead, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        }
+                    }
+                    decodedPath == "/api/net/speed/down" -> {
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
+                        } else {
+                            val retryAfter = NetworkDiagnosticsHelper.checkAndConsumeSpeedLimit("${reqAuth.id}:$clientIp", "down")
+                            if (retryAfter > 0) {
+                                val err = "{\"error\":\"rate_limited\",\"retryAfterSec\":$retryAfter}"
+                                sendResponse(output, 429, "application/json; charset=UTF-8", err.toByteArray(Charsets.UTF_8), isHead = isHead, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                            } else {
+                                val reqSize = extractQueryParam(queryString, "size")?.toLongOrNull()
+                                    ?: NetworkDiagnosticsHelper.DEFAULT_DOWN_BYTES
+                                NetworkDiagnosticsHelper.streamDownloadSpeed(
+                                    output = output,
+                                    requestedSize = reqSize,
+                                    isHead = isHead,
+                                    isHttps = (serverSocket is SSLServerSocket),
+                                    needDevCookie = needDevCookie
+                                )
+                            }
+                        }
+                    }
+                    decodedPath == "/api/net/load" -> {
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
+                        } else {
+                            val data = NetworkDiagnosticsHelper.getLoadJson(
+                                activeThreads = activeRequestThreads.get(),
+                                activeSessions = activeSessions.size
+                            ).toString().toByteArray(Charsets.UTF_8)
+                            sendResponse(output, 200, "application/json; charset=UTF-8", data, isHead = isHead, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        }
+                    }
+                    decodedPath == "/api/net/check" -> {
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
+                        } else if (reqAuth.role != "admin") {
+                            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"admin_required\"}".toByteArray(Charsets.UTF_8), isHead = isHead, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        } else {
+                            val host = extractQueryParam(queryString, "host") ?: ""
+                            val res = NetworkDiagnosticsHelper.checkPrivateHost(host)
+                            if (res == null) {
+                                sendResponse(output, 400, "application/json; charset=UTF-8", "{\"error\":\"bad_host\"}".toByteArray(Charsets.UTF_8), isHead = isHead, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                            } else {
+                                sendResponse(output, 200, "application/json; charset=UTF-8", res.toString().toByteArray(Charsets.UTF_8), isHead = isHead, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                            }
                         }
                     }
                     decodedPath == "/api/lan/devices" -> {
@@ -962,7 +1130,7 @@ object LocalHttpShareServer {
                                 val fileName = meta?.first ?: "file"
                                 val fileSize = meta?.second ?: encFile.length()
                                 val mimeType = meta?.third ?: "application/octet-stream"
-                                serveMailFile(output, idParam, fileName, fileSize, mimeType, rangeHeader, isDl, context, isHead, needDevCookie)
+                                serveMailFile(output, idParam, fileName, fileSize, mimeType, rangeHeader, isDl, context, isHead, needDevCookie, trackCtx = trackCtx)
                             }
                         }
                     }
@@ -1034,14 +1202,28 @@ object LocalHttpShareServer {
                         override fun read(): Int {
                             if (remaining <= 0) return -1
                             val b = rawInput.read()
-                            if (b != -1) remaining--
+                            if (b != -1) {
+                                remaining--
+                                ActivityTracker.recordUploadBytes(
+                                    trackCtx.key, trackCtx.sessionToken, trackCtx.deviceId,
+                                    trackCtx.login, trackCtx.role, trackCtx.device, trackCtx.ip,
+                                    fileName = name, bytesRead = 1L
+                                )
+                            }
                             return b
                         }
                         override fun read(b: ByteArray, off: Int, len: Int): Int {
                             if (remaining <= 0) return -1
                             val toRead = minOf(len.toLong(), remaining).toInt()
                             val r = rawInput.read(b, off, toRead)
-                            if (r != -1) remaining -= r
+                            if (r > 0) {
+                                remaining -= r
+                                ActivityTracker.recordUploadBytes(
+                                    trackCtx.key, trackCtx.sessionToken, trackCtx.deviceId,
+                                    trackCtx.login, trackCtx.role, trackCtx.device, trackCtx.ip,
+                                    fileName = name, bytesRead = r.toLong()
+                                )
+                            }
                             return r
                         }
                     }
@@ -1057,6 +1239,27 @@ object LocalHttpShareServer {
                         val err = if (e.message == "too_large") "too_large" else "upload_failed"
                         sendResponse(output, 400, "application/json; charset=UTF-8", "{\"error\":\"$err\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
                     }
+                    return
+                }
+
+                if (decodedPath == "/api/net/speed/up") {
+                    if (authRequired && !reqAuth.isAuthorized) {
+                        send401WithoutAuth(output, needDevCookie)
+                        return
+                    }
+                    val contentLen = contentLengthHeader ?: 0L
+                    if (contentLen > NetworkDiagnosticsHelper.MAX_SPEED_TEST_BYTES) {
+                        sendResponse(output, 413, "application/json; charset=UTF-8", "{\"error\":\"too_large\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        return
+                    }
+                    val retryAfter = NetworkDiagnosticsHelper.checkAndConsumeSpeedLimit("${reqAuth.id}:$clientIp", "up")
+                    if (retryAfter > 0) {
+                        val err = "{\"error\":\"rate_limited\",\"retryAfterSec\":$retryAfter}"
+                        sendResponse(output, 429, "application/json; charset=UTF-8", err.toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        return
+                    }
+                    val res = NetworkDiagnosticsHelper.handleUploadSpeed(rawInput, contentLen)
+                    sendResponse(output, 200, "application/json; charset=UTF-8", res.toString().toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
                     return
                 }
 
@@ -1081,6 +1284,31 @@ object LocalHttpShareServer {
                 }
 
                 when (decodedPath) {
+                    "/api/monitor/beat" -> {
+                        if (authRequired && !reqAuth.isAuthorized) {
+                            send401WithoutAuth(output, needDevCookie)
+                        } else {
+                            val file = bodyJson.optString("file", "").trim().take(240)
+                            val pos = bodyJson.optDouble("pos", 0.0).let { if (it.isNaN() || it.isInfinite()) 0.0 else it }
+                            val dur = bodyJson.optDouble("dur", 0.0).let { if (it.isNaN() || it.isInfinite()) 0.0 else it }
+                            val kind = bodyJson.optString("kind", "").lowercase()
+                            val isAudio = kind == "audio" || (kind != "video" && getFileKind(file.substringAfterLast('.', "")) == "audio")
+                            ActivityTracker.onHeartbeat(
+                                key = trackCtx.key,
+                                sessionToken = trackCtx.sessionToken,
+                                deviceId = trackCtx.deviceId,
+                                login = trackCtx.login,
+                                role = trackCtx.role,
+                                device = trackCtx.device,
+                                ip = trackCtx.ip,
+                                file = file,
+                                posSec = pos,
+                                durSec = dur,
+                                isAudio = isAudio
+                            )
+                            sendResponse(output, 200, "application/json; charset=UTF-8", "{\"ok\":true}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                        }
+                    }
                     "/api/net" -> {
                         if (authRequired && !reqAuth.isAuthorized) {
                             send401WithoutAuth(output, needDevCookie)
@@ -1433,9 +1661,21 @@ object LocalHttpShareServer {
             null
         }
 
+        val hasSecretQ = body.has("secretQuestion") && !body.isNull("secretQuestion")
+        val hasSecretA = body.has("secretAnswer") && !body.isNull("secretAnswer")
+        val rawSecretQ = if (hasSecretQ) body.optString("secretQuestion", "").trim() else ""
+        val rawSecretA = if (hasSecretA) body.optString("secretAnswer", "") else ""
+        val secretProvided = !isTargetAdmin && (rawSecretQ.isNotEmpty() || rawSecretA.isNotEmpty())
+        if (secretProvided) {
+            if (rawSecretQ.length !in 3..200 || DynamicUserManager.normalizeSecretAnswer(rawSecretA).length < 3) {
+                sendResponse(output, 400, "application/json; charset=UTF-8", "{\"error\":\"bad_secret\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                return
+            }
+        }
+
         val loginChanged = (finalLogin != currentTargetLogin)
         val passwordChanged = (finalPassword != null)
-        if (!loginChanged && !passwordChanged) {
+        if (!loginChanged && !passwordChanged && !secretProvided) {
             sendResponse(output, 400, "application/json; charset=UTF-8", "{\"error\":\"nothing_to_change\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
             return
         }
@@ -1453,13 +1693,21 @@ object LocalHttpShareServer {
             }
             val pwdToSave = finalPassword ?: HttpServerConfig.getPassword(context)
             HttpServerConfig.setUserCredentials(context, finalLogin, pwdToSave)
+            if (secretProvided) {
+                DynamicUserManager.setFixedUserSecret(context, rawSecretQ, rawSecretA)
+            }
         } else {
-            DynamicUserManager.updateCredentials(context, targetId, finalLogin, finalPassword)
+            if (loginChanged || passwordChanged) {
+                DynamicUserManager.updateCredentials(context, targetId, finalLogin, finalPassword)
+            }
+            if (secretProvided) {
+                DynamicUserManager.updateSecretQuestion(context, targetId, rawSecretQ, rawSecretA)
+            }
         }
 
         // Close ALL other sessions of this account
         activeSessions.values.filter { it.accountId == targetId && it.token != reqAuth.sessionToken }.forEach {
-            activeSessions.remove(it.token)
+            removeSession(it.token)
         }
         if (!reqAuth.sessionToken.isNullOrEmpty() && reqAuth.id == targetId) {
             val currentSess = activeSessions[reqAuth.sessionToken]
@@ -1498,14 +1746,14 @@ object LocalHttpShareServer {
             UserLimitsManager.setLimits(context, limitMin, parsedSchedule)
             if (!UserLimitsManager.isScheduleAllowed(parsedSchedule) || UserLimitsManager.isTimeLimitExceeded(context, "user", limitMin)) {
                 activeSessions.values.filter { it.accountId == "user" }.forEach {
-                    activeSessions.remove(it.token)
+                    removeSession(it.token)
                 }
             }
         } else {
             DynamicUserManager.setLimits(context, targetId, limitMin, parsedSchedule)
             if (!UserLimitsManager.isScheduleAllowed(parsedSchedule) || UserLimitsManager.isTimeLimitExceeded(context, targetId, limitMin)) {
                 activeSessions.values.filter { it.accountId == targetId }.forEach {
-                    activeSessions.remove(it.token)
+                    removeSession(it.token)
                 }
             }
         }
@@ -1534,7 +1782,21 @@ object LocalHttpShareServer {
             sendResponse(output, 409, "application/json; charset=UTF-8", "{\"error\":\"login_taken\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
             return
         }
-        val newUser = DynamicUserManager.createUser(context, name, password)
+        val secQ = body.optString("secretQuestion", "").trim()
+        val secA = body.optString("secretAnswer", "")
+        if (secQ.isNotEmpty() || secA.isNotEmpty()) {
+            if (secQ.length !in 3..200 || DynamicUserManager.normalizeSecretAnswer(secA).length < 3) {
+                sendResponse(output, 400, "application/json; charset=UTF-8", "{\"error\":\"bad_secret\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                return
+            }
+        }
+        val newUser = DynamicUserManager.createUser(
+            context = context,
+            name = name,
+            password = password,
+            secretQuestion = secQ.ifEmpty { null },
+            secretAnswer = secA.ifEmpty { null }
+        )
         sendResponse(output, 200, "application/json; charset=UTF-8", "{\"ok\":true,\"id\":${jsonEscape(newUser.id)}}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
     }
 
@@ -1555,7 +1817,7 @@ object LocalHttpShareServer {
             return
         }
         activeSessions.values.filter { it.accountId == id }.forEach {
-            activeSessions.remove(it.token)
+            removeSession(it.token)
         }
         DynamicUserManager.deleteUser(context, id)
         sendResponse(output, 200, "application/json; charset=UTF-8", "{\"ok\":true}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
@@ -1674,11 +1936,79 @@ object LocalHttpShareServer {
             return
         }
 
+        val secretQuestion = body.optString("secretQuestion", "").trim()
+        val secretAnswer = body.optString("secretAnswer", "")
+        if (secretQuestion.length !in 3..200 || DynamicUserManager.normalizeSecretAnswer(secretAnswer).length < 3) {
+            sendResponse(output, 400, "application/json; charset=UTF-8", "{\"error\":\"bad_secret\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+
         DynamicUserManager.recordRegistrationAttempt(clientIp)
         val devName = parseBrowserAndOs(userAgent).ifEmpty { "Браузер" }
-        DynamicUserManager.registerPendingUser(context, login, password, clientIp, devName)
+        DynamicUserManager.registerPendingUser(context, login, password, clientIp, devName, secretQuestion, secretAnswer)
 
         sendResponse(output, 200, "application/json; charset=UTF-8", "{\"ok\":true,\"status\":\"pending\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+    }
+
+    private fun handleForgotQuestion(
+        output: OutputStream,
+        context: Context,
+        body: JSONObject,
+        clientIp: String,
+        needDevCookie: String?
+    ) {
+        val captchaId = body.optString("captchaId", "").trim()
+        val captcha = body.optString("captcha", "").trim()
+        if (!DynamicUserManager.verifyCaptcha(captchaId, captcha)) {
+            sendResponse(output, 400, "application/json; charset=UTF-8", "{\"error\":\"bad_captcha\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+
+        val login = body.optString("login", "").trim()
+        if (login.isEmpty()) {
+            sendResponse(output, 400, "application/json; charset=UTF-8", "{\"error\":\"bad_login\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+
+        if (DynamicUserManager.isForgotLocked(clientIp, login)) {
+            sendResponse(output, 429, "application/json; charset=UTF-8", "{\"error\":\"locked\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+
+        val adminLogin = HttpServerConfig.getAdminUsername(context)
+        if (login.equals("admin", ignoreCase = true) || login.equals(adminLogin, ignoreCase = true)) {
+            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"not_allowed\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            return
+        }
+
+        val userLogin = HttpServerConfig.getUsername(context)
+        val isFixedUser = login.equals("user", ignoreCase = true) || login.equals(userLogin, ignoreCase = true)
+
+        val question: String = if (isFixedUser) {
+            val q = DynamicUserManager.getFixedUserSecretQuestion(context)
+            val s = DynamicUserManager.getFixedUserSecretSalt(context)
+            val h = DynamicUserManager.getFixedUserSecretHash(context)
+            if (q.isNullOrBlank() || s.isNullOrBlank() || h.isNullOrBlank()) {
+                sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"not_allowed\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                return
+            }
+            q
+        } else {
+            val dyn = DynamicUserManager.findByName(context, login)
+            if (dyn != null) {
+                if (dyn.status != "active" || dyn.secretQuestion.isNullOrBlank() || dyn.secretAnswerSalt.isNullOrBlank() || dyn.secretAnswerHash.isNullOrBlank()) {
+                    sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"not_allowed\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                    return
+                }
+                dyn.secretQuestion!!
+            } else {
+                // Return a plausible deterministic dummy question to avoid login enumeration
+                DynamicUserManager.dummyQuestionForLogin(login)
+            }
+        }
+
+        val json = "{\"ok\":true,\"question\":${jsonEscape(question)}}".toByteArray(Charsets.UTF_8)
+        sendResponse(output, 200, "application/json; charset=UTF-8", json, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
     }
 
     private fun handleForgot(
@@ -1707,33 +2037,46 @@ object LocalHttpShareServer {
             return
         }
 
-        val oldPassword = body.optString("oldPassword", "")
+        val answer = body.optString("answer", "")
         val userLogin = HttpServerConfig.getUsername(context)
         val isFixedUser = login.equals("user", ignoreCase = true) || login.equals(userLogin, ignoreCase = true)
+        val dynTarget = if (!isFixedUser) DynamicUserManager.findByName(context, login) else null
 
-        val validOld = if (isFixedUser) {
-            val prevSalt = DynamicUserManager.getFixedUserPrevSalt(context)
-            val prevHash = DynamicUserManager.getFixedUserPrevHash(context)
-            if (prevSalt.isNullOrEmpty() || prevHash.isNullOrEmpty() || oldPassword == "1234") {
-                false
-            } else {
-                DynamicUserManager.verifyPasswordWithSaltHash(oldPassword, prevSalt, prevHash)
+        if (isFixedUser) {
+            val q = DynamicUserManager.getFixedUserSecretQuestion(context)
+            val s = DynamicUserManager.getFixedUserSecretSalt(context)
+            val h = DynamicUserManager.getFixedUserSecretHash(context)
+            if (q.isNullOrBlank() || s.isNullOrBlank() || h.isNullOrBlank()) {
+                sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"not_allowed\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                return
             }
-        } else {
-            val dyn = DynamicUserManager.findByName(context, login)
-            if (dyn == null || dyn.prevSalt.isNullOrEmpty() || dyn.prevHash.isNullOrEmpty() || oldPassword == "1234") {
-                false
-            } else {
-                DynamicUserManager.verifyPasswordWithSaltHash(oldPassword, dyn.prevSalt, dyn.prevHash)
+        } else if (dynTarget != null) {
+            if (dynTarget.status != "active" || dynTarget.secretQuestion.isNullOrBlank() || dynTarget.secretAnswerSalt.isNullOrBlank() || dynTarget.secretAnswerHash.isNullOrBlank()) {
+                sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"not_allowed\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+                return
             }
         }
 
-        if (!validOld) {
+        val validAnswer = when {
+            isFixedUser -> DynamicUserManager.verifySecretAnswer(
+                answer,
+                DynamicUserManager.getFixedUserSecretSalt(context),
+                DynamicUserManager.getFixedUserSecretHash(context)
+            )
+            dynTarget != null -> DynamicUserManager.verifySecretAnswer(
+                answer,
+                dynTarget.secretAnswerSalt,
+                dynTarget.secretAnswerHash
+            )
+            else -> false
+        }
+
+        if (!validAnswer) {
             DynamicUserManager.recordForgotFailure(clientIp, login)
             try {
                 Thread.sleep(300L + SecureRandom().nextInt(300))
             } catch (_: Exception) {}
-            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"bad_old\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
+            sendResponse(output, 403, "application/json; charset=UTF-8", "{\"error\":\"bad_answer\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
             return
         }
 
@@ -1745,14 +2088,14 @@ object LocalHttpShareServer {
                 sendResponse(output, 400, "application/json; charset=UTF-8", "{\"error\":\"bad_login\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
                 return
             }
-            val targetId = if (isFixedUser) "user" else DynamicUserManager.findByName(context, login)?.id
+            val targetId = if (isFixedUser) "user" else dynTarget!!.id
             if (DynamicUserManager.isLoginTaken(context, newLogin, targetId)) {
                 sendResponse(output, 409, "application/json; charset=UTF-8", "{\"error\":\"login_taken\"}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
                 return
             }
             newLogin
         } else {
-            if (isFixedUser) userLogin else DynamicUserManager.findByName(context, login)?.name ?: login
+            if (isFixedUser) userLogin else dynTarget!!.name
         }
 
         val newPassword = body.optString("newPassword", "")
@@ -1767,11 +2110,11 @@ object LocalHttpShareServer {
             val hashBytes = HttpServerConfig.hashPassword(curPass.toCharArray(), saltBytes)
             DynamicUserManager.setFixedUserPrevPassword(context, HttpServerConfig.bytesToHex(saltBytes), HttpServerConfig.bytesToHex(hashBytes))
             HttpServerConfig.setUserCredentials(context, finalLogin, newPassword)
-            activeSessions.values.filter { it.accountId == "user" }.forEach { activeSessions.remove(it.token) }
+            activeSessions.values.filter { it.accountId == "user" }.forEach { removeSession(it.token) }
         } else {
-            val dyn = DynamicUserManager.findByName(context, login)!!
+            val dyn = dynTarget!!
             DynamicUserManager.updateCredentials(context, dyn.id, finalLogin, newPassword)
-            activeSessions.values.filter { it.accountId == dyn.id }.forEach { activeSessions.remove(it.token) }
+            activeSessions.values.filter { it.accountId == dyn.id }.forEach { removeSession(it.token) }
         }
 
         sendResponse(output, 200, "application/json; charset=UTF-8", "{\"ok\":true}".toByteArray(Charsets.UTF_8), extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
@@ -1799,8 +2142,9 @@ object LocalHttpShareServer {
             saveDevicesToDisk(context, force = true)
             if (targetBlocked) {
                 activeSessions.values.filter { it.deviceId == targetId }.forEach {
-                    activeSessions.remove(it.token)
+                    removeSession(it.token)
                 }
+                ActivityTracker.removeByDevice(targetId)
             }
         }
 
@@ -2374,7 +2718,8 @@ object LocalHttpShareServer {
         context: Context,
         asDownload: Boolean,
         isHead: Boolean,
-        needDevCookie: String? = null
+        needDevCookie: String? = null,
+        trackCtx: TrackCtx? = null
     ) {
         val mediaList = loadMediaList(context)
         val item = mediaList.find { it.id == mediaId || it.fileName == mediaId }
@@ -2466,6 +2811,21 @@ object LocalHttpShareServer {
                 val read = inputStream.read(buffer, 0, toRead)
                 if (read == -1) break
                 output.write(buffer, 0, read)
+                if (trackCtx != null && read > 0) {
+                    if (asDownload) {
+                        ActivityTracker.recordDownloadBytes(
+                            trackCtx.key, trackCtx.sessionToken, trackCtx.deviceId,
+                            trackCtx.login, trackCtx.role, trackCtx.device, trackCtx.ip,
+                            fileName = item.fileName, isExplicitDownload = true, bytesSent = read.toLong()
+                        )
+                    } else {
+                        ActivityTracker.recordStreamBytes(
+                            trackCtx.key, trackCtx.sessionToken, trackCtx.deviceId,
+                            trackCtx.login, trackCtx.role, trackCtx.device, trackCtx.ip,
+                            fileName = item.fileName, isVideo = item.isVideo, bytesSent = read.toLong()
+                        )
+                    }
+                }
                 bytesToRead -= read
             }
             output.flush()
@@ -2574,7 +2934,8 @@ object LocalHttpShareServer {
         context: Context,
         isHead: Boolean,
         ifNoneMatchHeader: String? = null,
-        needDevCookie: String? = null
+        needDevCookie: String? = null,
+        trackCtx: TrackCtx? = null
     ) {
         val safeFileName = mediaId.replace(Regex("[^a-zA-Z0-9._-]"), "_") + ".jpg"
         val thumbsDir = File(context.cacheDir, "http_thumbs")
@@ -2618,7 +2979,16 @@ object LocalHttpShareServer {
                 }
                 header.append("Connection: close\r\n\r\n")
                 output.write(header.toString().toByteArray(Charsets.UTF_8))
-                if (!isHead) output.write(bytes)
+                if (!isHead) {
+                    output.write(bytes)
+                    if (trackCtx != null && bytes.isNotEmpty()) {
+                        ActivityTracker.recordDownloadBytes(
+                            trackCtx.key, trackCtx.sessionToken, trackCtx.deviceId,
+                            trackCtx.login, trackCtx.role, trackCtx.device, trackCtx.ip,
+                            fileName = "", isExplicitDownload = false, bytesSent = bytes.size.toLong()
+                        )
+                    }
+                }
                 output.flush()
                 return
             } catch (e: Exception) {
@@ -2670,7 +3040,16 @@ object LocalHttpShareServer {
         }
         header.append("Connection: close\r\n\r\n")
         output.write(header.toString().toByteArray(Charsets.UTF_8))
-        if (!isHead) output.write(bytes)
+        if (!isHead) {
+            output.write(bytes)
+            if (trackCtx != null && bytes.isNotEmpty()) {
+                ActivityTracker.recordDownloadBytes(
+                    trackCtx.key, trackCtx.sessionToken, trackCtx.deviceId,
+                    trackCtx.login, trackCtx.role, trackCtx.device, trackCtx.ip,
+                    fileName = "", isExplicitDownload = false, bytesSent = bytes.size.toLong()
+                )
+            }
+        }
         output.flush()
     }
 
@@ -2810,7 +3189,8 @@ object LocalHttpShareServer {
         isDl: Boolean,
         context: Context,
         isHead: Boolean,
-        needDevCookie: String? = null
+        needDevCookie: String? = null,
+        trackCtx: TrackCtx? = null
     ) {
         val id = idParam?.toLongOrNull()
         if (id == null) {
@@ -2881,6 +3261,13 @@ object LocalHttpShareServer {
                 var n: Int
                 while (input.read(buf).also { n = it } != -1) {
                     output.write(buf, 0, n)
+                    if (trackCtx != null && n > 0) {
+                        ActivityTracker.recordDownloadBytes(
+                            trackCtx.key, trackCtx.sessionToken, trackCtx.deviceId,
+                            trackCtx.login, trackCtx.role, trackCtx.device, trackCtx.ip,
+                            fileName = fileName, isExplicitDownload = isDl, bytesSent = n.toLong()
+                        )
+                    }
                 }
                 output.flush()
             }
@@ -2892,7 +3279,8 @@ object LocalHttpShareServer {
         idParam: String?,
         context: Context,
         isHead: Boolean,
-        needDevCookie: String? = null
+        needDevCookie: String? = null,
+        trackCtx: TrackCtx? = null
     ) {
         val id = idParam?.toLongOrNull()
         if (id == null) {
@@ -2916,7 +3304,16 @@ object LocalHttpShareServer {
                 }
                 header.append("Connection: close\r\n\r\n")
                 output.write(header.toString().toByteArray(Charsets.UTF_8))
-                if (!isHead) output.write(bytes)
+                if (!isHead) {
+                    output.write(bytes)
+                    if (trackCtx != null && bytes.isNotEmpty()) {
+                        ActivityTracker.recordDownloadBytes(
+                            trackCtx.key, trackCtx.sessionToken, trackCtx.deviceId,
+                            trackCtx.login, trackCtx.role, trackCtx.device, trackCtx.ip,
+                            fileName = "", isExplicitDownload = false, bytesSent = bytes.size.toLong()
+                        )
+                    }
+                }
                 output.flush()
                 return
             } catch (_: Exception) {}
@@ -2990,7 +3387,16 @@ object LocalHttpShareServer {
         }
         header.append("Connection: close\r\n\r\n")
         output.write(header.toString().toByteArray(Charsets.UTF_8))
-        if (!isHead) output.write(bytes)
+        if (!isHead) {
+            output.write(bytes)
+            if (trackCtx != null && bytes.isNotEmpty()) {
+                ActivityTracker.recordDownloadBytes(
+                    trackCtx.key, trackCtx.sessionToken, trackCtx.deviceId,
+                    trackCtx.login, trackCtx.role, trackCtx.device, trackCtx.ip,
+                    fileName = "", isExplicitDownload = false, bytesSent = bytes.size.toLong()
+                )
+            }
+        }
         output.flush()
     }
 
@@ -3093,7 +3499,8 @@ object LocalHttpShareServer {
         isDl: Boolean,
         context: Context,
         isHead: Boolean,
-        needDevCookie: String? = null
+        needDevCookie: String? = null,
+        trackCtx: TrackCtx? = null
     ) {
         if (pathParam.isNullOrBlank()) {
             sendResponse(output, 404, "text/plain; charset=UTF-8", "Path missing".toByteArray(Charsets.UTF_8), needDevCookie = needDevCookie)
@@ -3180,6 +3587,7 @@ object LocalHttpShareServer {
 
         if (isHead) return
 
+        val isMediaStream = !isDl && (mime.startsWith("video/") || mime.startsWith("audio/"))
         var inputStream: InputStream? = null
         try {
             inputStream = FileInputStream(targetFile)
@@ -3198,6 +3606,21 @@ object LocalHttpShareServer {
                 val read = inputStream.read(buffer, 0, toRead)
                 if (read == -1) break
                 output.write(buffer, 0, read)
+                if (trackCtx != null && read > 0) {
+                    if (isMediaStream) {
+                        ActivityTracker.recordStreamBytes(
+                            trackCtx.key, trackCtx.sessionToken, trackCtx.deviceId,
+                            trackCtx.login, trackCtx.role, trackCtx.device, trackCtx.ip,
+                            fileName = targetFile.name, isVideo = mime.startsWith("video/"), bytesSent = read.toLong()
+                        )
+                    } else {
+                        ActivityTracker.recordDownloadBytes(
+                            trackCtx.key, trackCtx.sessionToken, trackCtx.deviceId,
+                            trackCtx.login, trackCtx.role, trackCtx.device, trackCtx.ip,
+                            fileName = targetFile.name, isExplicitDownload = isDl, bytesSent = read.toLong()
+                        )
+                    }
+                }
                 bytesToRead -= read
             }
             output.flush()
@@ -3231,7 +3654,12 @@ object LocalHttpShareServer {
         }
         val pendingRegs = if (reqAuth.role == "admin") DynamicUserManager.getPendingCount(context) else 0
         val diskJson = "{\"total\":${stat.first},\"free\":${stat.second}}"
-        val json = "{\"ok\":true,\"online\":true,\"time\":$timeMs,\"wifi\":$wifiJson,\"me\":$meJson,\"disk\":$diskJson,\"pendingRegs\":$pendingRegs}"
+        val versionStr = ServerInfoHelper.getAppVersion(context)
+        val uptimeSec = ServerInfoHelper.getUptimeSec(serverStartTimeMs)
+        val protoStr = HttpServerConfig.getProtocol(context).lowercase()
+        val devCount = devices.size
+        val mediaBytes = ServerInfoHelper.getCachedMediaBytes(context, forceRefresh = false)
+        val json = "{\"ok\":true,\"online\":true,\"time\":$timeMs,\"wifi\":$wifiJson,\"me\":$meJson,\"disk\":$diskJson,\"pendingRegs\":$pendingRegs,\"version\":${jsonEscape(versionStr)},\"uptimeSec\":$uptimeSec,\"protocol\":${jsonEscape(protoStr)},\"port\":$currentPort,\"devicesCount\":$devCount,\"mediaBytes\":$mediaBytes}"
         val data = json.toByteArray(Charsets.UTF_8)
         sendResponse(output, 200, "application/json; charset=UTF-8", data, isHead = isHead, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
     }
@@ -3343,6 +3771,10 @@ object LocalHttpShareServer {
         sb.append("},")
 
         // user
+        val userSecretQ = DynamicUserManager.getFixedUserSecretQuestion(context)
+        val userHasSecret = !userSecretQ.isNullOrBlank() &&
+            !DynamicUserManager.getFixedUserSecretSalt(context).isNullOrBlank() &&
+            !DynamicUserManager.getFixedUserSecretHash(context).isNullOrBlank()
         sb.append("{")
         sb.append("\"id\":\"user\",")
         sb.append("\"name\":${jsonEscape(userName)},")
@@ -3355,6 +3787,8 @@ object LocalHttpShareServer {
         sb.append("\"limitMin\":$userLimitMin,")
         sb.append("\"remainingSec\":${userRemainingSec ?: "null"},")
         sb.append("\"schedule\":${userScheduleObj ?: "null"},")
+        sb.append("\"hasSecretQuestion\":$userHasSecret,")
+        sb.append("\"secretQuestion\":${if (userHasSecret) jsonEscape(userSecretQ!!) else "null"},")
         sb.append("\"lastLogin\":${userLastLogin ?: "null"}")
         sb.append("}")
 
@@ -3372,6 +3806,7 @@ object LocalHttpShareServer {
             val dynUsedToday = UserLimitsManager.getUsedTodaySeconds(context, dyn.id)
             val dynRemainingSec = UserLimitsManager.getRemainingSeconds(context, dyn.id, dyn.limitMin)
             val dynScheduleObj = if (dyn.schedule.mode == "off" && dyn.schedule.windows.isEmpty()) null else dyn.schedule.toJson()
+            val dynHasSecret = !dyn.secretQuestion.isNullOrBlank() && !dyn.secretAnswerSalt.isNullOrBlank() && !dyn.secretAnswerHash.isNullOrBlank()
 
             sb.append("{")
             sb.append("\"id\":${jsonEscape(dyn.id)},")
@@ -3385,6 +3820,8 @@ object LocalHttpShareServer {
             sb.append("\"limitMin\":${dyn.limitMin},")
             sb.append("\"remainingSec\":${dynRemainingSec ?: "null"},")
             sb.append("\"schedule\":${dynScheduleObj ?: "null"},")
+            sb.append("\"hasSecretQuestion\":$dynHasSecret,")
+            sb.append("\"secretQuestion\":${if (dynHasSecret) jsonEscape(dyn.secretQuestion!!) else "null"},")
             sb.append("\"lastLogin\":${dynLastLogin ?: "null"}")
             sb.append("}")
         }
@@ -3698,7 +4135,7 @@ object LocalHttpShareServer {
         }
     }
 
-    private fun getAllMediaTotalBytes(context: Context): Long {
+    internal fun getAllMediaTotalBytes(context: Context): Long {
         var sum = 0L
         val uris = listOf(
             MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
@@ -3998,7 +4435,8 @@ object LocalHttpShareServer {
         isDl: Boolean,
         context: Context,
         isHead: Boolean,
-        needDevCookie: String? = null
+        needDevCookie: String? = null,
+        trackCtx: TrackCtx? = null
     ) {
         var rangeStart: Long = 0
         var rangeEnd: Long = fileSize - 1
@@ -4052,7 +4490,30 @@ object LocalHttpShareServer {
         output.flush()
 
         if (!isHead) {
-            MailManager.streamDecryptedAttachment(context, fileId, output, rangeStart, rangeEnd)
+            val streamOut: OutputStream = if (trackCtx != null) {
+                object : FilterOutputStream(output) {
+                    override fun write(b: Int) {
+                        out.write(b)
+                        ActivityTracker.recordDownloadBytes(
+                            trackCtx.key, trackCtx.sessionToken, trackCtx.deviceId,
+                            trackCtx.login, trackCtx.role, trackCtx.device, trackCtx.ip,
+                            fileName = fileName, isExplicitDownload = isDl, bytesSent = 1L
+                        )
+                    }
+                    override fun write(b: ByteArray, off: Int, len: Int) {
+                        out.write(b, off, len)
+                        if (len > 0) {
+                            ActivityTracker.recordDownloadBytes(
+                                trackCtx.key, trackCtx.sessionToken, trackCtx.deviceId,
+                                trackCtx.login, trackCtx.role, trackCtx.device, trackCtx.ip,
+                                fileName = fileName, isExplicitDownload = isDl, bytesSent = len.toLong()
+                            )
+                        }
+                    }
+                    override fun flush() = out.flush()
+                }
+            } else output
+            MailManager.streamDecryptedAttachment(context, fileId, streamOut, rangeStart, rangeEnd)
             output.flush()
         }
     }

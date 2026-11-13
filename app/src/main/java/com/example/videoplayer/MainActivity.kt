@@ -1,5 +1,9 @@
 package com.example.videoplayer
 
+import android.content.Context
+import android.content.SharedPreferences
+import android.content.res.Configuration
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -22,15 +26,55 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
+import com.example.videoplayer.ui.OrientationHelper
 import com.example.videoplayer.ui.PlayerScreen
 import com.example.videoplayer.ui.VideoLibraryScreen
 import com.example.videoplayer.ui.theme.*
 
 class MainActivity : FragmentActivity() {
+    private var inPipState by mutableStateOf(false)
+    private var orientationModeState by mutableStateOf(OrientationHelper.MODE_PORTRAIT)
+    private var prefListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
+
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: Configuration
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        inPipState = isInPictureInPictureMode
+        if (!isInPictureInPictureMode) {
+            OrientationHelper.apply(this, orientationModeState)
+        }
+    }
+
+    override fun onDestroy() {
+        prefListener?.let {
+            getSharedPreferences(OrientationHelper.PREFS_NAME, Context.MODE_PRIVATE)
+                .unregisterOnSharedPreferenceChangeListener(it)
+        }
+        prefListener = null
+        super.onDestroy()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ThemeManager.init(this)
         ThemeConfigManager.init(this)
+        orientationModeState = OrientationHelper.getMode(this)
+        OrientationHelper.apply(this, orientationModeState)
+        val prefs = getSharedPreferences(OrientationHelper.PREFS_NAME, Context.MODE_PRIVATE)
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == OrientationHelper.KEY_MODE) {
+                runOnUiThread {
+                    orientationModeState = OrientationHelper.getMode(this@MainActivity)
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N || !isInPictureInPictureMode) {
+                        OrientationHelper.apply(this@MainActivity, orientationModeState)
+                    }
+                }
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        prefListener = listener
         enableEdgeToEdge()
 
         setContent {
@@ -54,6 +98,7 @@ class MainActivity : FragmentActivity() {
                     if (selectedVideoUri != null) {
                         PlayerScreen(
                             videoUri = selectedVideoUri!!,
+                            isInPipMode = inPipState,
                             onBack = { selectedVideoUri = null }
                         )
                     } else {

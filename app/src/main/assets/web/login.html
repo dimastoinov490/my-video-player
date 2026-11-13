@@ -70,6 +70,13 @@ h1 .a{color:var(--text)}h1 .b{color:var(--o2)}
 .panel.compact .field{margin-bottom:10px}
 .panel.compact .field input{height:48px;font-size:16px}
 .panel.compact .btn{height:50px;font-size:17px}
+.field select{width:100%;height:56px;border-radius:18px;border:1.5px solid var(--line);background:rgba(25,14,7,.92);color:var(--text);font-size:16px;padding:0 18px;outline:none;font-family:inherit;transition:border-color .2s,box-shadow .2s}
+.field select:focus{border-color:var(--o1);box-shadow:0 0 0 3px rgba(255,138,0,.18)}
+.field select option{background:#180d06;color:#fff}
+.qbox{margin-bottom:12px;padding:12px 16px;border-radius:16px;border:1.5px solid rgba(255,138,0,.45);background:rgba(255,138,0,.09);text-align:left}
+.qbox small{display:block;font-size:12px;color:var(--o1);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px}
+.qbox b{display:block;font-size:15px;color:var(--text);line-height:1.35;word-break:break-word}
+.panel.compact .field select{height:48px;font-size:15px}
 .back{display:block;margin:12px auto 0}
 #vReg .field input,#vForgot .field input{padding-left:18px}
 .capbox .rf{margin:0 0 0 0}.capbox>*+*{margin-left:10px}
@@ -139,10 +146,23 @@ h1 .a{color:var(--text)}h1 .b{color:var(--o2)}
   </div>
 
   <div id="vReg" style="display:none">
-    <p class="hint2">Придумайте логин и пароль и отправьте заявку. Войти можно будет после одобрения администратором.</p>
+    <p class="hint2">Придумайте логин, пароль и секретный вопрос для восстановления доступа. Войти можно будет после одобрения администратором.</p>
     <div class="field"><input id="rLogin" type="text" placeholder="Логин (3-32 символа)" autocomplete="off" autocapitalize="none" spellcheck="false"></div>
     <div class="field"><input id="rPass" type="password" placeholder="Пароль (от 4 символов)" autocomplete="new-password"></div>
     <div class="field"><input id="rPass2" type="password" placeholder="Повторите пароль" autocomplete="new-password"></div>
+    <div class="field">
+      <select id="rSecretSel" aria-label="Секретный вопрос">
+        <option value="">Выберите секретный вопрос</option>
+        <option value="Девичья фамилия матери">Девичья фамилия матери</option>
+        <option value="Кличка первого питомца">Кличка первого питомца</option>
+        <option value="Город рождения">Город рождения</option>
+        <option value="Любимая книга">Любимая книга</option>
+        <option value="__custom">Свой вопрос…</option>
+      </select>
+    </div>
+    <div class="field" id="rSecretCustomWrap" style="display:none"><input id="rSecretCustom" type="text" placeholder="Введите свой секретный вопрос" maxlength="200" autocomplete="off"></div>
+    <div class="field"><input id="rAnswer" type="text" placeholder="Ответ на секретный вопрос (от 3 символов)" autocomplete="off"></div>
+    <div class="field"><input id="rAnswer2" type="text" placeholder="Повторите ответ" autocomplete="off"></div>
     <div class="capbox"><img class="capimg" alt="Проверочный код"><button type="button" class="rf capnew" aria-label="Другой код"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg></button><input class="capin" placeholder="Код" autocomplete="off" autocapitalize="characters" maxlength="8"></div>
     <button class="btn" id="rGo" type="button"><span>Отправить заявку</span></button>
     <div class="err" id="rErr" role="alert"></div>
@@ -150,14 +170,22 @@ h1 .a{color:var(--text)}h1 .b{color:var(--o2)}
   </div>
 
   <div id="vForgot" style="display:none">
-    <p class="hint2">Введите логин и ПРЕДЫДУЩИЙ пароль (тот, что был до последней смены), пройдите проверку и задайте новый пароль. Для администратора восстановление делается в приложении на телефоне.</p>
-    <div class="field"><input id="fLogin" type="text" placeholder="Логин" autocomplete="off" autocapitalize="none" spellcheck="false"></div>
-    <div class="field"><input id="fOld" type="password" placeholder="Предыдущий пароль" autocomplete="off"></div>
-    <div class="field"><input id="fNewLogin" type="text" placeholder="Новый логин (необязательно)" autocomplete="off" autocapitalize="none" spellcheck="false"></div>
-    <div class="field"><input id="fNew" type="password" placeholder="Новый пароль" autocomplete="new-password"></div>
-    <div class="field"><input id="fNew2" type="password" placeholder="Повторите новый пароль" autocomplete="new-password"></div>
-    <div class="capbox"><img class="capimg" alt="Проверочный код"><button type="button" class="rf capnew" aria-label="Другой код"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg></button><input class="capin" placeholder="Код" autocomplete="off" autocapitalize="characters" maxlength="8"></div>
-    <button class="btn" id="fGo" type="button"><span>Сменить пароль</span></button>
+    <p class="hint2">Для обычных учётных записей. Администратор восстанавливается в приложении на телефоне.</p>
+    <div id="fStep1">
+      <div class="field"><input id="fLogin" type="text" placeholder="Логин" autocomplete="off" autocapitalize="none" spellcheck="false"></div>
+      <div class="capbox"><img class="capimg" alt="Проверочный код"><button type="button" class="rf capnew" aria-label="Другой код"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg></button><input class="capin" placeholder="Код" autocomplete="off" autocapitalize="characters" maxlength="8"></div>
+      <button class="btn" id="fNext" type="button"><span>Далее</span></button>
+    </div>
+    <div id="fStep2" style="display:none">
+      <div class="qbox"><small>Секретный вопрос</small><b id="fQText"></b></div>
+      <div class="field"><input id="fAnswer" type="text" placeholder="Ответ на секретный вопрос" autocomplete="off"></div>
+      <div class="field"><input id="fNewLogin" type="text" placeholder="Новый логин (необязательно)" autocomplete="off" autocapitalize="none" spellcheck="false"></div>
+      <div class="field"><input id="fNew" type="password" placeholder="Новый пароль (от 4 символов)" autocomplete="new-password"></div>
+      <div class="field"><input id="fNew2" type="password" placeholder="Повторите новый пароль" autocomplete="new-password"></div>
+      <div class="capbox"><img class="capimg" alt="Проверочный код"><button type="button" class="rf capnew" aria-label="Другой код"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg></button><input class="capin" placeholder="Код" autocomplete="off" autocapitalize="characters" maxlength="8"></div>
+      <button class="btn" id="fGo" type="button"><span>Сменить пароль</span></button>
+      <button type="button" class="lnk back" id="fStepBack">← Изменить логин</button>
+    </div>
     <div class="err" id="fErr" role="alert"></div>
     <button type="button" class="lnk back" data-back>← Ко входу</button>
   </div>
@@ -207,10 +235,21 @@ h1 .a{color:var(--text)}h1 .b{color:var(--o2)}
   var views={login:document.getElementById('vLogin'),reg:document.getElementById('vReg'),forgot:document.getElementById('vForgot')};
   var titles={login:'Вход в медиа-сервер',reg:'Регистрация',forgot:'Восстановление пароля'};
   var cap={id:'',local:''};
+  var fStep1=document.getElementById('fStep1'), fStep2=document.getElementById('fStep2'), forgotLogin='';
+  var mockUsers={user:{question:'Город рождения',answer:'москва'},demo:{question:'Кличка первого питомца',answer:'барсик'}};
+  var mockFails=0;
+  function normAns(s){ return String(s||'').trim().toLowerCase().replace(/\s+/g,' '); }
+  function setForgotStep(step){
+    fStep1.style.display=(step===1)?'':'none';
+    fStep2.style.display=(step===2)?'':'none';
+    if(step===1){ document.getElementById('fAnswer').value=''; document.getElementById('fNew').value=''; document.getElementById('fNew2').value=''; }
+    panel.scrollTop=0;
+  }
   function setView(v){
     Object.keys(views).forEach(function(k){ views[k].style.display=(k===v)?'':'none'; });
     sub.textContent=titles[v]; panel.className='panel'+(v==='login'?'':' compact'); panel.scrollTop=0;
     ['rErr','fErr','err'].forEach(function(id){ var e=document.getElementById(id); if(e) e.className='err'; });
+    if(v==='forgot') setForgotStep(1);
     if(v!=='login') loadCaptcha();
   }
   function localCaptcha(){
@@ -228,37 +267,103 @@ h1 .a{color:var(--text)}h1 .b{color:var(--o2)}
     fetch('/api/captcha',{cache:'no-store',credentials:'same-origin'}).then(function(r){ return r.json(); }).then(function(j){ cap.id=j.id; setCap(j.image); }).catch(function(){ cap.id=''; });
   }
   function post(url,obj){
+    if(location.protocol==='file:'){
+      return new Promise(function(res){ setTimeout(function(){
+        if(String(obj.captcha||'').trim().toUpperCase()!==cap.local) return res({ok:false,j:{error:'bad_captcha'}});
+        var l=String(obj.login||'').trim().toLowerCase();
+        if(url==='/api/register'){
+          if(!obj.secretQuestion||normAns(obj.secretAnswer).length<3) return res({ok:false,j:{error:'bad_secret'}});
+          if(l==='admin'||mockUsers[l]) return res({ok:false,j:{error:'login_taken'}});
+          mockUsers[l]={question:obj.secretQuestion,answer:normAns(obj.secretAnswer)};
+          return res({ok:true,j:{ok:true,status:'pending'}});
+        }
+        if(url==='/api/forgot/question'){
+          if(mockFails>=5) return res({ok:false,j:{error:'locked'}});
+          if(l==='admin') return res({ok:false,j:{error:'not_allowed'}});
+          var u=mockUsers[l];
+          return res({ok:true,j:{ok:true,question:u?u.question:'Девичья фамилия матери'}});
+        }
+        if(url==='/api/forgot'){
+          if(mockFails>=5) return res({ok:false,j:{error:'locked'}});
+          if(l==='admin') return res({ok:false,j:{error:'not_allowed'}});
+          var u2=mockUsers[l];
+          if(!u2||normAns(obj.answer)!==u2.answer){ mockFails++; return res({ok:false,j:{error:'bad_answer'}}); }
+          mockFails=0;
+          return res({ok:true,j:{ok:true}});
+        }
+        res({ok:true,j:{ok:true}});
+      },180); });
+    }
     return fetch(url,{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json','X-Nexora':'1'},body:JSON.stringify(obj)}).then(function(r){ return r.json().catch(function(){ return {}; }).then(function(j){ return {ok:r.ok,j:j}; }); });
   }
   function msg(el,t,ok){ el.textContent=t; el.className='err show'+(ok?' ok':''); }
-  var ERR={bad_captcha:'Неверный код с картинки',login_taken:'Такой логин уже занят',bad_login:'Логин: 3-32 символа, буквы, цифры, точка, дефис, подчёркивание',weak_password:'Пароль слишком короткий',rate_limited:'Слишком много попыток. Подождите несколько минут',registration_closed:'Приём заявок сейчас закрыт администратором',auth_required:'На сервере выключена защита паролем',blocked:'Это устройство заблокировано администратором',bad_old:'Неверный логин или предыдущий пароль',locked:'Слишком много неверных попыток. Попробуйте позже',not_allowed:'Для этой учётной записи восстановление недоступно. Обратитесь к администратору',too_many:'Слишком много заявок. Попробуйте позже'};
+  var ERR={bad_captcha:'Неверный код с картинки',login_taken:'Такой логин уже занят',bad_login:'Логин: 3-32 символа, буквы, цифры, точка, дефис, подчёркивание',weak_password:'Пароль слишком короткий',rate_limited:'Слишком много попыток. Подождите несколько минут',registration_closed:'Приём заявок сейчас закрыт администратором',auth_required:'На сервере выключена защита паролем',blocked:'Это устройство заблокировано администратором',bad_secret:'Укажите секретный вопрос и ответ (минимум 3 символа)',bad_answer:'Неверный ответ на секретный вопрос',no_question:'Для этой учётной записи секретный вопрос не задан',bad_old:'Неверный логин или предыдущий пароль',locked:'Слишком много неверных попыток. Попробуйте позже',not_allowed:'Для этой учётной записи восстановление недоступно. Обратитесь к администратору',too_many:'Слишком много заявок. Попробуйте позже'};
   document.getElementById('goReg').addEventListener('click',function(){ setView('reg'); });
   document.getElementById('goForgot').addEventListener('click',function(){ setView('forgot'); });
   Array.prototype.forEach.call(document.querySelectorAll('[data-back]'),function(b){ b.addEventListener('click',function(){ setView('login'); }); });
   Array.prototype.forEach.call(document.querySelectorAll('.capnew'),function(b){ b.addEventListener('click',loadCaptcha); });
-  function capVal(view){ return view.querySelector('.capin').value.trim(); }
+  var rSecretSel=document.getElementById('rSecretSel'), rSecretCustomWrap=document.getElementById('rSecretCustomWrap'), rSecretCustom=document.getElementById('rSecretCustom');
+  rSecretSel.addEventListener('change',function(){
+    var custom=(rSecretSel.value==='__custom');
+    rSecretCustomWrap.style.display=custom?'':'none';
+    if(custom) rSecretCustom.focus();
+  });
+  function capVal(container){ return container.querySelector('.capin').value.trim(); }
   document.getElementById('rGo').addEventListener('click',function(){
-    var e=document.getElementById('rErr'), l=document.getElementById('rLogin').value.trim(), p=document.getElementById('rPass').value, p2=document.getElementById('rPass2').value, c=capVal(views.reg);
+    var e=document.getElementById('rErr'), l=document.getElementById('rLogin').value.trim(), p=document.getElementById('rPass').value, p2=document.getElementById('rPass2').value;
+    var q=(rSecretSel.value==='__custom'?rSecretCustom.value:rSecretSel.value).trim();
+    var a=document.getElementById('rAnswer').value, a2=document.getElementById('rAnswer2').value, c=capVal(views.reg);
     if(!/^[A-Za-z0-9._-]{3,32}$/.test(l)) return msg(e,ERR.bad_login);
     if(p.length<4) return msg(e,ERR.weak_password);
     if(p!==p2) return msg(e,'Пароли не совпадают');
+    if(q.length<3) return msg(e,'Выберите или введите секретный вопрос (от 3 символов)');
+    if(normAns(a).length<3) return msg(e,'Ответ на секретный вопрос — минимум 3 символа');
+    if(normAns(a)!==normAns(a2)) return msg(e,'Ответы на секретный вопрос не совпадают');
     if(!c) return msg(e,'Введите код с картинки');
     var b=this; b.disabled=true;
-    post('/api/register',{login:l,password:p,captchaId:cap.id,captcha:c}).then(function(r){
+    post('/api/register',{login:l,password:p,secretQuestion:q,secretAnswer:a,captchaId:cap.id,captcha:c}).then(function(r){
       b.disabled=false;
-      if(r.ok){ msg(e,'Заявка отправлена. Дождитесь одобрения администратора, затем войдите.',true); document.getElementById('rPass').value=''; document.getElementById('rPass2').value=''; return; }
+      if(r.ok){
+        msg(e,'Заявка отправлена. Дождитесь одобрения администратора, затем войдите.',true);
+        document.getElementById('rPass').value=''; document.getElementById('rPass2').value='';
+        document.getElementById('rAnswer').value=''; document.getElementById('rAnswer2').value='';
+        return;
+      }
       var k=r.j&&r.j.error; msg(e,ERR[k]||'Не удалось отправить заявку'); loadCaptcha();
     }).catch(function(){ b.disabled=false; msg(e,'Нет связи с сервером'); });
   });
+  document.getElementById('fStepBack').addEventListener('click',function(){
+    document.getElementById('fErr').className='err';
+    setForgotStep(1); loadCaptcha();
+  });
+  document.getElementById('fNext').addEventListener('click',function(){
+    var e=document.getElementById('fErr'), l=document.getElementById('fLogin').value.trim(), c=capVal(fStep1);
+    e.className='err';
+    if(!l) return msg(e,'Введите логин');
+    if(!c) return msg(e,'Введите код с картинки');
+    var b=this; b.disabled=true;
+    post('/api/forgot/question',{login:l,captchaId:cap.id,captcha:c}).then(function(r){
+      b.disabled=false;
+      if(r.ok && r.j && r.j.question){
+        forgotLogin=l;
+        document.getElementById('fQText').textContent=r.j.question;
+        setForgotStep(2);
+        loadCaptcha();
+        document.getElementById('fAnswer').focus();
+        return;
+      }
+      var k=r.j&&r.j.error; msg(e,ERR[k]||'Не удалось получить секретный вопрос'); loadCaptcha();
+    }).catch(function(){ b.disabled=false; msg(e,'Нет связи с сервером'); });
+  });
   document.getElementById('fGo').addEventListener('click',function(){
-    var e=document.getElementById('fErr'), l=document.getElementById('fLogin').value.trim(), o=document.getElementById('fOld').value, nl=document.getElementById('fNewLogin').value.trim(), p=document.getElementById('fNew').value, p2=document.getElementById('fNew2').value, c=capVal(views.forgot);
-    if(!l||!o) return msg(e,'Введите логин и предыдущий пароль');
+    var e=document.getElementById('fErr'), l=forgotLogin||document.getElementById('fLogin').value.trim(), ans=document.getElementById('fAnswer').value, nl=document.getElementById('fNewLogin').value.trim(), p=document.getElementById('fNew').value, p2=document.getElementById('fNew2').value, c=capVal(fStep2);
+    if(!l||normAns(ans).length<3) return msg(e,'Введите ответ на секретный вопрос (от 3 символов)');
     if(nl&&!/^[A-Za-z0-9._-]{3,32}$/.test(nl)) return msg(e,ERR.bad_login);
     if(p.length<4) return msg(e,ERR.weak_password);
     if(p!==p2) return msg(e,'Новые пароли не совпадают');
     if(!c) return msg(e,'Введите код с картинки');
     var b=this; b.disabled=true;
-    post('/api/forgot',{login:l,oldPassword:o,newLogin:nl||null,newPassword:p,captchaId:cap.id,captcha:c}).then(function(r){
+    post('/api/forgot',{login:l,answer:ans,newLogin:nl||null,newPassword:p,captchaId:cap.id,captcha:c}).then(function(r){
       b.disabled=false;
       if(r.ok){ document.getElementById('user').value=(nl||l); setView('login'); var er=document.getElementById('err'); er.textContent='Пароль изменён. Войдите с новым паролем.'; er.className='err show ok'; return; }
       var k=r.j&&r.j.error; msg(e,ERR[k]||'Не удалось сменить пароль'); loadCaptcha();

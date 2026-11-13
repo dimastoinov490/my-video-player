@@ -92,6 +92,7 @@ class BrowserActivity : FragmentActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        OrientationHelper.apply(this)
 
         // Status bar matching theme #120A05 with light status bar icons
         window.statusBarColor = Color.parseColor("#120A05")

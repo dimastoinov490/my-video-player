@@ -648,7 +648,8 @@ fun ExactHtmlVideoLibraryView(
                                 val hw = prefs.getBoolean("hw_accel", true)
                                 val bg = prefs.getBoolean("bg_play", false)
                                 val buff = prefs.getBoolean("show_buffering_status", true)
-                                val rot = prefs.getBoolean("auto_rotate", true)
+                                val oriMode = OrientationHelper.getMode(context)
+                                val rot = oriMode == OrientationHelper.MODE_SENSOR || oriMode == OrientationHelper.MODE_SYSTEM
                                 val openInApp = prefs.getBoolean("open_in_app_browser", true)
 
                                 val json = JSONObject()
@@ -656,6 +657,7 @@ fun ExactHtmlVideoLibraryView(
                                 json.put("bg_play", bg)
                                 json.put("show_buffering_status", buff)
                                 json.put("auto_rotate", rot)
+                                json.put("orientation_mode", oriMode)
                                 json.put("open_in_app_browser", openInApp)
                                 json.toString()
                             } catch (e: Exception) {
@@ -666,7 +668,20 @@ fun ExactHtmlVideoLibraryView(
                         @JavascriptInterface
                         fun setSetting(key: String, value: String) {
                             Handler(Looper.getMainLooper()).post {
-                                val validKeys = setOf("hw_accel", "bg_play", "show_buffering_status", "auto_rotate", "open_in_app_browser")
+                                if (key == "orientation_mode") {
+                                    val saved = OrientationHelper.setMode(context, value)
+                                    (context as? android.app.Activity)?.let { OrientationHelper.apply(it, saved) }
+                                    return@post
+                                }
+                                if (key == "auto_rotate") {
+                                    val saved = OrientationHelper.setMode(
+                                        context,
+                                        if (value.toBoolean()) OrientationHelper.MODE_SENSOR else OrientationHelper.MODE_PORTRAIT
+                                    )
+                                    (context as? android.app.Activity)?.let { OrientationHelper.apply(it, saved) }
+                                    return@post
+                                }
+                                val validKeys = setOf("hw_accel", "bg_play", "show_buffering_status", "open_in_app_browser")
                                 if (key in validKeys) {
                                     val prefs = context.getSharedPreferences("video_prefs", Context.MODE_PRIVATE)
                                     prefs.edit().putBoolean(key, value.toBoolean()).apply()

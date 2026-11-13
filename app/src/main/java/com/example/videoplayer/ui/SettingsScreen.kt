@@ -1,5 +1,6 @@
 package com.example.videoplayer.ui
 
+import android.app.Activity
 import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
@@ -39,7 +40,7 @@ fun SettingsScreen(
     var hardwareAccel by remember { mutableStateOf(prefs.getBoolean("hw_accel", true)) }
     var backgroundPlay by remember { mutableStateOf(prefs.getBoolean("bg_play", false)) }
     var showBuffering by remember { mutableStateOf(prefs.getBoolean("show_buffering_status", false)) }
-    var autoRotate by remember { mutableStateOf(prefs.getBoolean("auto_rotate", true)) }
+    var orientationMode by remember { mutableStateOf(OrientationHelper.getMode(context)) }
     var showAiStudio by remember { mutableStateOf(false) }
     var showScreenshotDialog by remember { mutableStateOf(false) }
 
@@ -122,16 +123,74 @@ fun SettingsScreen(
                         }
                     )
                     HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
-                    SettingsSwitchItem(
-                        icon = Icons.Default.PlayCircle,
-                        title = "Автоповорот",
-                        subtitle = "Переворачивать экран при смене ориентации",
-                        checked = autoRotate,
-                        onCheckedChange = {
-                            autoRotate = it
-                            prefs.edit().putBoolean("auto_rotate", it).apply()
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 14.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.ScreenRotation,
+                                contentDescription = null,
+                                tint = theme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column {
+                                Text(
+                                    "Ориентация экрана",
+                                    color = Color.White,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    "Применяется сразу и сохраняется при запуске",
+                                    color = GrayText,
+                                    fontSize = 12.sp
+                                )
+                            }
                         }
-                    )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        val options = listOf(
+                            OrientationHelper.MODE_SYSTEM to "Системная (как в телефоне)",
+                            OrientationHelper.MODE_SENSOR to "Автоповорот по датчику",
+                            OrientationHelper.MODE_PORTRAIT to "Только портрет",
+                            OrientationHelper.MODE_LANDSCAPE to "Только альбом"
+                        )
+                        options.forEach { (modeKey, label) ->
+                            val selected = orientationMode == modeKey
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable {
+                                        orientationMode = OrientationHelper.setMode(context, modeKey)
+                                        (context as? Activity)?.let { OrientationHelper.apply(it, orientationMode) }
+                                    }
+                                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = selected,
+                                    onClick = {
+                                        orientationMode = OrientationHelper.setMode(context, modeKey)
+                                        (context as? Activity)?.let { OrientationHelper.apply(it, orientationMode) }
+                                    },
+                                    colors = RadioButtonDefaults.colors(
+                                        selectedColor = theme.primary,
+                                        unselectedColor = GrayText
+                                    )
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = label,
+                                    color = if (selected) Color.White else Color.LightGray,
+                                    fontSize = 14.sp,
+                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
