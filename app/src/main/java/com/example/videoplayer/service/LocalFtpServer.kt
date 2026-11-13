@@ -1,7 +1,7 @@
 package com.example.videoplayer.service
 
 import android.content.Context
-import android.os.Environment
+import java.io.File
 import org.apache.ftpserver.FtpServer
 import org.apache.ftpserver.FtpServerFactory
 import org.apache.ftpserver.listener.ListenerFactory
@@ -26,9 +26,22 @@ object LocalFtpServer {
             listenerFactory.port = port
             serverFactory.addListener("default", listenerFactory.createListener())
 
+            // FTP access is intentionally confined to the app's dedicated share folder.
+            // Never expose the device-wide external storage root through an anonymous FTP account.
+            val shareDirectory = File(
+                context.getExternalFilesDir(null) ?: context.filesDir,
+                "ftp_share"
+            )
+            if (!shareDirectory.exists() && !shareDirectory.mkdirs()) {
+                throw IllegalStateException("Не удалось создать папку FTP-обмена")
+            }
+            if (!shareDirectory.isDirectory) {
+                throw IllegalStateException("Путь FTP-обмена не является папкой")
+            }
+
             val user = BaseUser().apply {
                 name = "anonymous"
-                homeDirectory = Environment.getExternalStorageDirectory().absolutePath
+                homeDirectory = shareDirectory.canonicalPath
                 authorities = listOf(WritePermission())
             }
             serverFactory.userManager.save(user)
