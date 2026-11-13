@@ -76,6 +76,10 @@ import androidx.core.view.WindowInsetsControllerCompat
 import com.example.videoplayer.R
 import com.example.videoplayer.model.MediaStoreHelper
 import com.example.videoplayer.player.PlaybackTrack
+import com.example.videoplayer.player.GoogleCastManager
+import com.example.videoplayer.player.CastStartResult
+import com.google.android.gms.cast.framework.CastButtonFactory
+import androidx.mediarouter.app.MediaRouteButton
 import com.example.videoplayer.player.VlcPlayerManager
 import com.example.videoplayer.ui.theme.ThemeConfigManager
 import kotlinx.coroutines.Dispatchers
@@ -213,6 +217,7 @@ fun PlayerScreen(
 
     // Crash-proof player manager
     val playerManager = remember { VlcPlayerManager(context) }
+    val castManager = remember { GoogleCastManager(context) }
     var useNativeFallback by remember { mutableStateOf(!playerManager.isEngineReady) }
 
     var isPlaying by remember { mutableStateOf(true) }
@@ -231,6 +236,7 @@ fun PlayerScreen(
     var selectedAudioTrack by remember { mutableIntStateOf(-1) }
     var selectedSubtitleTrack by remember { mutableIntStateOf(-1) }
     var showCastDialog by remember { mutableStateOf(false) }
+    var castStatusText by remember { mutableStateOf("Выберите устройство Google Cast") }
     var scaleMode by remember { mutableStateOf(VideoScaleMode.FIT) }
     var repeatMode by remember { mutableStateOf(VideoRepeatMode.OFF) }
     var infoFeedbackText by remember { mutableStateOf<String?>(null) }
@@ -1219,21 +1225,55 @@ fun PlayerScreen(
             )
         }
 
-        // Cast Search Dialog
+        // Google Cast device picker and remote playback.
         if (showCastDialog) {
             AlertDialog(
                 onDismissRequest = { showCastDialog = false },
-                title = { Text("Беспроводная трансляция", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+                title = { Text("Трансляция на телевизор", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp) },
                 text = {
-                    Text(
-                        "Подключение к Google Cast пока не реализовано. Miracast обычно запускается средствами системы Android — используйте пункт «Трансляция экрана» в быстрых настройках телефона.",
-                        color = Color.LightGray,
-                        fontSize = 13.sp
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            "Выберите Chromecast или телевизор с Google Cast:",
+                            color = Color.LightGray,
+                            fontSize = 13.sp
+                        )
+                        AndroidView(
+                            factory = { viewContext ->
+                                MediaRouteButton(viewContext).apply {
+                                    try {
+                                        CastButtonFactory.setUpMediaRouteButton(viewContext.applicationContext, this)
+                                    } catch (e: Exception) {
+                                        Log.w("PlayerScreen", "Unable to initialize Google Cast device picker", e)
+                                    }
+                                }
+                            },
+                            modifier = Modifier.size(52.dp)
+                        )
+                        Text(castStatusText, color = Color(0xFF9BA8BA), fontSize = 12.sp)
+                        Button(
+                            onClick = {
+                                when (castManager.castVideo(videoUri, resolvedTitle) { success ->
+                                    castStatusText = if (success) {
+                                        "Видео передано на устройство"
+                                    } else {
+                                        "Устройство не приняло видео. Проверьте формат и доступность ссылки."
+                                    }
+                                }) {
+                                    CastStartResult.STARTED -> castStatusText = "Отправка видео на устройство…"
+                                    CastStartResult.NOT_CONNECTED -> castStatusText = "Сначала выберите устройство в списке выше"
+                                    CastStartResult.UNSUPPORTED_URI -> castStatusText = "Для Google Cast нужна HTTP(S)-ссылка, доступная телевизору. Локальные файлы пока не поддерживаются."
+                                    CastStartResult.UNAVAILABLE -> castStatusText = "Google Cast недоступен. Проверьте Google Play Services."
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Транслировать текущее видео")
+                        }
+                    }
                 },
                 confirmButton = {
                     TextButton(onClick = { showCastDialog = false }) {
-                        Text("Отмена", color = Color(0xFFA63EF6))
+                        Text("Закрыть", color = Color(0xFFA63EF6))
                     }
                 },
                 containerColor = Color(0xFF0D111A),
