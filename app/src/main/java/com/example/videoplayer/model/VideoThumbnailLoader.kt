@@ -2,6 +2,7 @@ package com.example.videoplayer.model
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
 import android.os.Build
 import android.util.Base64
@@ -24,14 +25,18 @@ object VideoThumbnailLoader {
             val fileName = md5(key) + ".jpg"
             val cacheFile = File(cacheDir, fileName)
 
-            if (cacheFile.exists() && cacheFile.length() > 0) {
-                try {
-                    val bytes = cacheFile.readBytes()
-                    val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
-                    return "data:image/jpeg;base64,$b64"
-                } catch (_: Throwable) {
-                    // Fall back to regeneration if cached file could not be read
+            if (cacheFile.exists()) {
+                if (cacheFile.length() > 0 && isValidImage(cacheFile)) {
+                    try {
+                        val bytes = cacheFile.readBytes()
+                        val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                        return "data:image/jpeg;base64,$b64"
+                    } catch (_: Throwable) {
+                        // Fall through and regenerate an unreadable cache entry.
+                    }
                 }
+                // A truncated or invalid cache entry must not be returned as a thumbnail.
+                cacheFile.delete()
             }
 
             var bitmap: Bitmap? = null
@@ -94,15 +99,28 @@ object VideoThumbnailLoader {
 
             if (bitmap == null) return null
 
-            val baos = ByteArrayOutputStream()
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 75, baos)
-            val bytes = baos.toByteArray()
-            bitmap.recycle()
+            val thumbnail = bitmap ?: return null
+            val bytes = try {
+                val baos = ByteArrayOutputStream()
+                if (!thumbnail.compress(Bitmap.CompressFormat.JPEG, 75, baos)) {
+                    return null
+                }
+                baos.toByteArray()
+            } finally {
+                if (!thumbnail.isRecycled) thumbnail.recycle()
+            }
+            if (bytes.isEmpty()) return null
 
-            val tmpFile = File(cacheDir, "$fileName.tmp")
-            tmpFile.writeBytes(bytes)
-            if (!tmpFile.renameTo(cacheFile)) {
-                tmpFile.delete()
+            // Use a unique temporary file so simultaneous requests cannot corrupt
+            // each other's cache writes for the same media item.
+            val tmpFile = File.createTempFile("$fileName.", ".tmp", cacheDir)
+            try {
+                tmpFile.writeBytes(bytes)
+                if (!tmpFile.renameTo(cacheFile) && !cacheFile.exists()) {
+                    Log.w(TAG, "Unable to move thumbnail cache into place for ${video.uri}")
+                }
+            } finally {
+                if (tmpFile.exists()) tmpFile.delete()
             }
 
             val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
@@ -110,6 +128,16 @@ object VideoThumbnailLoader {
         } catch (t: Throwable) {
             Log.e(TAG, "getDataUri error: ${t.message}")
             null
+        }
+    }
+
+    private fun isValidImage(file: File): Boolean {
+        return try {
+            val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(file.absolutePath, options)
+            options.outWidth > 0 && options.outHeight > 0
+        } catch (_: Throwable) {
+            false
         }
     }
 
