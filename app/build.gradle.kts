@@ -115,7 +115,6 @@ dependencies {
     implementation("org.videolan.android:libvlc-all:3.6.0-eap13")
     implementation("org.apache.ftpserver:ftpserver-core:1.2.0")
     implementation("org.slf4j:slf4j-android:1.7.36")
-    implementation("androidx.security:security-crypto:1.1.0-alpha06")
     implementation("commons-net:commons-net:3.10.0")
     implementation("androidx.biometric:biometric:1.1.0")
     implementation("androidx.fragment:fragment-ktx:1.6.2")
