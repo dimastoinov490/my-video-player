@@ -93,19 +93,26 @@ fun ExactHtmlVideoLibraryView(
             for (v in list) {
                 val uriStr = v.uri.toString()
                 if (!sentThumbs.add(uriStr)) continue
-                val d = VideoThumbnailLoader.getDataUri(context, v) ?: continue
+                val d = VideoThumbnailLoader.getDataUri(context, v)
+                if (d == null) {
+                    sentThumbs.remove(uriStr)
+                    continue
+                }
                 withContext(Dispatchers.Main) {
-                    webView.evaluateJavascript(
-                        "if (window.setVideoThumb) { window.setVideoThumb(${JSONObject.quote(uriStr)}, ${JSONObject.quote(d)}); }",
-                        null
-                    )
+                    if (webViewRef === webView && webView.isAttachedToWindow) {
+                        webView.evaluateJavascript(
+                            "if (window.setVideoThumb) { window.setVideoThumb(${JSONObject.quote(uriStr)}, ${JSONObject.quote(d)}); }",
+                            null
+                        )
+                    } else {
+                        sentThumbs.remove(uriStr)
+                    }
                 }
             }
         }
     }
 
     fun sendVideosToWeb(webView: WebView, vList: List<VideoItem>) {
-        if (vList.isEmpty()) return
         val jsonArray = JSONArray()
         val dateFormat = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
         for (v in vList) {
