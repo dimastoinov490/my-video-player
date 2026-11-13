@@ -351,7 +351,23 @@ fun PlayerScreen(
 
     // Persist progress periodically so playback can resume after leaving the player or closing the app.
     LaunchedEffect(isPlaying, videoUri) {
-        if (!isPlaying) return@LaunchedEffect
+        if (!isPlaying) {
+            val position = latestCurrentTimeMs
+            val duration = latestTotalDurationMs
+            if (position > 0L && (duration <= 0L || position < duration - 10_000L)) {
+                progressPrefs.edit()
+                    .putLong(progressKey, position)
+                    .putLong("${progressKey}_duration", duration)
+                    .apply()
+                savedResumePositionMs = position
+                savedResumeDurationMs = duration
+            } else if (duration > 0L && position >= duration - 10_000L) {
+                progressPrefs.edit().remove(progressKey).remove("${progressKey}_duration").apply()
+                savedResumePositionMs = 0L
+                savedResumeDurationMs = 0L
+            }
+            return@LaunchedEffect
+        }
         while (isPlaying) {
             delay(5000L)
             val position = latestCurrentTimeMs
