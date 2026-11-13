@@ -90,7 +90,7 @@ object MediaStoreHelper {
                         continue
                     }
 
-                    val resolution = if (width > 0 && height > 0) "${width}x${height}" else "HD"
+                    val resolution = if (width > 0 && height > 0) "${width}x${height}" else "—"
                     videoList.add(
                         VideoItem(
                             id = if (id >= 0) id else videoList.size.toLong() + 1000,
