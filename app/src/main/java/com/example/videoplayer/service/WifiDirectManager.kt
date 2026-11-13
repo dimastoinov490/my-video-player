@@ -109,7 +109,7 @@ object WifiDirectManager {
             }
         }
 
-        fallbackToLocalHotspot(appContext, onStatus, onComplete)
+        fallbackToLocalHotspot(appContext, generation, onStatus, onComplete)
     }
 
     fun stop(context: Context) {
