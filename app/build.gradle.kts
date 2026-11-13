@@ -16,7 +16,7 @@ val runNumber = System.getenv("GITHUB_RUN_NUMBER")?.toInt() ?: 1
 
 android {
     namespace = "com.example.videoplayer"
-    compileSdk = 34
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.example.videoplayer"
