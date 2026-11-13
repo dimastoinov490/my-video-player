@@ -12,11 +12,11 @@ import org.videolan.libvlc.interfaces.IVLCVout
 import com.example.videoplayer.ui.VideoScaleMode
 
 class VlcPlayerManager(private val context: Context) {
+    // Keep VLC's normal frame scheduling and decoder selection. Forcing
+    // software decoding and disabling late-frame dropping can hurt playback
+    // smoothness and battery life on real devices.
     private val options = arrayListOf(
-        "--no-drop-late-frames",
-        "--no-skip-frames",
-        "--rtsp-tcp",
-        "-vvv"
+        "--rtsp-tcp"
     )
 
     private var libVLC: LibVLC? = null
@@ -204,8 +204,7 @@ class VlcPlayerManager(private val context: Context) {
                 Media(vlc, urlOrUri)
             }
 
-            // Software decoding prevents emulator / GPU SIGSEGV crashes
-            media.setHWDecoderEnabled(false, false)
+            // Let VLC select the available hardware/software decoder.
             mp.media = media
             media.release()
             mp.play()

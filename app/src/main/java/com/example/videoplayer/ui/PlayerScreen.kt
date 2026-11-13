@@ -8,12 +8,14 @@ import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
 import android.media.AudioManager
+import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.provider.Settings
 import android.util.Rational
+import android.util.Log
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.WindowManager
@@ -248,6 +250,7 @@ fun PlayerScreen(
     var gaugeDismissJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
 
     var nativeVideoView by remember { mutableStateOf<VideoView?>(null) }
+    var nativeMediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
 
     BackHandler {
         onBack()
@@ -511,7 +514,13 @@ fun PlayerScreen(
                             }
                             setVideoURI(uri)
                             setOnPreparedListener { mp ->
+                                nativeMediaPlayer = mp
                                 totalDurationMs = mp.duration.toLong()
+                                try {
+                                    mp.playbackParams = mp.playbackParams.setSpeed(currentSpeed)
+                                } catch (e: Exception) {
+                                    Log.w("PlayerScreen", "Playback speed is unavailable in native fallback", e)
+                                }
                                 isPlaying = true
                                 mp.start()
                             }
@@ -1061,9 +1070,25 @@ fun PlayerScreen(
                                 FilterChip(
                                     selected = currentSpeed == spd,
                                     onClick = {
-                                        currentSpeed = spd
-                                        playerManager.setRate(spd)
-                                        infoFeedbackText = "Скорость: ${spd}x"
+                                        if (useNativeFallback) {
+                                            val nativePlayer = nativeMediaPlayer
+                                            if (nativePlayer == null) {
+                                                infoFeedbackText = "Плеер ещё загружается"
+                                            } else {
+                                                try {
+                                                    nativePlayer.playbackParams = nativePlayer.playbackParams.setSpeed(spd)
+                                                    currentSpeed = spd
+                                                    infoFeedbackText = "Скорость: ${spd}x"
+                                                } catch (e: Exception) {
+                                                    Log.w("PlayerScreen", "Native playback speed failed", e)
+                                                    infoFeedbackText = "Эта скорость не поддерживается"
+                                                }
+                                            }
+                                        } else {
+                                            playerManager.setRate(spd)
+                                            currentSpeed = spd
+                                            infoFeedbackText = "Скорость: ${spd}x"
+                                        }
                                     },
                                     label = { Text("${spd}x", fontSize = 11.sp) },
                                     colors = FilterChipDefaults.filterChipColors(

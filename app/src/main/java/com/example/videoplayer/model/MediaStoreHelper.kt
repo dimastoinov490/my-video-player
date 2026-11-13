@@ -4,6 +4,7 @@ import android.content.ContentUris
 import android.content.Context
 import android.graphics.Bitmap
 import android.media.MediaScannerConnection
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -12,6 +13,9 @@ import android.util.Log
 import android.util.Size
 import com.example.videoplayer.R
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.coroutines.resume
+import kotlinx.coroutines.suspendCancellableCoroutine
 
 object MediaStoreHelper {
     private const val TAG = "MediaStoreHelper"
@@ -86,7 +90,7 @@ object MediaStoreHelper {
                         continue
                     }
 
-                    val resolution = if (width > 0 && height > 0) "${width}x${height}" else "HD"
+                    val resolution = if (width > 0 && height > 0) "${width}x${height}" else "—"
                     videoList.add(
                         VideoItem(
                             id = if (id >= 0) id else videoList.size.toLong() + 1000,
@@ -146,16 +150,22 @@ object MediaStoreHelper {
                     if (ext in VIDEO_EXTENSIONS) {
                         val pathLower = file.absolutePath.lowercase()
                         if (seenPaths.add(pathLower)) {
+                            val metadata = readVideoMetadata(file)
+                            val resolution = if (metadata.width > 0 && metadata.height > 0) {
+                                "${metadata.width}x${metadata.height}"
+                            } else {
+                                "—"
+                            }
                             outList.add(
                                 VideoItem(
                                     id = outList.size.toLong() + 5000L,
                                     title = file.nameWithoutExtension,
                                     displayName = file.name,
                                     uri = Uri.fromFile(file),
-                                    duration = 0L,
-                                    resolution = "MP4",
-                                    width = 1920,
-                                    height = 1080,
+                                    duration = metadata.durationMs,
+                                    resolution = resolution,
+                                    width = metadata.width,
+                                    height = metadata.height,
                                     dateAdded = file.lastModified() / 1000L,
                                     size = file.length()
                                 )
@@ -165,6 +175,41 @@ object MediaStoreHelper {
                 }
             }
         } catch (_: Throwable) {}
+    }
+
+    private data class VideoMetadata(
+        val durationMs: Long,
+        val width: Int,
+        val height: Int
+    )
+
+    private fun readVideoMetadata(file: File): VideoMetadata {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(file.absolutePath)
+            val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                ?.toLongOrNull()?.coerceAtLeast(0L) ?: 0L
+            var width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)
+                ?.toIntOrNull()?.coerceAtLeast(0) ?: 0
+            var height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)
+                ?.toIntOrNull()?.coerceAtLeast(0) ?: 0
+            val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)
+                ?.toIntOrNull() ?: 0
+            if (rotation == 90 || rotation == 270) {
+                val temp = width
+                width = height
+                height = temp
+            }
+            VideoMetadata(duration, width, height)
+        } catch (e: Exception) {
+            Log.w(TAG, "Unable to read video metadata for ${file.name}: ${e.message}")
+            VideoMetadata(0L, 0, 0)
+        } finally {
+            try {
+                retriever.release()
+            } catch (_: Exception) {
+            }
+        }
     }
 
     fun loadThumbnail(context: Context, id: Long): Bitmap? {
@@ -251,8 +296,8 @@ object MediaStoreHelper {
         return audioList
     }
 
-    fun requestMediaScan(context: Context) {
-        try {
+    suspend fun requestMediaScan(context: Context): Int {
+        return try {
             val scanDirs = listOfNotNull(
                 Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
                 Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
@@ -270,29 +315,30 @@ object MediaStoreHelper {
                     if (f.name.startsWith(".")) continue
                     if (f.isDirectory) {
                         collectFiles(f, depth - 1)
-                    } else if (f.isFile && f.length() > 0) {
-                        val ext = f.extension.lowercase()
-                        if (ext in VIDEO_EXTENSIONS) {
-                            filePaths.add(f.absolutePath)
-                        }
+                    } else if (f.isFile && f.length() > 0 && f.extension.lowercase() in VIDEO_EXTENSIONS) {
+                        filePaths.add(f.absolutePath)
                     }
                 }
             }
 
-            for (d in scanDirs) {
-                collectFiles(d, 3)
-            }
+            for (dir in scanDirs) collectFiles(dir, 3)
+            if (filePaths.isEmpty()) return 0
 
-            if (filePaths.isNotEmpty()) {
+            suspendCancellableCoroutine { continuation ->
+                val remaining = AtomicInteger(filePaths.size)
                 MediaScannerConnection.scanFile(
                     context,
                     filePaths.toTypedArray(),
-                    null,
                     null
-                )
+                ) { _, _ ->
+                    if (remaining.decrementAndGet() == 0 && continuation.isActive) {
+                        continuation.resume(filePaths.size)
+                    }
+                }
             }
-        } catch (e: Throwable) {
-            Log.e(TAG, "requestMediaScan error: ${e.message}")
+        } catch (e: Exception) {
+            Log.e(TAG, "requestMediaScan error: ${e.message}", e)
+            0
         }
     }
 }
