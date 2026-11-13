@@ -93,17 +93,38 @@ fun ExactHtmlVideoLibraryView(
             for (v in list) {
                 val uriStr = v.uri.toString()
                 if (!sentThumbs.add(uriStr)) continue
-                val d = VideoThumbnailLoader.getDataUri(context, v)
-                if (d == null) {
+
+                // Thumbnail extraction can fail transiently while MediaStore is indexing
+                // or while a provider is opening the content URI. Retry a few times.
+                var dataUri: String? = null
+                repeat(3) { attempt ->
+                    if (dataUri == null) {
+                        dataUri = VideoThumbnailLoader.getDataUri(context, v)
+                        if (dataUri == null && attempt < 2) {
+                            kotlinx.coroutines.delay(350L * (attempt + 1))
+                        }
+                    }
+                }
+
+                val thumbnailData = dataUri
+                if (thumbnailData == null) {
+                    // Keep the item eligible for a later sync/refresh retry.
                     sentThumbs.remove(uriStr)
                     continue
                 }
+
                 withContext(Dispatchers.Main) {
                     if (webViewRef === webView && webView.isAttachedToWindow) {
-                        webView.evaluateJavascript(
-                            "if (window.setVideoThumb) { window.setVideoThumb(${JSONObject.quote(uriStr)}, ${JSONObject.quote(d)}); }",
-                            null
-                        )
+                        val js = """
+                            (function() {
+                                if (typeof window.setVideoThumb !== 'function') return false;
+                                window.setVideoThumb(${JSONObject.quote(uriStr)}, ${JSONObject.quote(thumbnailData)});
+                                return true;
+                            })();
+                        """.trimIndent()
+                        webView.evaluateJavascript(js) { result ->
+                            if (result != "true") sentThumbs.remove(uriStr)
+                        }
                     } else {
                         sentThumbs.remove(uriStr)
                     }
