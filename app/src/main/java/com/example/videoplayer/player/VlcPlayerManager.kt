@@ -11,6 +11,8 @@ import org.videolan.libvlc.MediaPlayer
 import org.videolan.libvlc.interfaces.IVLCVout
 import com.example.videoplayer.ui.VideoScaleMode
 
+data class PlaybackTrack(val id: Int, val name: String)
+
 class VlcPlayerManager(private val context: Context) {
     // Keep VLC's normal frame scheduling and decoder selection. Forcing
     // software decoding and disabling late-frame dropping can hurt playback
@@ -28,6 +30,7 @@ class VlcPlayerManager(private val context: Context) {
     var onStatusChanged: ((String) -> Unit)? = null
     var onTimeChanged: ((Long, Long) -> Unit)? = null
     var onVideoAspectChanged: ((Float) -> Unit)? = null
+    var onTracksChanged: (() -> Unit)? = null
 
     val isEngineReady: Boolean
         get() = libVLC != null && mediaPlayer != null && !isReleased
@@ -67,6 +70,8 @@ class VlcPlayerManager(private val context: Context) {
             MediaPlayer.Event.Stopped -> onStatusChanged?.invoke("Stopped")
             MediaPlayer.Event.EndReached -> onStatusChanged?.invoke("EndReached")
             MediaPlayer.Event.EncounteredError -> onStatusChanged?.invoke("Error")
+            MediaPlayer.Event.ESAdded,
+            MediaPlayer.Event.ESDeleted -> onTracksChanged?.invoke()
             MediaPlayer.Event.TimeChanged -> {
                 val mp = mediaPlayer ?: return@EventListener
                 try {
@@ -213,6 +218,48 @@ class VlcPlayerManager(private val context: Context) {
             Log.e("VlcPlayerManager", "playUrl error", e)
             onStatusChanged?.invoke("Error: ${e.message}")
         }
+    }
+
+    fun getAudioTracks(): List<PlaybackTrack> {
+        if (isReleased) return emptyList()
+        return try {
+            mediaPlayer?.getAudioTracks()?.map { PlaybackTrack(it.id, it.name.orEmpty()) }.orEmpty()
+        } catch (e: Throwable) {
+            Log.w("VlcPlayerManager", "Unable to read audio tracks", e)
+            emptyList()
+        }
+    }
+
+    fun getSubtitleTracks(): List<PlaybackTrack> {
+        if (isReleased) return emptyList()
+        return try {
+            mediaPlayer?.getSpuTracks()?.map { PlaybackTrack(it.id, it.name.orEmpty()) }.orEmpty()
+        } catch (e: Throwable) {
+            Log.w("VlcPlayerManager", "Unable to read subtitle tracks", e)
+            emptyList()
+        }
+    }
+
+    fun getSelectedAudioTrack(): Int = try {
+        if (isReleased) -1 else mediaPlayer?.getAudioTrack() ?: -1
+    } catch (_: Throwable) { -1 }
+
+    fun getSelectedSubtitleTrack(): Int = try {
+        if (isReleased) -1 else mediaPlayer?.getSpuTrack() ?: -1
+    } catch (_: Throwable) { -1 }
+
+    fun selectAudioTrack(trackId: Int): Boolean = try {
+        !isReleased && (mediaPlayer?.setAudioTrack(trackId) == true)
+    } catch (e: Throwable) {
+        Log.w("VlcPlayerManager", "Unable to select audio track $trackId", e)
+        false
+    }
+
+    fun selectSubtitleTrack(trackId: Int): Boolean = try {
+        !isReleased && (mediaPlayer?.setSpuTrack(trackId) == true)
+    } catch (e: Throwable) {
+        Log.w("VlcPlayerManager", "Unable to select subtitle track $trackId", e)
+        false
     }
 
     fun seekTo(timeMs: Long) {
