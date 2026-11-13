@@ -87,6 +87,7 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLDecoder
+import java.security.MessageDigest
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -100,6 +101,11 @@ enum class VideoScaleMode(val label: String) {
 enum class VideoRepeatMode(val label: String) {
     OFF("Повтор выкл"),
     REPEAT_ONE("Повтор одного")
+}
+
+private fun playbackProgressKey(uri: String): String {
+    val digest = MessageDigest.getInstance("SHA-256").digest(uri.toByteArray(Charsets.UTF_8))
+    return "position_" + digest.joinToString("") { "%02x".format(it) }
 }
 
 fun resolveVideoTitle(context: Context, uriString: String): String {
@@ -199,6 +205,11 @@ fun PlayerScreen(
     val context = LocalContext.current
     val config = ThemeConfigManager.currentConfig
     val resolvedTitle = remember(videoUri) { resolveVideoTitle(context, videoUri) }
+    val progressPrefs = remember { context.getSharedPreferences("playback_progress", Context.MODE_PRIVATE) }
+    val progressKey = remember(videoUri) { playbackProgressKey(videoUri) }
+    var savedResumePositionMs by remember(videoUri) { mutableLongStateOf(progressPrefs.getLong(progressKey, 0L)) }
+    var savedResumeDurationMs by remember(videoUri) { mutableLongStateOf(progressPrefs.getLong("${progressKey}_duration", 0L)) }
+    var resumePositionApplied by remember(videoUri) { mutableStateOf(false) }
 
     // Crash-proof player manager
     val playerManager = remember { VlcPlayerManager(context) }
@@ -255,6 +266,9 @@ fun PlayerScreen(
     var videoAspect by remember { mutableFloatStateOf(16f / 9f) }
     val coroutineScope = rememberCoroutineScope()
     var gaugeDismissJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    val latestCurrentTimeMs by rememberUpdatedState(currentTimeMs)
+    val latestTotalDurationMs by rememberUpdatedState(totalDurationMs)
+    val latestRepeatMode by rememberUpdatedState(repeatMode)
 
     var nativeVideoView by remember { mutableStateOf<VideoView?>(null) }
     var nativeMediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
@@ -277,6 +291,14 @@ fun PlayerScreen(
                 act.window.attributes = lp
                 val ctrl = WindowCompat.getInsetsController(act.window, act.window.decorView)
                 ctrl.show(WindowInsetsCompat.Type.systemBars())
+            }
+            val position = latestCurrentTimeMs
+            val duration = latestTotalDurationMs
+            if (position > 0L && (duration <= 0L || position < duration - 10_000L)) {
+                progressPrefs.edit()
+                    .putLong(progressKey, position)
+                    .putLong("${progressKey}_duration", duration)
+                    .apply()
             }
             try {
                 playerManager.release()
@@ -327,6 +349,44 @@ fun PlayerScreen(
         }
     }
 
+    // Persist progress periodically so playback can resume after leaving the player or closing the app.
+    LaunchedEffect(isPlaying, videoUri) {
+        if (!isPlaying) {
+            val position = latestCurrentTimeMs
+            val duration = latestTotalDurationMs
+            if (position > 0L && (duration <= 0L || position < duration - 10_000L)) {
+                progressPrefs.edit()
+                    .putLong(progressKey, position)
+                    .putLong("${progressKey}_duration", duration)
+                    .apply()
+                savedResumePositionMs = position
+                savedResumeDurationMs = duration
+            } else if (duration > 0L && position >= duration - 10_000L) {
+                progressPrefs.edit().remove(progressKey).remove("${progressKey}_duration").apply()
+                savedResumePositionMs = 0L
+                savedResumeDurationMs = 0L
+            }
+            return@LaunchedEffect
+        }
+        while (isPlaying) {
+            delay(5000L)
+            val position = latestCurrentTimeMs
+            val duration = latestTotalDurationMs
+            if (position > 0L && (duration <= 0L || position < duration - 10_000L)) {
+                progressPrefs.edit()
+                    .putLong(progressKey, position)
+                    .putLong("${progressKey}_duration", duration)
+                    .apply()
+                savedResumePositionMs = position
+                savedResumeDurationMs = duration
+            } else if (duration > 0L && position >= duration - 10_000L) {
+                progressPrefs.edit().remove(progressKey).remove("${progressKey}_duration").apply()
+                savedResumePositionMs = 0L
+                savedResumeDurationMs = 0L
+            }
+        }
+    }
+
     val beatPosMs by rememberUpdatedState(currentTimeMs)
     val beatDurMs by rememberUpdatedState(totalDurationMs)
     val beatTitle by rememberUpdatedState(resolvedTitle)
@@ -374,16 +434,41 @@ fun PlayerScreen(
         }
         playerManager.onStatusChanged = { status ->
             statusText = status
-            if (status == "Playing") isPlaying = true
-            else if (status == "Paused" || status == "Stopped") isPlaying = false
+            if (status == "Playing") {
+                isPlaying = true
+                if (!resumePositionApplied) {
+                    resumePositionApplied = true
+                    val resumeAt = savedResumePositionMs
+                    val savedDuration = savedResumeDurationMs
+                    if (resumeAt > 15_000L && (savedDuration <= 0L || resumeAt < savedDuration - 10_000L)) {
+                        playerManager.seekTo(resumeAt)
+                        currentTimeMs = resumeAt
+                        infoFeedbackText = "Продолжение с ${formatTime(resumeAt)}"
+                    }
+                }
+            } else if (status == "Paused" || status == "Stopped") isPlaying = false
             else if (status == "EndReached") {
-                if (repeatMode == VideoRepeatMode.REPEAT_ONE) {
+                if (latestRepeatMode == VideoRepeatMode.REPEAT_ONE) {
                     playerManager.seekTo(0)
                     playerManager.resume()
                 } else {
                     isPlaying = false
+                    progressPrefs.edit().remove(progressKey).remove("${progressKey}_duration").apply()
+                    savedResumePositionMs = 0L
+                    savedResumeDurationMs = 0L
                 }
             } else if (status.startsWith("Error")) {
+                val fallbackPosition = latestCurrentTimeMs
+                val fallbackDuration = latestTotalDurationMs
+                if (fallbackPosition > 0L) {
+                    savedResumePositionMs = fallbackPosition
+                    savedResumeDurationMs = fallbackDuration
+                    progressPrefs.edit()
+                        .putLong(progressKey, fallbackPosition)
+                        .putLong("${progressKey}_duration", fallbackDuration)
+                        .apply()
+                }
+                resumePositionApplied = false
                 useNativeFallback = true
                 infoFeedbackText = "Включен резервный медиа-движок Android"
             }
@@ -536,6 +621,18 @@ fun PlayerScreen(
                             setOnPreparedListener { mp ->
                                 nativeMediaPlayer = mp
                                 totalDurationMs = mp.duration.toLong()
+                                if (!resumePositionApplied) {
+                                    resumePositionApplied = true
+                                    val resumeAt = savedResumePositionMs
+                                    val savedDuration = savedResumeDurationMs
+                                    if (resumeAt > 15_000L && mp.duration > 0 &&
+                                        (savedDuration <= 0L || resumeAt < savedDuration - 10_000L) && resumeAt < mp.duration - 10_000L
+                                    ) {
+                                        mp.seekTo(resumeAt.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+                                        currentTimeMs = resumeAt
+                                        infoFeedbackText = "Продолжение с ${formatTime(resumeAt)}"
+                                    }
+                                }
                                 try {
                                     mp.playbackParams = mp.playbackParams.setSpeed(currentSpeed)
                                 } catch (e: Exception) {
