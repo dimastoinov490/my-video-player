@@ -283,11 +283,18 @@ class VlcPlayerManager(private val context: Context) {
         } catch (_: Throwable) {}
     }
 
-    fun setRate(rate: Float) {
-        if (isReleased) return
-        try {
-            mediaPlayer?.rate = rate
-        } catch (_: Throwable) {}
+    fun setRate(rate: Float): Boolean {
+        if (isReleased || rate <= 0f || rate > 4f) return false
+        return try {
+            val player = mediaPlayer ?: return false
+            player.rate = rate
+            // LibVLC's setter returns Unit, so verify the effective native value
+            // before the UI reports that the speed change succeeded.
+            kotlin.math.abs(player.rate - rate) < 0.01f
+        } catch (e: Throwable) {
+            Log.w("VlcPlayerManager", "Unable to change playback rate to $rate", e)
+            false
+        }
     }
 
     fun pause() {
