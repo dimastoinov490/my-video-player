@@ -512,6 +512,11 @@ fun PlayerScreen(
                             setVideoURI(uri)
                             setOnPreparedListener { mp ->
                                 totalDurationMs = mp.duration.toLong()
+                                try {
+                                    mp.playbackParams = mp.playbackParams.setSpeed(currentSpeed)
+                                } catch (e: Exception) {
+                                    Log.w("PlayerScreen", "Playback speed is unavailable in native fallback", e)
+                                }
                                 isPlaying = true
                                 mp.start()
                             }
@@ -1061,9 +1066,27 @@ fun PlayerScreen(
                                 FilterChip(
                                     selected = currentSpeed == spd,
                                     onClick = {
-                                        currentSpeed = spd
-                                        playerManager.setRate(spd)
-                                        infoFeedbackText = "Скорость: ${spd}x"
+                                        if (useNativeFallback) {
+                                            val nativePlayer = nativeVideoView
+                                            if (nativePlayer == null) {
+                                                infoFeedbackText = "Плеер ещё загружается"
+                                            } else {
+                                                try {
+                                                    nativePlayer.setPlaybackParams(
+                                                        nativePlayer.playbackParams.setSpeed(spd)
+                                                    )
+                                                    currentSpeed = spd
+                                                    infoFeedbackText = "Скорость: ${spd}x"
+                                                } catch (e: Exception) {
+                                                    Log.w("PlayerScreen", "Native playback speed failed", e)
+                                                    infoFeedbackText = "Эта скорость не поддерживается"
+                                                }
+                                            }
+                                        } else {
+                                            playerManager.setRate(spd)
+                                            currentSpeed = spd
+                                            infoFeedbackText = "Скорость: ${spd}x"
+                                        }
                                     },
                                     label = { Text("${spd}x", fontSize = 11.sp) },
                                     colors = FilterChipDefaults.filterChipColors(
