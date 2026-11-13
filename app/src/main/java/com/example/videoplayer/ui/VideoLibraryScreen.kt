@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -58,7 +60,12 @@ import androidx.compose.ui.geometry.Offset
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.SwipeRefreshIndicator
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -87,6 +94,19 @@ fun VideoLibraryScreen(
     var hasStoragePermission by remember {
         mutableStateOf(checkMediaPermissions(context))
     }
+    var videoLoadJob by remember { mutableStateOf<Job?>(null) }
+
+    fun startVideoLoad() {
+        videoLoadJob?.cancel()
+        videoLoadJob = loadVideosInternal(
+            context,
+            coroutineScope,
+            onVideosLoaded = { videos = it },
+            onStatus = { scanStatusText = it },
+            onRefreshing = { isRefreshing = it },
+            onBanner = { showScanBanner = it }
+        )
+    }
 
     // Permission launcher
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -97,7 +117,7 @@ fun VideoLibraryScreen(
         val granted = checkMediaPermissions(context)
         hasStoragePermission = granted
         if (granted) {
-            loadVideosInternal(context, coroutineScope, onVideosLoaded = { videos = it }, onStatus = { scanStatusText = it }, onRefreshing = { isRefreshing = it }, onBanner = { showScanBanner = it })
+            startVideoLoad()
         } else {
             scanStatusText = "Для просмотра видео необходимо разрешение на доступ к видеофайлам"
             showScanBanner = false
@@ -112,7 +132,7 @@ fun VideoLibraryScreen(
             return
         }
         hasStoragePermission = true
-        loadVideosInternal(context, coroutineScope, onVideosLoaded = { videos = it }, onStatus = { scanStatusText = it }, onRefreshing = { isRefreshing = it }, onBanner = { showScanBanner = it })
+        startVideoLoad()
     }
 
     LaunchedEffect(Unit) {
@@ -161,15 +181,23 @@ fun VideoLibraryScreen(
                 onOpenCustomUrl = onOpenCustomUrl,
                 onRefreshVideos = {
                     Toast.makeText(context, "Обновление списка видео…", Toast.LENGTH_SHORT).show()
+                    videoLoadJob?.cancel()
                     coroutineScope.launch {
                         if (!checkMediaPermissions(context)) {
                             loadVideos()
                             return@launch
                         }
-                        withContext(Dispatchers.IO) {
-                            MediaStoreHelper.requestMediaScan(context)
+                        try {
+                            withContext(Dispatchers.IO) {
+                                MediaStoreHelper.requestMediaScan(context)
+                            }
+                            startVideoLoad()
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            Log.e("VideoLibraryScreen", "Manual media refresh failed", e)
+                            scanStatusText = "Не удалось обновить список видео"
                         }
-                        loadVideos()
                     }
                 },
                 currentNavIndex = bottomNavIndex,
@@ -189,26 +217,37 @@ private fun loadVideosInternal(
     onStatus: (String) -> Unit,
     onRefreshing: (Boolean) -> Unit,
     onBanner: (Boolean) -> Unit
-) {
+): Job = coroutineScope.launch {
+    val loadJob = currentCoroutineContext()[Job]
+    val mainHandler = Handler(Looper.getMainLooper())
     onRefreshing(true)
     onBanner(true)
     onStatus("Инициализация поиска видеофайлов...")
 
-    coroutineScope.launch {
-        try {
-            val list = withContext(Dispatchers.IO) {
-                MediaStoreHelper.getVideos(context) { path ->
-                    onStatus(path)
+    try {
+        val list = withContext(Dispatchers.IO) {
+            MediaStoreHelper.getVideos(context) { path ->
+                // MediaStore scanning runs on IO; never mutate Compose state from that thread.
+                if (loadJob?.isActive == true) {
+                    mainHandler.post {
+                        if (loadJob.isActive) onStatus(path)
+                    }
                 }
             }
-            onVideosLoaded(list)
-            onStatus("Найдено: ${list.size} видеофайлов")
-            delay(1500)
-        } catch (e: Exception) {
-            Log.e("VideoLibraryScreen", "Failed to load videos", e)
-            onVideosLoaded(emptyList())
-            onStatus("Ошибка сканирования медиа")
-        } finally {
+        }
+        currentCoroutineContext().ensureActive()
+        onVideosLoaded(list)
+        onStatus("Найдено: ${list.size} видеофайлов")
+        delay(1500)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Log.e("VideoLibraryScreen", "Failed to load videos", e)
+        onVideosLoaded(emptyList())
+        onStatus("Ошибка сканирования медиа")
+    } finally {
+        // A cancelled older request must not hide the progress of a newer request.
+        if (currentCoroutineContext().isActive) {
             onRefreshing(false)
             onBanner(false)
         }
