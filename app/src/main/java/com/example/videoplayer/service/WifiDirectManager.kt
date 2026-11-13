@@ -31,6 +31,8 @@ object WifiDirectManager {
     private var hotspotReservation: WifiManager.LocalOnlyHotspotReservation? = null
     private var hotspotCallback: WifiManager.LocalOnlyHotspotCallback? = null
     private var activeInfo: WifiDirectInfo? = null
+    private var isStarting = false
+    private var operationGeneration = 0
     private var p2pManager: WifiP2pManager? = null
     private var p2pChannel: WifiP2pManager.Channel? = null
 
@@ -50,11 +52,13 @@ object WifiDirectManager {
             onComplete(activeInfo!!)
             return
         }
-        if (hotspotCallback != null) {
-            onStatus("Точка доступа уже запускается...")
+        if (isStarting) {
+            onStatus("Подключение Wi‑Fi уже запускается...")
             return
         }
 
+        isStarting = true
+        val generation = ++operationGeneration
         val appContext = context.applicationContext
         val manager = appContext.getSystemService(Context.WIFI_P2P_SERVICE) as? WifiP2pManager
         val channel = manager?.initialize(appContext, Looper.getMainLooper(), null)
@@ -67,6 +71,10 @@ object WifiDirectManager {
                 manager.createGroup(channel, object : WifiP2pManager.ActionListener {
                     override fun onSuccess() {
                         manager.requestGroupInfo(channel) { group: WifiP2pGroup? ->
+                            if (generation != operationGeneration) {
+                                try { manager.removeGroup(channel, null) } catch (_: Exception) { }
+                                return@requestGroupInfo
+                            }
                             if (group != null && !group.networkName.isNullOrBlank() && !group.passphrase.isNullOrBlank()) {
                                 val info = WifiDirectInfo(
                                     ssid = group.networkName,
@@ -77,12 +85,13 @@ object WifiDirectManager {
                                 currentSsid = info.ssid
                                 currentPass = info.password
                                 activeInfo = info
+                                isStarting = false
                                 isEnabled = true
                                 onStatus("Wi‑Fi Direct группа активна: ${info.ssid}")
                                 onComplete(info)
                             } else {
                                 Log.w(TAG, "Wi-Fi Direct group did not provide usable credentials")
-                                fallbackToLocalHotspot(appContext, onStatus, onComplete)
+                                fallbackToLocalHotspot(appContext, generation, onStatus, onComplete)
                             }
                         }
                     }
@@ -102,6 +111,8 @@ object WifiDirectManager {
     }
 
     fun stop(context: Context) {
+        operationGeneration++
+        isStarting = false
         isEnabled = false
         activeInfo = null
 
@@ -138,10 +149,13 @@ object WifiDirectManager {
 
     private fun fallbackToLocalHotspot(
         context: Context,
+        generation: Int,
         onStatus: (String) -> Unit,
         onComplete: (WifiDirectInfo) -> Unit
     ) {
+        if (generation != operationGeneration) return
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            isStarting = false
             isEnabled = false
             onStatus("Wi‑Fi Direct недоступен, а системная точка доступа требует Android 8.0 или новее")
             return
@@ -149,6 +163,7 @@ object WifiDirectManager {
 
         val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
         if (wifiManager == null) {
+            isStarting = false
             isEnabled = false
             onStatus("Служба Wi‑Fi недоступна на этом устройстве")
             return
@@ -157,6 +172,10 @@ object WifiDirectManager {
         onStatus("Запуск системной локальной точки доступа...")
         val callback = object : WifiManager.LocalOnlyHotspotCallback() {
             override fun onStarted(reservation: WifiManager.LocalOnlyHotspotReservation) {
+                if (generation != operationGeneration) {
+                    reservation.close()
+                    return
+                }
                 hotspotCallback = this
                 hotspotReservation = reservation
 
@@ -178,6 +197,7 @@ object WifiDirectManager {
                         reservation.close()
                         hotspotReservation = null
                         hotspotCallback = null
+                        isStarting = false
                         isEnabled = false
                         activeInfo = null
                         onStatus("Android запустил точку доступа, но не предоставил её данные для подключения")
@@ -195,6 +215,7 @@ object WifiDirectManager {
                     currentSsid = info.ssid
                     currentPass = info.password
                     activeInfo = info
+                    isStarting = false
                     isEnabled = true
                     onStatus("Локальная точка доступа активна: ${info.ssid}")
                     onComplete(info)
@@ -207,23 +228,28 @@ object WifiDirectManager {
                     hotspotReservation = null
                     hotspotCallback = null
                     activeInfo = null
+                    isStarting = false
                     isEnabled = false
                     onStatus("Не удалось получить данные локальной точки доступа")
                 }
             }
 
             override fun onStopped() {
+                if (generation != operationGeneration) return
                 hotspotReservation = null
                 hotspotCallback = null
                 activeInfo = null
+                isStarting = false
                 isEnabled = false
                 onStatus("Локальная точка доступа остановлена")
             }
 
             override fun onFailed(reason: Int) {
+                if (generation != operationGeneration) return
                 hotspotReservation = null
                 hotspotCallback = null
                 activeInfo = null
+                isStarting = false
                 isEnabled = false
                 Log.w(TAG, "Local-only hotspot failed ($reason)")
                 onStatus("Не удалось создать точку доступа Wi‑Fi (ошибка $reason)")
@@ -235,11 +261,13 @@ object WifiDirectManager {
             wifiManager.startLocalOnlyHotspot(callback, Handler(Looper.getMainLooper()))
         } catch (e: SecurityException) {
             hotspotCallback = null
+            isStarting = false
             isEnabled = false
             Log.e(TAG, "Missing permission to start local-only hotspot", e)
             onStatus("Нет разрешения Android для создания точки доступа Wi‑Fi")
         } catch (e: Exception) {
             hotspotCallback = null
+            isStarting = false
             isEnabled = false
             Log.e(TAG, "Unable to start local-only hotspot", e)
             onStatus("Не удалось запустить точку доступа Wi‑Fi: ${e.message ?: "неизвестная ошибка"}")
