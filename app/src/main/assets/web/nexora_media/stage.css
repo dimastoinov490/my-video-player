@@ -1,0 +1,71 @@
+/* Фиксированная сцена 1600x900 (16:9, как на макете). Масштабируется ТОЛЬКО
+   пропорционально (один коэффициент --s), центрируется со свободными полями.
+   Если окно портретное, сцена поворачивается на 90° (--r), а не перестраивается.
+   Переменные --s --r --tx --ty задаёт app.js (fit). */
+:root{--s:1;--r:0deg;--tx:0px;--ty:0px}
+  html,body{overflow:hidden;height:100%}
+  .app{
+    position:absolute;left:0;top:0;
+    width:1600px;height:900px;min-height:0;max-width:none;margin:0;padding:0;
+    display:block;transform:translate(var(--tx),var(--ty)) rotate(var(--r)) scale(var(--s));transform-origin:0 0;
+  }
+  .app .top{position:absolute;left:0;top:0;width:1600px;height:120px;padding:0;min-height:0;display:block}
+  .brand{position:absolute;left:168px;top:22px;margin:0;gap:28px}
+  .logo{width:104px;height:92px}
+  .brand h1{font-size:46px;margin-top:8px}
+  .brand p{font-size:23px;margin-top:10px}
+  .brand>div{padding-top:4px}
+  .search{position:absolute;left:1030px;top:32px;width:340px;height:56px}
+  .menu-btn{position:absolute;left:1472px;top:18px;width:94px;height:94px;border-radius:26px}
+  .menu-btn svg{width:42px;height:42px}
+
+  .side{position:absolute;left:10px;top:143px;width:180px;height:735px;min-height:0;padding:12px 8px;border-radius:34px}
+  .nav{max-height:none;font-size:20px;gap:8px}
+  .nav svg{width:56px;height:56px}
+
+  .main{position:absolute;left:245px;top:140px;width:1315px;height:748px;padding:6px 14px 20px 0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#8bbcff transparent}
+  .stats{grid-template-columns:270px 280px 311px 329px;gap:37px;margin-bottom:26px}
+  .stat{height:128px;padding:0 30px;gap:22px;border-radius:34px}
+  .stat svg{width:64px;height:64px}
+  .stat b{font-size:42px}
+  .stat span{font-size:23px;margin-top:6px}
+  .sec-head{margin:0 0 18px}
+  .sec-head h2{font-size:30px}
+  .sec-head h2::before{height:42px}
+  .app[data-view=home] .sec-head,.app[data-view=home] .list{max-width:945px}
+  .link{font-size:22px}
+  .row{height:136px;gap:30px;border-radius:30px}
+  .thumb{width:304px}
+  .play{width:62px;height:62px}.play svg{width:28px;height:28px}
+  .dur{font-size:20px;left:14px;bottom:10px;padding:3px 10px}
+  .thumb .t-title{font-size:20px}
+  .meta h3{font-size:26px}
+  .meta p{font-size:21px}
+
+  .storage{position:absolute;left:1224px;top:342px;width:355px;margin:0;padding:34px 30px 28px;border-radius:44px;display:block;text-align:center}
+  .app:not([data-view=home]) .storage,.app:not([data-view=home]) .status{display:none}
+  .ring{width:196px;height:196px;margin:0 auto 22px}.ring-ico{width:84px;height:84px}
+  .used{font-size:25px}
+  .storage p{font-size:21px;text-align:left}.storage .free{font-size:20px}
+  .status{position:absolute;left:1290px;top:760px;font-size:24px}
+  .status svg{width:38px;height:38px}
+
+  /* фон и волны: размеры макета при 1600x900, без vh/vw */
+  .bg{position:absolute;left:0;top:0;width:1600px;height:900px;z-index:0}
+  .wave-top{height:234px}.wave-bot{height:198px}
+  .app>*:not(.bg){position:absolute}
+  .app .top,.app .side,.app .main,.app .storage,.app .status{z-index:1}
+
+  .toast{position:absolute;left:800px;bottom:28px;z-index:50}
+
+  /* плеер лежит в top layer вне сцены: масштабируем так же, как сцену */
+  .player{position:fixed;left:50%;top:50%;margin:0;width:920px;max-width:none;
+    transform:translate(-50%,-50%) rotate(var(--r)) scale(var(--s))}
+  .player.full{width:1460px;max-width:none}
+  .nx-dlg{width:540px;max-width:none}
+  .player[open]{animation:pop-p .3s cubic-bezier(.2,.9,.3,1.2)}
+  #pBody video{max-height:630px}
+  #pBody img{max-height:666px}
+  .player.full #pBody video,.player.full #pBody img{max-height:760px}
+  .mail-box{height:580px}
+@keyframes pop-p{from{opacity:0;transform:translate(-50%,-50%) rotate(var(--r)) scale(calc(var(--s)*.94))}}

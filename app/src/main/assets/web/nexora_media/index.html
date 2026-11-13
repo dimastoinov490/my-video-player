@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Nexora Media — Твой медиа-сервер</title>
+<link rel="stylesheet" href="fonts/fonts.css">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="stage.css">
+</head>
+<body>
+
+<!-- Иконки -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="gBlue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b9bff"/><stop offset="1" stop-color="#0b4fd6"/></linearGradient>
+    <symbol id="i-logo" viewBox="0 0 64 56"><path d="M4 6h56L35 50a3.2 3.2 0 0 1-5.6 0z" fill="none" stroke="url(#gBlue)" stroke-width="9" stroke-linejoin="round"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2.6 2.5 10.5V21a1 1 0 0 0 1 1h5.8v-6.2h5.4V22h5.8a1 1 0 0 0 1-1V10.5z"/><path fill="#fff" d="M12 7.8a1 1 0 0 1 .65.24l4.3 3.6V20h-2.4v-5.2H9.45V20h-2.4v-8.36l4.3-3.6A1 1 0 0 1 12 7.8z" opacity=".0"/></symbol>
+    <symbol id="i-film" viewBox="0 0 24 24"><path fill="currentColor" d="m3.2 7.3 15-3.4.8 3.4zM2 9h20v10.5a1.5 1.5 0 0 1-1.5 1.5h-17A1.5 1.5 0 0 1 2 19.5zm3 1.8v2.6h3.2v-2.6zm5.6 0v2.6h3.2v-2.6zm5.6 0v2.6h2.8v-2.6z"/></symbol>
+    <symbol id="i-note" viewBox="0 0 24 24"><path fill="currentColor" d="M9 3.5v11.7A4 4 0 1 0 11.5 19V8.2l8-1.8v6.8a4 4 0 1 0 2.5 3.7V2z"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><path fill="currentColor" d="M4 3h16a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm1.5 14.5h13l-4.2-5.6-3.3 4.2-2.3-2.8zM8.5 6.6a1.9 1.9 0 1 0 0 3.8 1.9 1.9 0 0 0 0-3.8z"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path fill="currentColor" d="M3.5 4h6l2.2 2.4h8.8A1.5 1.5 0 0 1 22 7.9V19a1.5 1.5 0 0 1-1.5 1.5h-17A1.5 1.5 0 0 1 2 19V5.5A1.5 1.5 0 0 1 3.5 4z"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><path fill="currentColor" d="M10.3 2h3.4l.5 2.7 1.7.7 2.3-1.5 2.4 2.4-1.5 2.3.7 1.7 2.7.5v3.4l-2.7.5-.7 1.7 1.5 2.3-2.4 2.4-2.3-1.5-1.7.7-.5 2.7h-3.4l-.5-2.7-1.7-.7-2.3 1.5-2.4-2.4 1.5-2.3-.7-1.7L2 13.7v-3.4l2.7-.5.7-1.7-1.5-2.3 2.4-2.4 2.3 1.5 1.7-.7zM12 8.4a3.6 3.6 0 1 0 0 7.2 3.6 3.6 0 0 0 0-7.2z"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path fill="currentColor" d="M7 4.2v15.6a1 1 0 0 0 1.5.86l13-7.8a1 1 0 0 0 0-1.72l-13-7.8A1 1 0 0 0 7 4.2z"/></symbol>
+    <symbol id="i-play-o" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" d="M6 3.8v16.4a.6.6 0 0 0 .9.5l13.6-8.2a.6.6 0 0 0 0-1L6.9 3.3a.6.6 0 0 0-.9.5z"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path fill="currentColor" d="M6 4h4.2v16H6zM13.8 4H18v16h-4.2z"/></symbol>
+    <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="12" cy="4.5" r="2.2" fill="currentColor"/><circle cx="12" cy="12" r="2.2" fill="currentColor"/><circle cx="12" cy="19.5" r="2.2" fill="currentColor"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M4 12h15M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-db" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C7.6 2 4 3.3 4 5v2c0 1.7 3.6 3 8 3s8-1.3 8-3V5c0-1.7-3.6-3-8-3zM4 9.2V12c0 1.7 3.6 3 8 3s8-1.3 8-3V9.2C18.4 10.4 15.4 11.2 12 11.2S5.6 10.4 4 9.2zm0 5V17c0 1.7 3.6 3 8 3s8-1.3 8-3v-2.8c-1.6 1.2-4.6 2-8 2s-6.4-.8-8-2z"/></symbol>
+    <symbol id="i-wifi" viewBox="0 0 24 24"><path fill="currentColor" d="M12 18.6a1.9 1.9 0 1 0 0 3.8 1.9 1.9 0 0 0 0-3.8zM12 12c-2 0-3.9.8-5.3 2.2l1.8 1.8a5.3 5.3 0 0 1 7 0l1.8-1.8A7.7 7.7 0 0 0 12 12zm0-5.6c-3.5 0-6.700 1.400-9.100 3.700l1.800 1.800a10.500 10.500 0 0 1 14.600 0l1.800-1.800A13 13 0 0 0 12 6.400z"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" d="M5 4v16M12 4v16M19 4v16"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" d="m5 5 14 14M19 5 5 19"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" d="M10.5 3.5a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM16 16l5 5"/></symbol>
+    <symbol id="i-dl" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M12 4v11M7 11l5 5 5-5M5 20h14"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" d="M15 5l-7 7 7 7"/></symbol>
+    <symbol id="i-next" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></symbol>
+    <symbol id="i-full" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M4 9V5a1 1 0 0 1 1-1h4M20 9V5a1 1 0 0 0-1-1h-4M4 15v4a1 1 0 0 0 1 1h4M20 15v4a1 1 0 0 1-1 1h-4"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><rect x="7" y="2.5" width="10" height="19" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M11 18.5h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-tablet" viewBox="0 0 24 24"><rect x="4.5" y="3" width="15" height="18" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M11 18h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-pc" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 20h8M12 16v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.6-3 8.5-7 10-4-1.5-7-5.4-7-10V6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M5.6 5.6l12.8 12.8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M14.5 7.5l3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-attach" viewBox="0 0 24 24"><path d="M20 11.5l-8.2 8.2a5 5 0 0 1-7.1-7.1l8.7-8.7a3.3 3.3 0 0 1 4.7 4.7L9.4 17.3a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3.5 7l8.5 6 8.5-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-tools" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="7.6" r="1" fill="currentColor"/></symbol>
+    <symbol id="i-out" viewBox="0 0 24 24"><path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4M20 12H9M16 8l4 4-4 4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4.5" y="10.5" width="15" height="10.5" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h8l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M14 3v5h5M8 13h8M8 17h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7.5V12l3 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20.5S3.5 15.2 3.5 9.3A4.5 4.5 0 0 1 12 7.2a4.5 4.5 0 0 1 8.5 2.1C20.5 15.2 12 20.5 12 20.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+    <symbol id="i-anim" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5zM3 12.5l9 5 9-5M3 16.5l9 5 9-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  </defs>
+</svg>
+
+
+<div class="app" id="app">
+<div class="bg" aria-hidden="true">
+  <svg class="wave wave-top" viewBox="0 0 1440 300" preserveAspectRatio="none">
+    <defs>
+      <linearGradient id="wt" x1="0" x2="1"><stop offset="0" stop-color="#2d8cff"/><stop offset=".5" stop-color="#9fd0ff"/><stop offset="1" stop-color="#1f6fff"/></linearGradient>
+    </defs>
+    <path d="M0 0h1440v120c-160 70-300 60-470 10S620 40 440 110 100 170 0 90z" fill="url(#wt)" opacity=".55"/>
+    <path d="M0 0h1440v70c-200 60-330 40-500-10S560 10 360 60 90 100 0 40z" fill="#1a73ff" opacity=".35"/>
+    <path d="M0 80c200 50 380-30 560-10s340 70 520 10 260-40 360 10" fill="none" stroke="#fff" stroke-width="3" opacity=".8"/>
+  </svg>
+  <svg class="wave wave-bot" viewBox="0 0 1440 260" preserveAspectRatio="none">
+    <path d="M0 140c220-90 420 40 660 0s420-110 780-40v160H0z" fill="#2a86ff" opacity=".4"/>
+    <path d="M0 190c260-70 460 20 700 0s450-60 740-10v80H0z" fill="#0f5fe0" opacity=".45"/>
+    <path d="M0 120c220-70 420 50 660 10s420-90 780-20" fill="none" stroke="#fff" stroke-width="3" opacity=".9"/>
+    <path d="M0 150c240-60 440 50 680 20s420-70 760-20" fill="none" stroke="#7bbcff" stroke-width="2" opacity=".8"/>
+  </svg>
+</div>
+  <header class="top">
+    <div class="brand">
+      <svg class="logo"><use href="#i-logo"/></svg>
+      <div>
+        <h1>Nexora <span>Media</span></h1>
+        <p data-i18n="subtitle">Твой медиа-сервер</p>
+      </div>
+    </div>
+    <label class="search glass">
+      <svg><use href="#i-search"/></svg>
+      <input id="search" type="search" placeholder="Поиск по библиотеке" autocomplete="off">
+    </label>
+    <button class="menu-btn glass" id="menuBtn" aria-label="Меню"><svg><use href="#i-menu"/></svg><span class="menu-badge" id="menuBadge" hidden></span></button>
+  </header>
+
+  <nav class="side glass" id="side" aria-label="Разделы">
+    <button class="nav active" data-view="home"><svg><use href="#i-home"/></svg><span>Главная</span></button>
+    <button class="nav" data-view="video"><svg><use href="#i-film"/></svg><span>Видео</span></button>
+    <button class="nav" data-view="audio"><svg><use href="#i-note"/></svg><span>Аудио</span></button>
+    <button class="nav" data-view="photo"><svg><use href="#i-image"/></svg><span>Фото</span></button>
+    <button class="nav" data-view="folders"><svg><use href="#i-folder"/></svg><span>Папки</span></button>
+    <button class="nav" data-view="settings"><svg><use href="#i-gear"/></svg><span>Настройки</span><span class="nav-dot" id="navSetDot" hidden></span></button>
+  </nav>
+
+  <main class="main" id="main"></main>
+
+  <aside class="storage glass" id="storage" aria-label="Хранилище">
+    <div class="ring" id="ring"><svg class="ring-svg" viewBox="0 0 120 120"><circle class="ring-bg" cx="60" cy="60" r="52"/><circle class="ring-fg" id="ringFg" cx="60" cy="60" r="52"/></svg><svg class="ring-ico"><use href="#i-db"/></svg></div>
+    <div class="used"><b id="usedTxt"></b> / <span id="totalTxt"></span></div>
+    <div class="bar"><i id="barFill"></i></div>
+    <p><span data-i18n="usedLabel">Занято</span>: <b id="pctTxt"></b></p>
+    <p class="free"><span data-i18n="freeLabel">Свободно</span>: <span id="freeTxt"></span></p>
+  </aside>
+
+  <div class="toast" id="toast" role="status"></div>
+  <div class="status" id="status" role="button" tabindex="0" aria-label="Состояние сервера">
+    <svg><use href="#i-wifi"/></svg><span id="statusTxt">Сервер онлайн</span>
+    <div class="status-pop glass" id="statusPop">
+      <b>Адрес сервера</b>
+      <span id="popAddr">—</span>
+      <b>Сигнал Wi-Fi</b>
+      <span id="popSig">—</span>
+    </div>
+  </div>
+</div>
+
+<!-- Плеер -->
+<dialog id="player" class="player">
+  <div class="player-head">
+    <div class="player-meta"><h3 id="pTitle"></h3><small id="pMeta"></small></div>
+    <div class="player-actions">
+      <button class="icon-btn" id="pPrev" hidden aria-label="Назад"><svg><use href="#i-back"/></svg></button>
+      <button class="icon-btn" id="pNext" hidden aria-label="Вперёд"><svg><use href="#i-next"/></svg></button>
+      <button class="icon-btn" id="pFs" hidden aria-label="На весь экран"><svg><use href="#i-full"/></svg></button>
+      <a class="icon-btn" id="pDl" hidden href="#" download aria-label="Скачать"><svg><use href="#i-dl"/></svg></a>
+      <button class="icon-btn" id="pClose" aria-label="Закрыть"><svg><use href="#i-close"/></svg></button>
+    </div>
+  </div>
+  <div id="pBody"></div>
+</dialog>
+
+<!-- Диалог подтверждения / ввода -->
+<dialog id="nxDlg" class="player nx-dlg">
+  <div class="nx-dlg-box glass">
+    <h3 id="dT"></h3>
+    <p id="dP"></p>
+    <input class="nx-input" id="dI" hidden autocomplete="off">
+    <div class="nx-dlg-act">
+      <button class="nx-btn" id="dNo" type="button">Отмена</button>
+      <button class="nx-btn primary" id="dYes" type="button">OK</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- Блокировка по расписанию / лимиту -->
+<dialog id="nxLock" class="player nx-dlg">
+  <div class="nx-dlg-box glass">
+    <h3 id="lkT"></h3>
+    <p id="lkP"></p>
+    <div class="nx-dlg-act">
+      <a class="nx-btn primary" href="/logout">Выйти</a>
+    </div>
+  </div>
+</dialog>
+
+<!--NEXORA_DATA-->
+<script src="app.js"></script>
+</body>
+</html>

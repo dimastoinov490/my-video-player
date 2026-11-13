@@ -973,6 +973,9 @@ object LocalHttpShareServer {
                             sendResponse(output, 404, "application/json; charset=UTF-8", "{\"error\":\"not_found\"}".toByteArray(Charsets.UTF_8), isHead, extraHeaders = listOf("Cache-Control: no-store"), needDevCookie = needDevCookie)
                         }
                     }
+                    tryServeNexoraMediaAsset(output, decodedPath, rangeHeader, context, isHead, needDevCookie) -> {
+                        // Served static asset from assets/web/nexora_media/
+                    }
                     else -> {
                         val notFound = "404 Not Found"
                         sendResponse(output, 404, "text/plain; charset=UTF-8", notFound.toByteArray(Charsets.UTF_8), isHead, needDevCookie = needDevCookie)
@@ -3480,11 +3483,22 @@ object LocalHttpShareServer {
 
         val jsonString = jsonBuilder.toString().replace("</", "<\\/")
 
+        val style = HttpServerConfig.getServerStyle(context)
+        val indexAssetPath = if (style == HttpServerConfig.STYLE_CLASSIC) {
+            "web/index.html"
+        } else {
+            "web/nexora_media/index.html"
+        }
+
         val rawHtml = try {
-            context.assets.open("web/index.html").bufferedReader(Charsets.UTF_8).use { it.readText() }
+            context.assets.open(indexAssetPath).bufferedReader(Charsets.UTF_8).use { it.readText() }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed reading web/index.html from assets", e)
-            null
+            Log.e(TAG, "Failed reading $indexAssetPath from assets", e)
+            try {
+                context.assets.open("web/index.html").bufferedReader(Charsets.UTF_8).use { it.readText() }
+            } catch (_: Exception) {
+                null
+            }
         }
 
         val html = if (rawHtml != null && rawHtml.contains("<!--NEXORA_DATA-->")) {
@@ -3496,6 +3510,7 @@ object LocalHttpShareServer {
         val data = html.toByteArray(Charsets.UTF_8)
         val sb = StringBuilder("HTTP/1.1 200 OK\r\n")
             .append("Content-Type: text/html; charset=UTF-8\r\n")
+            .append("Cache-Control: no-store\r\n")
             .append("Content-Length: ${data.size}\r\n")
         if (needDevCookie != null) {
             sb.append("Set-Cookie: nx_dev=$needDevCookie; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly\r\n")
@@ -3507,6 +3522,91 @@ object LocalHttpShareServer {
             output.write(data)
         }
         output.flush()
+    }
+
+    private fun tryServeNexoraMediaAsset(
+        output: OutputStream,
+        decodedPath: String,
+        rangeHeader: String?,
+        context: Context,
+        isHead: Boolean,
+        needDevCookie: String?
+    ): Boolean {
+        val normalized = decodedPath.removePrefix("/")
+        if (normalized.isEmpty() || normalized.contains("..") || normalized.contains("\\") || normalized.contains('\u0000')) {
+            return false
+        }
+        val relPath = when {
+            normalized == "style.css" ||
+            normalized == "stage.css" ||
+            normalized == "app.js" ||
+            normalized.startsWith("fonts/") ||
+            normalized.startsWith("media/") -> normalized
+            normalized.startsWith("nexora_media/") -> normalized.removePrefix("nexora_media/")
+            else -> return false
+        }
+        if (relPath.isEmpty() || relPath.endsWith("/")) return false
+
+        val assetPath = "web/nexora_media/$relPath"
+        val bytes = try {
+            context.assets.open(assetPath).use { it.readBytes() }
+        } catch (_: Exception) {
+            return false
+        }
+
+        val ext = relPath.substringAfterLast('.', "").lowercase()
+        val contentType = when (ext) {
+            "css" -> "text/css; charset=UTF-8"
+            "js" -> "application/javascript; charset=UTF-8"
+            "html" -> "text/html; charset=UTF-8"
+            "svg" -> "image/svg+xml"
+            "woff2" -> "font/woff2"
+            "woff" -> "font/woff"
+            "ttf" -> "font/ttf"
+            "json" -> "application/json; charset=UTF-8"
+            else -> getMimeTypeByExtension(ext)
+        }
+
+        val totalLength = bytes.size
+        if (!rangeHeader.isNullOrBlank() && rangeHeader.startsWith("bytes=") && totalLength > 0) {
+            val rangeVal = rangeHeader.removePrefix("bytes=").trim()
+            val dashIdx = rangeVal.indexOf('-')
+            if (dashIdx != -1) {
+                val startStr = rangeVal.substring(0, dashIdx).trim()
+                val endStr = rangeVal.substring(dashIdx + 1).trim()
+                val start = startStr.toIntOrNull()?.coerceIn(0, totalLength - 1) ?: 0
+                val end = (endStr.toIntOrNull() ?: (totalLength - 1)).coerceIn(start, totalLength - 1)
+                val len = end - start + 1
+                val sb = StringBuilder("HTTP/1.1 206 Partial Content\r\n")
+                    .append("Content-Type: $contentType\r\n")
+                    .append("Accept-Ranges: bytes\r\n")
+                    .append("Content-Range: bytes $start-$end/$totalLength\r\n")
+                    .append("Content-Length: $len\r\n")
+                    .append("Cache-Control: public, max-age=3600\r\n")
+                if (needDevCookie != null) {
+                    sb.append("Set-Cookie: nx_dev=$needDevCookie; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly\r\n")
+                }
+                sb.append("Connection: close\r\n\r\n")
+                output.write(sb.toString().toByteArray(Charsets.UTF_8))
+                if (!isHead) {
+                    output.write(bytes, start, len)
+                }
+                output.flush()
+                return true
+            }
+        }
+
+        val cacheHeader = if (ext == "css" || ext == "js") "Cache-Control: no-cache" else "Cache-Control: public, max-age=86400"
+        sendResponse(
+            output = output,
+            code = 200,
+            contentType = contentType,
+            data = bytes,
+            isHead = isHead,
+            extraHeaders = listOf("Accept-Ranges: bytes", cacheHeader),
+            needDevCookie = needDevCookie
+        )
+        return true
     }
 
     private fun sendHtmlLogin(

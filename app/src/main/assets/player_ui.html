@@ -329,6 +329,18 @@ svg.ic{width:1em;height:1em;display:block}
     <div class="lbl item" style="--i:6;margin:calc(10*var(--u)) calc(8*var(--u)) calc(18*var(--u))">Папка вещания файлов:</div>
     <div id="l-folders"></div>
 
+    <div class="lbl item" style="--i:11;margin:calc(18*var(--u)) calc(8*var(--u)) calc(16*var(--u))">Стиль сервера:</div>
+    <div id="l-server-styles">
+      <div class="card item sel" style="--i:11" data-style="nexora_media">
+        <div class="body"><div class="t" style="font-size:calc(29*var(--u))">Nexora Media</div><div class="s" style="white-space:normal">Новый веб-интерфейс медиа-сервера (по умолчанию)</div></div>
+        <div class="rd"><svg class="ic"><use href="#i-check"/></svg></div>
+      </div>
+      <div class="card item" style="--i:11" data-style="classic">
+        <div class="body"><div class="t" style="font-size:calc(29*var(--u))">Classic</div><div class="s" style="white-space:normal">Прежний веб-интерфейс сервера</div></div>
+        <div class="rd"><svg class="ic"><use href="#i-check"/></svg></div>
+      </div>
+    </div>
+
     <div class="row item" style="--i:12"><b>Передача по QR и Wi‑Fi Direct</b><span class="caps">Wi‑Fi</span></div>
     <div class="card static item" style="--i:13"><div class="tile"><svg class="ic"><use href="#i-wifi"/></svg></div>
       <div class="body"><div class="t">Wi‑Fi Direct &amp; QR передача</div><div class="s" id="wf-status" style="white-space:normal">Прямое подключение по QR с паролем от Wi‑Fi Direct</div></div>
@@ -823,7 +835,7 @@ const callB = (f, ...a) => { try { return window.AndroidBridge[f](...a); } catch
 const $ = id => document.getElementById(id);
 
 const mock = {
-  share: { running:false, url:'http://192.168.1.23:8080', port:8080, error:'', authRequired:false, username:'admin', password:'1234', folder:'all',
+  share: { running:false, url:'http://192.168.1.23:8080', port:8080, error:'', authRequired:false, username:'admin', password:'1234', folder:'all', serverStyle:'nexora_media',
            wifi:{ enabled:false, ssid:'Nexora-Direct-Share', pass:'nexora8888', qrPayload:'WIFI:T:WPA;S:Nexora-Direct-Share;P:nexora8888;;', status:'' } },
   settings: { hw_accel:true, bg_play:false, show_buffering_status:true, auto_rotate:true }
 };
@@ -860,7 +872,7 @@ function shareAct(fn, ...args){
   if (PREVIEW){
     const s = mock.share;
     if (fn==='shareSetServer') s.running = args[0];
-    else if (fn==='shareSetConfig'){ const [k,v]=args; if(k==='auth_required') s.authRequired = (v==='true'); else if(k==='username') s.username=v; else if(k==='password') s.password=v; else if(k==='folder') s.folder=v; }
+    else if (fn==='shareSetConfig'){ const [k,v]=args; if(k==='auth_required') s.authRequired = (v==='true'); else if(k==='username') s.username=v; else if(k==='password') s.password=v; else if(k==='folder') s.folder=v; else if(k==='server_style') s.serverStyle=v; }
     else if (fn==='shareWifi') s.wifi.enabled = args[0];
     else if (fn==='shareResetAdmin'){ s.adminUsername='admin'; s.adminPassword='admin'; s.adminDefault=true; }
   } else callB(fn, ...args);
@@ -869,6 +881,7 @@ function shareAct(fn, ...args){
 function buildFolders(){
   $('l-folders').innerHTML = FOLDERS.map((f,i)=>`<div class="card item" style="--i:${7+i}" data-f="${f[0]}"><div class="body"><div class="t" style="white-space:normal;font-size:calc(29*var(--u))">${esc(f[1])}</div></div><div class="rd">${ic('check')}</div></div>`).join('');
   document.querySelectorAll('#l-folders .card').forEach(c=>c.addEventListener('click',()=>shareAct('shareSetConfig','folder',c.dataset.f)));
+  document.querySelectorAll('#l-server-styles .card').forEach(c=>c.addEventListener('click',()=>shareAct('shareSetConfig','server_style',c.dataset.style)));
 }
 function renderShare(){
   const s = getShare(), w = s.wifi || {};
@@ -887,6 +900,8 @@ function renderShare(){
   const admEl = $('adm-info');
   if (admEl) admEl.textContent = admUser + (s.adminDefault ? (' / ' + admPass) : (' • ' + admPass));
   document.querySelectorAll('#l-folders .card').forEach(c=>c.classList.toggle('sel', c.dataset.f === s.folder));
+  const curStyle = (s.serverStyle === 'classic') ? 'classic' : 'nexora_media';
+  document.querySelectorAll('#l-server-styles .card').forEach(c=>c.classList.toggle('sel', c.dataset.style === curStyle));
   setSw($('sw-wifi'), w.enabled);
   $('wf-status').textContent = w.status || 'Прямое подключение по QR с паролем от Wi‑Fi Direct';
   $('wifi-card').classList.toggle('hide', !w.enabled);

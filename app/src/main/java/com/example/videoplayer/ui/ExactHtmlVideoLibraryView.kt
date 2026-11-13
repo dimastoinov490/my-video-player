@@ -455,6 +455,7 @@ fun ExactHtmlVideoLibraryView(
                                 val user = HttpServerConfig.getUsername(context)
                                 val pass = HttpServerConfig.getPassword(context)
                                 val folder = HttpServerConfig.getBroadcastFolder(context).id
+                                val serverStyle = HttpServerConfig.getServerStyle(context)
                                 val wifiEnabled = WifiDirectManager.isEnabled
                                 val wifiSsid = WifiDirectManager.currentSsid
                                 val wifiPass = WifiDirectManager.currentPass
@@ -476,6 +477,7 @@ fun ExactHtmlVideoLibraryView(
                                 json.put("adminPassword", adminPass ?: JSONObject.NULL)
                                 json.put("adminDefault", adminDefault)
                                 json.put("folder", folder)
+                                json.put("serverStyle", serverStyle)
 
                                 val wifiJson = JSONObject()
                                 wifiJson.put("enabled", wifiEnabled)
@@ -546,6 +548,9 @@ fun ExactHtmlVideoLibraryView(
                                     "folder" -> {
                                         val folder = HttpBroadcastFolder.values().find { it.id == value } ?: HttpBroadcastFolder.ALL
                                         HttpServerConfig.setBroadcastFolder(context, folder)
+                                    }
+                                    "server_style" -> {
+                                        HttpServerConfig.setServerStyle(context, value)
                                     }
                                 }
                             }

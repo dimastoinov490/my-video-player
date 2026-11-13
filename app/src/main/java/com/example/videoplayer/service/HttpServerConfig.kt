@@ -252,6 +252,20 @@ object HttpServerConfig {
         getPrefs(context).edit().putBoolean(KEY_STRICT, strict).apply()
     }
 
+    private const val KEY_SERVER_STYLE = "server_style"
+    const val STYLE_NEXORA_MEDIA = "nexora_media"
+    const val STYLE_CLASSIC = "classic"
+
+    fun getServerStyle(context: Context): String {
+        val raw = getPrefs(context).getString(KEY_SERVER_STYLE, STYLE_NEXORA_MEDIA)
+        return if (raw == STYLE_CLASSIC) STYLE_CLASSIC else STYLE_NEXORA_MEDIA
+    }
+
+    fun setServerStyle(context: Context, style: String) {
+        val normalized = if (style == STYLE_CLASSIC) STYLE_CLASSIC else STYLE_NEXORA_MEDIA
+        getPrefs(context).edit().putString(KEY_SERVER_STYLE, normalized).apply()
+    }
+
     fun getFolderDirectory(context: Context, folder: HttpBroadcastFolder): File? {
         return when (folder) {
             HttpBroadcastFolder.ALL -> null
