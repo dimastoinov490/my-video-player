@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
 import android.media.AudioManager
+import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
@@ -249,6 +250,7 @@ fun PlayerScreen(
     var gaugeDismissJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
 
     var nativeVideoView by remember { mutableStateOf<VideoView?>(null) }
+    var nativeMediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
 
     BackHandler {
         onBack()
@@ -512,6 +514,7 @@ fun PlayerScreen(
                             }
                             setVideoURI(uri)
                             setOnPreparedListener { mp ->
+                                nativeMediaPlayer = mp
                                 totalDurationMs = mp.duration.toLong()
                                 try {
                                     mp.playbackParams = mp.playbackParams.setSpeed(currentSpeed)
@@ -1068,14 +1071,12 @@ fun PlayerScreen(
                                     selected = currentSpeed == spd,
                                     onClick = {
                                         if (useNativeFallback) {
-                                            val nativePlayer = nativeVideoView
+                                            val nativePlayer = nativeMediaPlayer
                                             if (nativePlayer == null) {
                                                 infoFeedbackText = "Плеер ещё загружается"
                                             } else {
                                                 try {
-                                                    nativePlayer.setPlaybackParams(
-                                                        nativePlayer.playbackParams.setSpeed(spd)
-                                                    )
+                                                    nativePlayer.playbackParams = nativePlayer.playbackParams.setSpeed(spd)
                                                     currentSpeed = spd
                                                     infoFeedbackText = "Скорость: ${spd}x"
                                                 } catch (e: Exception) {
