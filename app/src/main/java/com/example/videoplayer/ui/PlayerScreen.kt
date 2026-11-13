@@ -458,6 +458,17 @@ fun PlayerScreen(
                     savedResumeDurationMs = 0L
                 }
             } else if (status.startsWith("Error")) {
+                val fallbackPosition = latestCurrentTimeMs
+                val fallbackDuration = latestTotalDurationMs
+                if (fallbackPosition > 0L) {
+                    savedResumePositionMs = fallbackPosition
+                    savedResumeDurationMs = fallbackDuration
+                    progressPrefs.edit()
+                        .putLong(progressKey, fallbackPosition)
+                        .putLong("${progressKey}_duration", fallbackDuration)
+                        .apply()
+                }
+                resumePositionApplied = false
                 useNativeFallback = true
                 infoFeedbackText = "Включен резервный медиа-движок Android"
             }
