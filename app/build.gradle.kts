@@ -1,15 +1,15 @@
 import java.util.Base64
 
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.plugin.compose")
+}
+
 val releaseStoreFile = providers.environmentVariable("RELEASE_STORE_FILE").orNull
 val releaseStorePassword = providers.environmentVariable("RELEASE_STORE_PASSWORD").orNull
 val releaseKeyAlias = providers.environmentVariable("RELEASE_KEY_ALIAS").orNull
 val releaseKeyPassword = providers.environmentVariable("RELEASE_KEY_PASSWORD").orNull
 val hasReleaseSigning = listOf(releaseStoreFile, releaseStorePassword, releaseKeyAlias, releaseKeyPassword).all { !it.isNullOrBlank() }
-
-plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.plugin.compose")
-}
 
 android {
     namespace = "com.example.videoplayer"
