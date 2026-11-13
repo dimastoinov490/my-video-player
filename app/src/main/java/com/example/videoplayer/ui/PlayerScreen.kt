@@ -1300,9 +1300,12 @@ fun PlayerScreen(
                                                 }
                                             }
                                         } else {
-                                            playerManager.setRate(spd)
-                                            currentSpeed = spd
-                                            infoFeedbackText = "Скорость: ${spd}x"
+                                            if (playerManager.setRate(spd)) {
+                                                currentSpeed = spd
+                                                infoFeedbackText = "Скорость: ${spd}x"
+                                            } else {
+                                                infoFeedbackText = "Не удалось изменить скорость воспроизведения"
+                                            }
                                         }
                                     },
                                     label = { Text("${spd}x", fontSize = 11.sp) },
