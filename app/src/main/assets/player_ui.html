@@ -1876,29 +1876,52 @@ function openMoreItem(id){
 }
 
 /* ---------- Dynamic Layout Metrics & Orientation ---------- */
+let layoutMetricsFrame = 0;
+
 const updateLayoutMetrics = () => {
   const root = document.documentElement;
-  root.style.setProperty('--app-width', window.innerWidth + 'px');
-  root.style.setProperty('--app-height', window.innerHeight + 'px');
+  // Use the WebView's current content viewport for sizing; it excludes stale
+  // window dimensions during the first frame of an Android rotation.
+  const viewportWidth = Math.max(1, root.clientWidth || window.innerWidth || 1);
+  const viewportHeight = Math.max(1, root.clientHeight || window.innerHeight || 1);
+  root.style.setProperty('--app-width', viewportWidth + 'px');
+  root.style.setProperty('--app-height', viewportHeight + 'px');
 
-  let isLandscape = window.innerWidth > window.innerHeight;
+  // Native configuration is the source of truth inside Android WebView.
+  // The old equality-only check ignored it on almost every real screen size,
+  // allowing a stale/opposite WebView viewport to select the wrong layout.
+  let isLandscape = viewportWidth > viewportHeight;
   if (typeof hasB === 'function' && hasB('getScreenMetrics')) {
     try {
       const m = JSON.parse(callB('getScreenMetrics') || '{}');
       if (m.diagonalInches) root.style.setProperty('--app-diagonal', String(m.diagonalInches));
       if (m.densityDpi) root.style.setProperty('--app-dpi', String(m.densityDpi));
-      if (typeof m.isLandscape === 'boolean' && window.innerWidth === window.innerHeight) {
-        isLandscape = m.isLandscape;
-      }
+      if (typeof m.isLandscape === 'boolean') isLandscape = m.isLandscape;
     } catch(e) {}
   }
+
   root.setAttribute('data-orientation', isLandscape ? 'landscape' : 'portrait');
   if (typeof scheduleNavSync === 'function') scheduleNavSync();
 };
-window.addEventListener('resize', updateLayoutMetrics);
-window.addEventListener('orientationchange', updateLayoutMetrics);
-window.addEventListener('DOMContentLoaded', updateLayoutMetrics);
-updateLayoutMetrics();
+
+const scheduleLayoutMetrics = () => {
+  if (layoutMetricsFrame) cancelAnimationFrame(layoutMetricsFrame);
+  layoutMetricsFrame = requestAnimationFrame(() => {
+    layoutMetricsFrame = 0;
+    updateLayoutMetrics();
+  });
+};
+
+window.addEventListener('resize', scheduleLayoutMetrics, { passive: true });
+window.addEventListener('orientationchange', () => {
+  // Let Android apply the new Configuration before querying the native
+  // orientation, then re-check once the WebView has completed its resize.
+  scheduleLayoutMetrics();
+  setTimeout(scheduleLayoutMetrics, 180);
+  setTimeout(scheduleLayoutMetrics, 420);
+}, { passive: true });
+window.addEventListener('DOMContentLoaded', scheduleLayoutMetrics);
+scheduleLayoutMetrics();
 
 /* Initial render */
 renderVideos();
