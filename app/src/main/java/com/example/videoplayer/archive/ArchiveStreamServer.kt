@@ -159,6 +159,7 @@ object ArchiveStreamServer {
             }
         }
 
+        val tempFile = session.tempFile
         val extractor = Thread({
             try {
                 ArchiveManager.extractSingleEntryToFile(
