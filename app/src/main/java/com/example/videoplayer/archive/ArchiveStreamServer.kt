@@ -116,27 +116,49 @@ object ArchiveStreamServer {
     }
 
     fun cleanupStaleCache(context: Context) {
+        synchronized(serverLock) {
+            cleanupStaleCacheLocked(context)
+        }
+    }
+
+    // Must be called while holding serverLock so a concurrent startSession cannot
+    // register a session between the empty-session check and cache deletion.
+    private fun cleanupStaleCacheLocked(context: Context) {
         if (sessions.isNotEmpty()) return
         try {
             val root = File(context.cacheDir, CACHE_DIR_NAME)
             if (root.exists()) {
                 root.deleteRecursively()
             }
-        } catch (_: Throwable) {}
+        } catch (t: Throwable) {
+            Log.w(TAG, "Unable to clean stale archive stream cache", t)
+        }
     }
 
     fun startSession(context: Context, spec: ArchivePlaybackSpec): StreamHandle {
         ensureServerStarted()
-        cleanupStaleCache(context)
 
         val sessionId = UUID.randomUUID().toString().replace("-", "")
-        val rootDir = File(context.cacheDir, CACHE_DIR_NAME).apply { mkdirs() }
-        val sessionDir = File(rootDir, sessionId).apply { mkdirs() }
         val safeName = spec.entryName.replace(Regex("[^a-zA-Z0-9._-]"), "_").ifBlank { "video.bin" }
-        val tempFile = File(sessionDir, safeName)
+        val session = synchronized(serverLock) {
+            cleanupStaleCacheLocked(context)
+            val rootDir = File(context.cacheDir, CACHE_DIR_NAME)
+            if (!rootDir.exists() && !rootDir.mkdirs() && !rootDir.isDirectory) {
+                throw IOException("Не удалось создать кэш потокового воспроизведения")
+            }
+            if (!rootDir.isDirectory) {
+                throw IOException("Путь к кэшу потокового воспроизведения не является папкой")
+            }
 
-        val session = StreamSession(sessionId, spec, tempFile, sessionDir)
-        sessions[sessionId] = session
+            val sessionDir = File(rootDir, sessionId)
+            if (!sessionDir.mkdirs() && !sessionDir.isDirectory) {
+                throw IOException("Не удалось создать папку сессии потокового воспроизведения")
+            }
+            val tempFile = File(sessionDir, safeName)
+            StreamSession(sessionId, spec, tempFile, sessionDir).also {
+                sessions[sessionId] = it
+            }
+        }
 
         val extractor = Thread({
             try {
@@ -164,6 +186,8 @@ object ArchiveStreamServer {
                 if (!session.cancelled.get()) {
                     Log.e(TAG, "Stream extraction error for ${spec.entryName}", t)
                     session.error.set(t)
+                    runCatching { tempFile.delete() }
+                    session.writtenBytes.set(0L)
                 }
             } finally {
                 synchronized(session.dataLock) {
