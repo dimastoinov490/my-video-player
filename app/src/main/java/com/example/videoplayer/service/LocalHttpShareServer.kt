@@ -491,7 +491,7 @@ object LocalHttpShareServer {
                 } catch (_: RejectedExecutionException) {
                     // Refuse excess work promptly instead of leaving accepted sockets open.
                     try {
-                        val response = "HTTP/1.1 503 Service Unavailable\\r\\nContent-Length: 0\\r\\nRetry-After: 2\\r\\nConnection: close\\r\\n\\r\\n"
+                        val response = "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nRetry-After: 2\r\nConnection: close\r\n\r\n"
                         client.getOutputStream().write(response.toByteArray(Charsets.UTF_8))
                         client.getOutputStream().flush()
                     } catch (_: Exception) {
