@@ -326,15 +326,30 @@ object LinuxInstaller {
             }
         }
 
-        // Создаем симлинки и жёсткие ссылки после распаковки файлов
+        // Создаем симлинки и жёсткие ссылки после распаковки файлов.
+        // Reject archive links that would escape the private rootfs directory.
         for ((destFile, target, kind) in deferredLinks) {
             try {
                 if (destFile.exists()) destFile.delete()
                 if (kind == '2') {
+                    val targetFile = if (target.startsWith("/")) {
+                        File(rootCanonical, target.removePrefix("/"))
+                    } else {
+                        File(destFile.parentFile ?: rootCanonical, target)
+                    }
+                    val canonicalTarget = targetFile.canonicalFile
+                    if (canonicalTarget.path != rootCanonical.path &&
+                        !canonicalTarget.path.startsWith(rootPathWithSep)) {
+                        continue
+                    }
                     Os.symlink(target, destFile.absolutePath)
                 } else {
                     val targetClean = target.removePrefix("./").trimStart('/')
                     val resolvedTarget = File(rootCanonical, targetClean).canonicalFile
+                    if (resolvedTarget.path != rootCanonical.path &&
+                        !resolvedTarget.path.startsWith(rootPathWithSep)) {
+                        continue
+                    }
                     if (resolvedTarget.exists()) {
                         try {
                             Os.link(resolvedTarget.absolutePath, destFile.absolutePath)
