@@ -111,7 +111,7 @@ fun LinuxTerminalScreen(
                     activeProcess = process
                     processWriter = writer
                 }
-                if (useProot && !LinuxInstaller.isBootstrapDone(context)) {
+                if (!LinuxInstaller.isBootstrapDone(context)) {
                     coroutineScope.launch(Dispatchers.IO) {
                         // Даем сессии время на старт и запускаем bootstrap.sh (внутри проверка .bootstrap_done)
                         kotlinx.coroutines.delay(500)
