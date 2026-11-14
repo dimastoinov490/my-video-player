@@ -77,7 +77,6 @@ import com.example.videoplayer.R
 import com.example.videoplayer.archive.ArchivePlaybackSpec
 import com.example.videoplayer.archive.ArchiveSource
 import com.example.videoplayer.archive.ArchiveStreamServer
-import com.example.videoplayer.model.MediaStoreHelper
 import com.example.videoplayer.player.PlaybackTrack
 import com.example.videoplayer.player.GoogleCastManager
 import com.example.videoplayer.player.CastStartResult
@@ -159,15 +158,6 @@ fun resolveVideoTitle(context: Context, uriString: String): String {
         val decoded = try { URLDecoder.decode(clean, "UTF-8") } catch (_: Exception) { clean }
         if (decoded.isNotBlank() && !decoded.all { it.isDigit() }) {
             return decoded
-        }
-    } catch (_: Throwable) {}
-
-    try {
-        val lastSegment = uriString.substringAfterLast('/')
-        if (lastSegment.all { it.isDigit() }) {
-            val videos = MediaStoreHelper.getVideos(context)
-            val match = videos.find { it.id.toString() == lastSegment || it.uri.toString() == uriString }
-            if (match != null) return match.displayName
         }
     } catch (_: Throwable) {}
 

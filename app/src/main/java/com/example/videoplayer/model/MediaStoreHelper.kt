@@ -121,7 +121,13 @@ object MediaStoreHelper {
             File(Environment.getExternalStorageDirectory(), "DCIM/Camera"),
             context.getExternalFilesDir(Environment.DIRECTORY_MOVIES),
             context.getExternalFilesDir(null)
-        )
+        ).distinctBy { dir ->
+            // Some roots above intentionally cover the same public folder
+            // (for example, Environment's Movies path and /storage/.../Movies).
+            // Canonical de-duplication avoids walking identical trees twice
+            // without dropping distinct or nested fallback locations.
+            runCatching { dir.canonicalPath }.getOrDefault(dir.absolutePath)
+        }
 
         for (dir in scanDirs) {
             if (dir.exists() && dir.isDirectory) {
