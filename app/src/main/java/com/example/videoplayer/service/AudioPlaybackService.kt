@@ -60,8 +60,10 @@ class AudioPlaybackService : MediaSessionService() {
             .build()
 
         player = exoPlayer
-        exoPlayer.addListener(playerListener)
+        // Restore before observing events so initialization cannot overwrite the checkpoint.
         restorePlaybackCheckpoint(exoPlayer)
+        exoPlayer.addListener(playerListener)
+        scheduleCheckpoint(exoPlayer)
         mediaSession = MediaSession.Builder(this, exoPlayer).build()
     }
 
@@ -92,7 +94,16 @@ class AudioPlaybackService : MediaSessionService() {
     private fun savePlaybackCheckpoint(current: Player) {
         runCatching {
             val queue = JSONArray()
-            for (index in 0 until current.mediaItemCount.coerceAtMost(MAX_SAVED_QUEUE_SIZE)) {
+            val itemCount = current.mediaItemCount
+            val currentIndex = current.currentMediaItemIndex.coerceAtLeast(0)
+            val windowStart = if (itemCount > MAX_SAVED_QUEUE_SIZE) {
+                (currentIndex - MAX_SAVED_QUEUE_SIZE / 2)
+                    .coerceIn(0, itemCount - MAX_SAVED_QUEUE_SIZE)
+            } else {
+                0
+            }
+            val windowEnd = minOf(itemCount, windowStart + MAX_SAVED_QUEUE_SIZE)
+            for (index in windowStart until windowEnd) {
                 val item = current.getMediaItemAt(index)
                 val metadata = item.mediaMetadata
                 queue.put(JSONObject().apply {
@@ -112,7 +123,7 @@ class AudioPlaybackService : MediaSessionService() {
 
             prefs.edit()
                 .putString(KEY_QUEUE, queue.toString())
-                .putInt(KEY_INDEX, current.currentMediaItemIndex.coerceAtLeast(0))
+                .putInt(KEY_INDEX, (currentIndex - windowStart).coerceIn(0, queue.length() - 1))
                 .putLong(KEY_POSITION, current.currentPosition.coerceAtLeast(0L))
                 .putBoolean(KEY_PLAY_WHEN_READY, current.playWhenReady && current.playbackState != Player.STATE_ENDED)
                 .apply()
