@@ -141,8 +141,6 @@ class BrowserActivity : FragmentActivity() {
                     hideKeyboard()
                 } else if (webView.canGoBack()) {
                     webView.goBack()
-                } else {
-                    finish()
                 }
             }
         }
@@ -279,8 +277,6 @@ class BrowserActivity : FragmentActivity() {
                     updateUrlDisplay(currentUrl)
                 } else if (webView.canGoBack()) {
                     webView.goBack()
-                } else {
-                    finish()
                 }
             }
         })
@@ -655,7 +651,7 @@ class BrowserActivity : FragmentActivity() {
                 }
             }
         }
-        addMenuItem(popupView, "Закрыть") {
+        addMenuItem(popupView, "Выйти") {
             popupWindow.dismiss()
             finish()
         }
