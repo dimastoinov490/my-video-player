@@ -217,7 +217,9 @@ object LocalHttpShareServer {
         TimeUnit.SECONDS,
         ArrayBlockingQueue(64),
         ThreadPoolExecutor.AbortPolicy()
-    )
+    ).apply {
+        allowCoreThreadTimeOut(true)
+    }
 
     @Synchronized
     fun start(context: Context, chosenPort: Int = DEFAULT_PORT): Boolean {
