@@ -98,6 +98,9 @@ fun VideoLibraryScreen(
     var hasStoragePermission by remember {
         mutableStateOf(checkMediaPermissions(context))
     }
+    var hasAudioPermission by remember {
+        mutableStateOf(checkAudioPermissions(context))
+    }
     var videoLoadJob by remember { mutableStateOf<Job?>(null) }
 
     fun startVideoLoad() {
@@ -126,6 +129,24 @@ fun VideoLibraryScreen(
             scanStatusText = "Для просмотра видео необходимо разрешение на доступ к видеофайлам"
             showScanBanner = false
             isRefreshing = false
+        }
+    }
+
+    val audioPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasAudioPermission = granted || checkAudioPermissions(context)
+    }
+
+    fun requestAudioAccessIfNeeded() {
+        if (checkAudioPermissions(context)) {
+            hasAudioPermission = true
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            audioPermissionLauncher.launch(Manifest.permission.READ_MEDIA_AUDIO)
+        } else {
+            hasAudioPermission = checkAudioPermissions(context)
         }
     }
 
@@ -172,7 +193,11 @@ fun VideoLibraryScreen(
                 onVideoSelected = onVideoSelected,
                 onNavTab = { tabName, idx ->
                     bottomNavIndex = idx
+                    if (tabName.equals("audio", ignoreCase = true) || idx == 1) {
+                        requestAudioAccessIfNeeded()
+                    }
                 },
+                audioPermissionGranted = hasAudioPermission,
                 onOpenSearch = {
                     isSearchActive = true
                 },
@@ -275,6 +300,15 @@ private fun checkMediaPermissions(context: Context): Boolean {
             Manifest.permission.READ_EXTERNAL_STORAGE
         ) == PackageManager.PERMISSION_GRANTED
     }
+}
+
+private fun checkAudioPermissions(context: Context): Boolean {
+    val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        Manifest.permission.READ_MEDIA_AUDIO
+    } else {
+        Manifest.permission.READ_EXTERNAL_STORAGE
+    }
+    return ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
 }
 
 private fun requestMediaPermissions(launcher: androidx.activity.result.ActivityResultLauncher<Array<String>>) {
