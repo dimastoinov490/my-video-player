@@ -616,24 +616,42 @@ fun ExactHtmlVideoLibraryView(
 
                         @JavascriptInterface
                         fun getQrDataUri(text: String, size: Int): String {
+                            // This bridge method allocates a bitmap and a pixel buffer. Bound
+                            // both dimensions and input size so malformed calls cannot trigger
+                            // excessive allocations from the WebView bridge thread.
+                            if (text.isBlank() || text.length > 4096) return ""
+                            val qrSize = if (size <= 0) 512 else size.coerceIn(128, 1024)
+                            var bitmap: Bitmap? = null
                             return try {
-                                val qrSize = if (size <= 0) 512 else size
-                                val matrix: BitMatrix = MultiFormatWriter().encode(text, BarcodeFormat.QR_CODE, qrSize, qrSize)
+                                val matrix: BitMatrix = MultiFormatWriter().encode(
+                                    text,
+                                    BarcodeFormat.QR_CODE,
+                                    qrSize,
+                                    qrSize
+                                )
                                 val pixels = IntArray(qrSize * qrSize)
                                 for (y in 0 until qrSize) {
                                     val offset = y * qrSize
                                     for (x in 0 until qrSize) {
-                                        pixels[offset + x] = if (matrix[x, y]) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
+                                        pixels[offset + x] = if (matrix[x, y]) {
+                                            0xFF000000.toInt()
+                                        } else {
+                                            0xFFFFFFFF.toInt()
+                                        }
                                     }
                                 }
-                                val bitmap = Bitmap.createBitmap(qrSize, qrSize, Bitmap.Config.ARGB_8888)
-                                bitmap.setPixels(pixels, 0, qrSize, 0, 0, qrSize, qrSize)
-                                val baos = ByteArrayOutputStream()
-                                bitmap.compress(Bitmap.CompressFormat.PNG, 100, baos)
-                                val b64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
-                                "data:image/png;base64,$b64"
+                                val createdBitmap = Bitmap.createBitmap(qrSize, qrSize, Bitmap.Config.ARGB_8888)
+                                bitmap = createdBitmap
+                                createdBitmap.setPixels(pixels, 0, qrSize, 0, 0, qrSize, qrSize)
+                                ByteArrayOutputStream().use { baos ->
+                                    createdBitmap.compress(Bitmap.CompressFormat.PNG, 100, baos)
+                                    val b64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
+                                    "data:image/png;base64,$b64"
+                                }
                             } catch (e: Exception) {
                                 ""
+                            } finally {
+                                bitmap?.recycle()
                             }
                         }
 
