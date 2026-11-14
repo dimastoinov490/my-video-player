@@ -26,7 +26,10 @@ import java.security.SecureRandom
 import java.util.Collections
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLServerSocket
 
 data class HttpMediaFile(
@@ -123,6 +126,8 @@ class RateLimiter(private val maxFailures: Int, private val windowMs: Long) {
 
 object LocalHttpShareServer {
     private const val TAG = "LocalHttpShareServer"
+    private const val MAX_HTTP_HEADER_LINE_BYTES = 16 * 1024
+    private const val MAX_HTTP_HEADER_BYTES = 64 * 1024
     const val DEFAULT_PORT = 8765
 
     private val activeSessions = ConcurrentHashMap<String, SessionInfo>()
@@ -203,7 +208,16 @@ object LocalHttpShareServer {
     val pendingUploads = ConcurrentHashMap<String, FileUploadMeta>()
 
     private val activeRequestThreads = java.util.concurrent.atomic.AtomicInteger(0)
-    private val threadPool = Executors.newCachedThreadPool()
+    // Bound concurrent clients and queued work so slow or abusive connections cannot
+    // create an unbounded number of request threads.
+    private val threadPool = ThreadPoolExecutor(
+        2,
+        16,
+        30L,
+        TimeUnit.SECONDS,
+        ArrayBlockingQueue(64),
+        ThreadPoolExecutor.AbortPolicy()
+    )
 
     @Synchronized
     fun start(context: Context, chosenPort: Int = DEFAULT_PORT): Boolean {
@@ -465,12 +479,24 @@ object LocalHttpShareServer {
         while (isRunning && !socket.isClosed) {
             try {
                 val client = socket.accept()
-                threadPool.execute {
-                    activeRequestThreads.incrementAndGet()
+                try {
+                    threadPool.execute {
+                        activeRequestThreads.incrementAndGet()
+                        try {
+                            handleClient(client, context)
+                        } finally {
+                            activeRequestThreads.decrementAndGet()
+                        }
+                    }
+                } catch (_: RejectedExecutionException) {
+                    // Refuse excess work promptly instead of leaving accepted sockets open.
                     try {
-                        handleClient(client, context)
+                        val response = "HTTP/1.1 503 Service Unavailable\\r\\nContent-Length: 0\\r\\nRetry-After: 2\\r\\nConnection: close\\r\\n\\r\\n"
+                        client.getOutputStream().write(response.toByteArray(Charsets.UTF_8))
+                        client.getOutputStream().flush()
+                    } catch (_: Exception) {
                     } finally {
-                        activeRequestThreads.decrementAndGet()
+                        try { client.close() } catch (_: Exception) {}
                     }
                 }
             } catch (_: SocketException) {
@@ -492,6 +518,9 @@ object LocalHttpShareServer {
             if (b == '\n'.code) {
                 break
             } else if (b != '\r'.code) {
+                if (baos.size() >= MAX_HTTP_HEADER_LINE_BYTES) {
+                    throw IOException("HTTP request line or header is too large")
+                }
                 baos.write(b)
             }
         }
@@ -527,8 +556,18 @@ object LocalHttpShareServer {
             var acceptHeader: String? = null
             var ifNoneMatchHeader: String? = null
 
+            var headerBytes = requestLine.length
+            if (headerBytes > MAX_HTTP_HEADER_BYTES) {
+                sendResponse(output, 400, "text/plain; charset=UTF-8", "Request headers too large".toByteArray(Charsets.UTF_8))
+                return
+            }
             var line = readHttpHeaderLine(rawInput)
             while (!line.isNullOrBlank()) {
+                headerBytes += line.length + 2
+                if (headerBytes > MAX_HTTP_HEADER_BYTES) {
+                    sendResponse(output, 400, "text/plain; charset=UTF-8", "Request headers too large".toByteArray(Charsets.UTF_8))
+                    return
+                }
                 val lower = line.lowercase()
                 if (lower.startsWith("authorization:")) {
                     authHeader = line.substringAfter(":").trim()
