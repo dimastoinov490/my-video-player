@@ -149,6 +149,7 @@ fun ExactHtmlVideoLibraryView(
 
     // Keep the compact HTML player synchronized with the real Media3 session.
     LaunchedEffect(audioController, isPageReady) {
+        if (!isPageReady) return@LaunchedEffect
         val controller = audioController ?: return@LaunchedEffect
         while (isActive) {
             val item = controller.currentMediaItem
