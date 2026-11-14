@@ -27,6 +27,7 @@ import com.example.videoplayer.player.LinuxInstaller
 import com.example.videoplayer.player.TermuxEngine
 import com.example.videoplayer.ui.theme.GrayText
 import com.example.videoplayer.ui.theme.LocalAppTheme
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -106,10 +107,12 @@ fun LinuxTerminalScreen(
         appendOutputLine("--------------------------------------------------")
 
         coroutineScope.launch(Dispatchers.IO) {
+            var sessionProcess: Process? = null
             try {
                 LinuxInstaller.ensureAiEngineScript(context)
                 LinuxInstaller.ensureBootstrapScript(context)
                 val process = TermuxEngine.createTermuxSession(context).start()
+                sessionProcess = process
                 val writer = PrintWriter(process.outputStream, true)
                 withContext(Dispatchers.Main) {
                     activeProcess = process
@@ -136,10 +139,30 @@ fun LinuxTerminalScreen(
                     }
                     line = reader.readLine()
                 }
+                withContext(Dispatchers.Main) {
+                    if (activeProcess === process) {
+                        processWriter = null
+                        activeProcess = null
+                        statusText = "Сессия Linux завершена"
+                    }
+                    appendOutputLine("[*] Сессия Linux завершена.")
+                }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
                     appendOutputLine("Ошибка терминала: ${e.localizedMessage}")
                     isLoading = false
+                    processWriter = null
+                    activeProcess = null
+                }
+            } finally {
+                // Also covers cancellation between process.start() and publishing it to Compose state.
+                sessionProcess?.let { process ->
+                    try {
+                        if (process.isAlive) process.destroy()
+                    } catch (_: Exception) {
+                    }
                 }
             }
         }
@@ -277,7 +300,7 @@ fun LinuxTerminalScreen(
                     modifier = Modifier
                         .heightIn(min = 48.dp)
                         .testTag("terminal_enter_button"),
-                    enabled = !isLoading
+                    enabled = !isLoading && processWriter != null
                 ) {
                     Text("Enter")
                 }
