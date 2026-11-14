@@ -24,8 +24,8 @@ find_package_deb() {
   local wanted="$1"
   local found=""
   while IFS= read -r deb; do
-    [[ "$(dpkg-deb -f "$deb" Package")" == "$wanted" ]] || continue
-    [[ "$(dpkg-deb -f "$deb" Architecture")" == "$TERMUX_ARCH" ]] || continue
+    [[ "$(dpkg-deb -f "$deb" Package)" == "$wanted" ]] || continue
+    [[ "$(dpkg-deb -f "$deb" Architecture)" == "$TERMUX_ARCH" ]] || continue
     found="$deb"
     break
   done < <(find "$TERMUX_DIR/output" -type f -name '*.deb' -print)
