@@ -84,7 +84,8 @@ class GoogleCastManager(context: Context) {
 
     private fun contentTypeFor(url: String): String {
         val path = Uri.parse(url).path.orEmpty().lowercase()
-        val extension = path.substringAfterLast('.', missingDelimiterValue = "")
+        val fileName = path.substringAfterLast('/')
+        val extension = if ('.' in fileName) fileName.substringAfterLast('.') else ""
         return when (extension) {
             "mp4", "m4v" -> "video/mp4"
             "webm" -> "video/webm"
