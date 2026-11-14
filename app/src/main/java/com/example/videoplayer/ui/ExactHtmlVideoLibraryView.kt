@@ -125,6 +125,28 @@ fun ExactHtmlVideoLibraryView(
 
     val latestAudioController by rememberUpdatedState(audioController)
 
+    val latestRefresh by rememberUpdatedState(onRefreshVideos)
+    val latestVideos by rememberUpdatedState(videos)
+    val latestOpenArchive by rememberUpdatedState(onOpenArchive)
+    val latestOpenArchivePicker by rememberUpdatedState(onOpenArchivePicker)
+    val latestOpenBrowser by rememberUpdatedState(onOpenBrowser)
+    val latestOpenTerminal by rememberUpdatedState(onOpenTerminal)
+    val sentThumbs = remember { java.util.Collections.synchronizedSet(HashSet<String>()) }
+    val wifiStatusRef = remember { AtomicReference("") }
+    val initialSyncDone = remember { AtomicBoolean(false) }
+    val lastSentVideosRef = remember { AtomicReference<List<VideoItem>?>(null) }
+    var isPageReady by remember { mutableStateOf(false) }
+    var thumbsJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var webViewRef by remember { mutableStateOf<WebView?>(null) }
+    val rootBrowsePath = remember {
+        try {
+            Environment.getExternalStorageDirectory().absolutePath
+        } catch (_: Exception) {
+            "/storage/emulated/0"
+        }
+    }
+    var currentBrowsePath by remember { mutableStateOf(rootBrowsePath) }
+
     // Keep the compact HTML player synchronized with the real Media3 session.
     LaunchedEffect(audioController, isPageReady) {
         val controller = audioController ?: return@LaunchedEffect
@@ -149,27 +171,6 @@ fun ExactHtmlVideoLibraryView(
             delay(if (controller.isPlaying) 450L else 1000L)
         }
     }
-    val latestRefresh by rememberUpdatedState(onRefreshVideos)
-    val latestVideos by rememberUpdatedState(videos)
-    val latestOpenArchive by rememberUpdatedState(onOpenArchive)
-    val latestOpenArchivePicker by rememberUpdatedState(onOpenArchivePicker)
-    val latestOpenBrowser by rememberUpdatedState(onOpenBrowser)
-    val latestOpenTerminal by rememberUpdatedState(onOpenTerminal)
-    val sentThumbs = remember { java.util.Collections.synchronizedSet(HashSet<String>()) }
-    val wifiStatusRef = remember { AtomicReference("") }
-    val initialSyncDone = remember { AtomicBoolean(false) }
-    val lastSentVideosRef = remember { AtomicReference<List<VideoItem>?>(null) }
-    var isPageReady by remember { mutableStateOf(false) }
-    var thumbsJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
-    var webViewRef by remember { mutableStateOf<WebView?>(null) }
-    val rootBrowsePath = remember {
-        try {
-            Environment.getExternalStorageDirectory().absolutePath
-        } catch (_: Exception) {
-            "/storage/emulated/0"
-        }
-    }
-    var currentBrowsePath by remember { mutableStateOf(rootBrowsePath) }
 
     fun sendThumbsToWeb(webView: WebView, list: List<VideoItem>) {
         if (list.isEmpty()) return
