@@ -34,6 +34,7 @@ import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.PrintWriter
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -56,6 +57,7 @@ fun LinuxTerminalScreen(
     var activeProcess by remember { mutableStateOf<Process?>(null) }
     // Keep a non-Compose handle so disposal can kill a process even before UI state is published.
     val processRef = remember { AtomicReference<Process?>(null) }
+    val screenDisposed = remember { AtomicBoolean(false) }
     var isLoading by remember { mutableStateOf(true) }
     var statusText by remember { mutableStateOf("Инициализация окружения...") }
 
@@ -67,6 +69,7 @@ fun LinuxTerminalScreen(
                 processWriter?.close()
             } catch (_: Exception) {
             }
+            screenDisposed.set(true)
             try {
                 processRef.getAndSet(null)?.destroy()
             } catch (_: Exception) {
@@ -122,6 +125,12 @@ fun LinuxTerminalScreen(
                 sessionProcess = process
                 // Publish immediately: readLine() is blocking and does not react to coroutine cancellation.
                 processRef.set(process)
+                // Close the narrow race where the screen is disposed as start() returns.
+                if (screenDisposed.get()) {
+                    processRef.compareAndSet(process, null)
+                    process.destroy()
+                    return@launch
+                }
                 val writer = PrintWriter(process.outputStream, true)
                 withContext(Dispatchers.Main) {
                     activeProcess = process
