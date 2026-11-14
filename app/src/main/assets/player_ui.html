@@ -319,6 +319,15 @@ svg.ic{width:1em;height:1em;display:block}
   .nav-active{top:calc(2*var(--u));height:calc(104*var(--u));border-radius:calc(38*var(--u))}
   .toast{bottom:calc(142*var(--u))}
 }
+.audio-now{display:none;position:fixed;z-index:30;left:calc(30*var(--u));right:calc(30*var(--u));bottom:calc(128*var(--u));padding:calc(20*var(--u)) calc(24*var(--u));border:1px solid rgba(255,145,35,.42);border-radius:calc(26*var(--u));background:linear-gradient(145deg,rgba(29,23,19,.97),rgba(8,10,14,.97));box-shadow:0 calc(10*var(--u)) calc(36*var(--u)) rgba(0,0,0,.48),inset 0 1px rgba(255,255,255,.08);backdrop-filter:blur(18px)}
+.audio-now.show{display:block}.audio-now-top{display:flex;align-items:center;gap:calc(18*var(--u))}
+.audio-now-meta{flex:1;min-width:0}.audio-now-title{font-size:calc(28*var(--u));font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.audio-now-artist{margin-top:calc(4*var(--u));font-size:calc(21*var(--u));color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.audio-now-controls{display:flex;align-items:center;gap:calc(12*var(--u))}
+.audio-now-btn{width:calc(64*var(--u));height:calc(64*var(--u));border:1px solid rgba(255,255,255,.12);border-radius:50%;background:rgba(255,255,255,.06);color:#fff;font-size:calc(34*var(--u));font-weight:700;display:grid;place-items:center}
+.audio-now-btn.main{width:calc(76*var(--u));height:calc(76*var(--u));border:0;background:linear-gradient(140deg,#ff9a1f,#ff5b00);color:#1b0b02;box-shadow:0 0 calc(18*var(--u)) rgba(255,100,0,.28)}
+.audio-now-progress{display:flex;align-items:center;gap:calc(12*var(--u));margin-top:calc(14*var(--u));font-size:calc(18*var(--u));color:var(--muted);font-variant-numeric:tabular-nums}
+.audio-now-progress input{flex:1;min-width:0;accent-color:#ff8a12;height:calc(8*var(--u))}
 </style>
 </head>
 <body>
@@ -395,7 +404,27 @@ svg.ic{width:1em;height:1em;display:block}
     <label class="search item"><svg class="ic"><use href="#i-search"/></svg><input id="q-audio" placeholder="Поиск аудио треков..."></label>
     <div class="row item" style="--i:1"><span>Всего треков: <span id="n-audio">0</span></span><b class="caps">Аудиотека</b></div>
     <div id="l-audio"></div>
-  </div></section>
+  </div>
+  <div class="audio-now" id="audio-now-playing" aria-label="Текущий аудиотрек">
+    <div class="audio-now-top">
+      <div class="tile"><svg class="ic"><use href="#i-note"/></svg></div>
+      <div class="audio-now-meta">
+        <div class="audio-now-title" id="audio-now-title">Ничего не воспроизводится</div>
+        <div class="audio-now-artist" id="audio-now-artist">Выберите трек из аудиотеки</div>
+      </div>
+      <div class="audio-now-controls">
+        <button class="audio-now-btn" id="audio-prev" type="button" aria-label="Предыдущий трек">‹</button>
+        <button class="audio-now-btn main" id="audio-toggle" type="button" aria-label="Воспроизвести">▶</button>
+        <button class="audio-now-btn" id="audio-next" type="button" aria-label="Следующий трек">›</button>
+      </div>
+    </div>
+    <div class="audio-now-progress">
+      <span id="audio-now-position">0:00</span>
+      <input id="audio-now-seek" type="range" min="0" max="0" value="0" step="500" aria-label="Позиция воспроизведения">
+      <span id="audio-now-duration">0:00</span>
+    </div>
+  </div>
+  </section>
 
   <!-- ============ BROWSE ============ -->
   <section class="page" id="p-browse">
@@ -786,6 +815,55 @@ function renderVideos() {
   });
   listEl.appendChild(frag);
 }
+
+function audioFormatTime(ms) {
+  const seconds = Math.max(0, Math.floor(Number(ms || 0) / 1000));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const rest = seconds % 60;
+  return hours ? (hours + ':' + String(minutes).padStart(2,'0') + ':' + String(rest).padStart(2,'0')) :
+    (minutes + ':' + String(rest).padStart(2,'0'));
+}
+
+window.updateAudioPlayback = function(state) {
+  const panel = document.getElementById('audio-now-playing');
+  if (!panel || !state) return;
+  panel.classList.toggle('show', !!state.hasTrack);
+  const title = document.getElementById('audio-now-title');
+  const artist = document.getElementById('audio-now-artist');
+  const toggle = document.getElementById('audio-toggle');
+  const seek = document.getElementById('audio-now-seek');
+  const position = document.getElementById('audio-now-position');
+  const duration = document.getElementById('audio-now-duration');
+  if (title) title.textContent = state.title || 'Аудио';
+  if (artist) artist.textContent = state.artist || 'Неизвестный исполнитель';
+  if (toggle) {
+    toggle.textContent = state.isPlaying ? 'Ⅱ' : '▶';
+    toggle.setAttribute('aria-label', state.isPlaying ? 'Пауза' : 'Воспроизвести');
+  }
+  const total = Math.max(0, Number(state.duration || 0));
+  const current = Math.max(0, Math.min(total || Number(state.position || 0), Number(state.position || 0)));
+  if (seek) {
+    seek.max = String(total);
+    if (!seek.matches(':active')) seek.value = String(current);
+    seek.disabled = total <= 0;
+  }
+  if (position) position.textContent = audioFormatTime(current);
+  if (duration) duration.textContent = audioFormatTime(total);
+};
+
+document.getElementById('audio-toggle')?.addEventListener('click', () => {
+  if (window.AndroidBridge?.audioPlayPause) window.AndroidBridge.audioPlayPause();
+});
+document.getElementById('audio-prev')?.addEventListener('click', () => {
+  if (window.AndroidBridge?.audioPrevious) window.AndroidBridge.audioPrevious();
+});
+document.getElementById('audio-next')?.addEventListener('click', () => {
+  if (window.AndroidBridge?.audioNext) window.AndroidBridge.audioNext();
+});
+document.getElementById('audio-now-seek')?.addEventListener('change', (event) => {
+  if (window.AndroidBridge?.audioSeekTo) window.AndroidBridge.audioSeekTo(Number(event.target.value || 0));
+});
 
 function renderAudio() {
   const items = allAudios.length > 0 ? allAudios : (PREVIEW ? [
