@@ -1,0 +1,24 @@
+Linux runtime third-party notices
+
+The optional Linux terminal bundles the following native runtime components.
+They are built from the official Termux package recipes pinned by
+.github/workflows/build-apk.yml (TERMUX_PACKAGES_REF).
+
+1. PRoot
+   Source: https://github.com/termux/proot
+   Package recipe: https://github.com/termux/termux-packages/tree/master/packages/proot
+   License declared by Termux: GPL-2.0
+
+2. libtalloc
+   Source: https://www.samba.org/ftp/talloc/
+   Package recipe: https://github.com/termux/termux-packages/tree/master/packages/libtalloc
+   License declared by Termux package recipe: GPL-3.0
+
+3. libandroid-shmem
+   Source: https://github.com/termux/libandroid-shmem
+   Package recipe: https://github.com/termux/termux-packages/tree/master/packages/libandroid-shmem
+   License declared by Termux: BSD 3-Clause
+
+The corresponding upstream license texts are distributed with their source
+projects. These components are third-party software and are not authored by
+this application.
