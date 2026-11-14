@@ -21,7 +21,7 @@ html,body{height:100%;background:#080604;overflow:hidden;color:#fff;font-family:
 svg{display:block}.ico{width:1em;height:1em;flex:none}
 button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:0}
 a{color:inherit;text-decoration:none}
-.canvas{position:absolute;left:0;top:0;width:864px;height:411px;transform-origin:0 0}
+.canvas{position:absolute;left:0;top:0;width:864px;height:411px;transform-origin:0 0;transition:transform .32s cubic-bezier(.22,1,.36,1);will-change:transform;backface-visibility:hidden}
 .frame{position:absolute;inset:4px;border-radius:18px;border:1.4px solid rgba(255,138,0,.85);overflow:hidden;display:flex;flex-direction:column;
   box-shadow:0 0 0 1px rgba(255,138,0,.14),0 0 14px rgba(255,110,0,.30),inset 0 0 24px rgba(255,110,0,.10);
   background:
@@ -84,7 +84,7 @@ a{color:inherit;text-decoration:none}
 .rc{position:relative;border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,.11);background:linear-gradient(135deg,#3a1c08,#120804);padding:0;min-height:0;
   transition:transform .25s cubic-bezier(.22,1,.36,1),border-color .25s,box-shadow .25s}
 .rc:hover{transform:translateY(-2px);border-color:rgba(255,138,0,.7);box-shadow:0 6px 16px rgba(255,110,0,.25)}
-.rc img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.rc img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;display:block}
 .rc:after{content:"";position:absolute;left:0;right:0;bottom:0;height:46%;background:linear-gradient(0deg,rgba(0,0,0,.82),transparent)}
 .rc span{position:absolute;z-index:2;left:11px;right:11px;bottom:8px;font-size:13.5px;font-weight:700;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rc .ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(255,138,0,.55);font-size:34px}
@@ -103,7 +103,7 @@ a{color:inherit;text-decoration:none}
   transition:border-color .2s,background .2s}
 .row:hover{border-color:rgba(255,138,0,.5);background:rgba(255,138,0,.05)}
 .thumb{position:relative;width:86px;height:49px;border-radius:9px;overflow:hidden;flex:none;background:linear-gradient(135deg,#3a1c08,#120804);display:flex;align-items:center;justify-content:center;color:rgba(255,138,0,.75);font-size:22px}
-.thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;display:block}
 .meta{flex:1;min-width:0}
 .meta b{display:block;font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .meta small{display:flex;gap:12px;margin-top:4px;font-size:11px;color:#b9aa9a}
@@ -177,7 +177,7 @@ body.rot .pane{touch-action:none}
 .album{position:relative;aspect-ratio:4/3;border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,.12);background:linear-gradient(135deg,#3a1c08,#120804);padding:0;text-align:left;
   transition:transform .25s cubic-bezier(.22,1,.36,1),border-color .25s,box-shadow .25s}
 .album:hover{transform:translateY(-2px);border-color:rgba(255,138,0,.7);box-shadow:0 6px 16px rgba(255,110,0,.25)}
-.album img{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover}
+.album img{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;object-position:center;display:block}
 .album .ph{position:absolute;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;color:rgba(255,138,0,.5);font-size:34px}
 .album:after{content:"";position:absolute;left:0;right:0;bottom:0;height:56%;background:linear-gradient(0deg,rgba(0,0,0,.85),transparent)}
 .album .an{position:absolute;z-index:2;left:11px;right:11px;bottom:8px}
@@ -185,9 +185,9 @@ body.rot .pane{touch-action:none}
 .album .an small{font-size:11px;color:#d6cfc7}
 .pic{position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,.11);background:linear-gradient(135deg,#3a1c08,#120804);padding:0;transition:transform .2s,border-color .2s}
 .pic:hover{transform:scale(1.03);border-color:rgba(255,138,0,.7)}
-.pic img{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover}
+.pic img{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;object-position:center;display:block}
 .pic .ph{position:absolute;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;color:rgba(255,138,0,.5);font-size:24px}
-.pbox img.big{display:block;width:100%;max-height:270px;object-fit:contain;background:#000}
+.pbox img.big{display:block;width:auto;height:auto;max-width:100%;max-height:270px;object-fit:contain;object-position:center;background:#000;margin:0 auto}
 
 
 /* ---------- объёмные карточки (Видео, Аудио, Фото, Папки): грани, глубина, анимация при прокрутке ---------- */
@@ -209,7 +209,7 @@ body.rot .pane{touch-action:none}
 .album.i3d{will-change:auto}
 @keyframes rise3d{from{opacity:0;transform:perspective(700px) translateY(18px) rotateX(-18deg) scale(.95)}to{opacity:1;transform:perspective(700px) translateY(0) rotateX(0) scale(1)}}
 .i3d.in{animation:rise3d .6s cubic-bezier(.22,1,.36,1) backwards;animation-delay:calc(var(--n,0)*40ms)}
-@media (prefers-reduced-motion:reduce){.i3d.in{animation:none}}
+@media (prefers-reduced-motion:reduce){.canvas{transition:none}.i3d.in{animation:none}}
 
 
 /* ---------- настройки: устройства, учётные записи, выбор файлов ---------- */
@@ -2144,19 +2144,31 @@ document.addEventListener('webkitfullscreenchange',function(){ if(!fsElem() && P
 drawDisk();
 
 /* ---------- масштаб макета под экран (на телефоне вертикально: поворот на 90°) ---------- */
-var BW=864, BH=411, noRot=/[?&]rotate=0/.test(location.search);
+var BW=864, BH=411, noRot=/[?&]rotate=0/.test(location.search), fitFrame=0;
 function fit(){
-  var cv=$('canvas'), w=window.innerWidth, h=window.innerHeight;
-  var rot=(!noRot && h>w*1.05);
-  var W=rot?h:w, H=rot?w:h;
-  var s=Math.min(W/BW, H/BH); rotated=rot; curScale=s; document.body.classList.toggle('rot',rot);
-  cv.style.width=(W/s)+'px'; cv.style.height=(H/s)+'px';
-  var t=rot? 'translateX('+w+'px) rotate(90deg) scale('+s+')' : 'scale('+s+')';
-  cv.style.transform=t; cv.style.webkitTransform=t;
-  moveGlass(cur,true);
-  setTimeout(function(){ var p=document.querySelector('.pane.on'); if(p) refresh3d(p); },100);
+  if(fitFrame) cancelAnimationFrame(fitFrame);
+  fitFrame=requestAnimationFrame(function(){
+    fitFrame=0;
+    var cv=$('canvas');
+    if(!cv) return;
+    var vv=window.visualViewport;
+    var w=Math.max(1,Math.round(vv && vv.width ? vv.width : window.innerWidth));
+    var h=Math.max(1,Math.round(vv && vv.height ? vv.height : window.innerHeight));
+    var rot=(!noRot && h>w*1.05);
+    var W=rot?h:w, H=rot?w:h;
+    var s=Math.min(W/BW, H/BH);
+    rotated=rot; curScale=s; document.body.classList.toggle('rot',rot);
+    cv.style.width=(W/s)+'px'; cv.style.height=(H/s)+'px';
+    var t=rot ? 'translate3d('+w+'px,0,0) rotate(90deg) scale('+s+')' : 'translate3d(0,0,0) scale('+s+')';
+    cv.style.transform=t; cv.style.webkitTransform=t;
+    moveGlass(cur,true);
+    setTimeout(function(){ var p=document.querySelector('.pane.on'); if(p) refresh3d(p); },100);
+  });
 }
-window.addEventListener('resize',fit); window.addEventListener('orientationchange',function(){setTimeout(fit,120);});
+window.addEventListener('resize',fit,{passive:true});
+window.addEventListener('orientationchange',function(){setTimeout(fit,80);},{passive:true});
+if(window.screen && screen.orientation && screen.orientation.addEventListener) screen.orientation.addEventListener('change',fit);
+if(window.visualViewport) window.visualViewport.addEventListener('resize',fit,{passive:true});
 fit();
 go(location.hash.slice(1)||'home'); moveGlass(cur,true); lzObserve(document.body);
 </script>
