@@ -645,7 +645,7 @@ object ArchiveManager {
      * directly skips the archive header; opening .002 directly also bypasses the
      * volume stream's sequence handling.
      */
-    private fun resolvePrimaryVolumeFile(selectedFile: File): File {
+    internal fun resolvePrimaryVolumeFile(selectedFile: File): File {
         val name = selectedFile.name
         val parent = selectedFile.parentFile ?: File(".")
         val candidates = when {
@@ -672,7 +672,19 @@ object ArchiveManager {
             }
             else -> emptyList()
         }
-        return candidates.firstOrNull { it.isFile && it.canRead() } ?: selectedFile
+        return candidates
+            .asSequence()
+            .mapNotNull { candidate ->
+                if (candidate.isFile && candidate.canRead()) {
+                    candidate
+                } else {
+                    // Preserve the actual on-disk casing on case-sensitive storage.
+                    parent.listFiles()?.firstOrNull {
+                        it.isFile && it.name.equals(candidate.name, ignoreCase = true) && it.canRead()
+                    }
+                }
+            }
+            .firstOrNull() ?: selectedFile
     }
 
     private fun openSafInStream(
