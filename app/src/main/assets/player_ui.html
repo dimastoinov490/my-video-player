@@ -830,7 +830,13 @@ function renderAudio() {
         return;
       }
       const uri = (playBtn ? playBtn.getAttribute('data-uri') : card.getAttribute('data-uri'));
-      if (uri) playMedia(uri);
+      if (uri) {
+        if (window.AndroidBridge && window.AndroidBridge.playAudio) {
+          window.AndroidBridge.playAudio(uri);
+        } else {
+          playMedia(uri);
+        }
+      }
     });
   });
 }
