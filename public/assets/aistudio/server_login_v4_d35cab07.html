@@ -73,8 +73,6 @@ h1 .a{color:var(--text)}h1 .b{color:var(--o2)}
 .back{display:block;margin:12px auto 0}
 #vReg .field input,#vForgot .field input{padding-left:18px}
 .capbox .rf{margin:0 0 0 0}.capbox>*+*{margin-left:10px}
-/* Keep form text at a readable physical size after the fixed desktop layout is scaled. */
-.frame input,.frame textarea,.frame select{font-size:calc(17px / var(--fit-scale, 1)) !important}
 </style>
 </head>
 <body>
@@ -277,7 +275,6 @@ h1 .a{color:var(--text)}h1 .b{color:var(--o2)}
     var rot=(!noRot && h>w*1.05);               /* телефон вертикально: поворот на 90°, как на главной */
     var W=rot?h:w, H=rot?w:h;
     var s=Math.min((W-24)/1280, (H-24)/680);
-    fr.style.setProperty('--fit-scale', String(s));
     var cw=(W-24)/s, ch=Math.min((H-24)/s, 900);
     fr.style.position='absolute'; fr.style.right='auto'; fr.style.bottom='auto';
     fr.style.width=cw+'px'; fr.style.height=ch+'px'; fr.style.transformOrigin='0 0';
