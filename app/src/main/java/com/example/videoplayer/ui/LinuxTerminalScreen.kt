@@ -47,7 +47,7 @@ fun LinuxTerminalScreen(
     fun appendOutputLine(line: String) {
         // Keep terminal history bounded so long-running sessions cannot grow UI memory indefinitely.
         if (outputLines.size >= 1000) outputLines.removeAt(0)
-        appendOutputLine(line)
+        outputLines.add(line)
     }
     var inputText by remember { mutableStateOf("") }
     var processWriter by remember { mutableStateOf<PrintWriter?>(null) }
