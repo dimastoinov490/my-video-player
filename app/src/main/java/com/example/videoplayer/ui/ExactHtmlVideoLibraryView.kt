@@ -42,6 +42,7 @@ import com.example.videoplayer.model.VideoThumbnailLoader
 import com.example.videoplayer.player.AppPreferences
 import com.example.videoplayer.player.CpuMonitor
 import com.example.videoplayer.player.DeviceInfoHelper
+import com.example.videoplayer.player.DiagnosticManager
 import com.example.videoplayer.player.MemoryMonitor
 import com.example.videoplayer.player.VlcEngineConfigurator
 import com.example.videoplayer.service.HttpBroadcastFolder
@@ -53,6 +54,7 @@ import com.google.zxing.MultiFormatWriter
 import com.google.zxing.common.BitMatrix
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -83,6 +85,7 @@ fun ExactHtmlVideoLibraryView(
     onOpenArchive: (ArchiveSource, File?) -> Unit = { _, _ -> },
     onOpenArchivePicker: () -> Unit = {},
     onOpenBrowser: (String) -> Unit = {},
+    onOpenTerminal: () -> Unit = {},
     browseRefreshTick: Int = 0,
     currentNavIndex: Int = 0,
     modifier: Modifier = Modifier
@@ -94,6 +97,7 @@ fun ExactHtmlVideoLibraryView(
     val latestOpenArchive by rememberUpdatedState(onOpenArchive)
     val latestOpenArchivePicker by rememberUpdatedState(onOpenArchivePicker)
     val latestOpenBrowser by rememberUpdatedState(onOpenBrowser)
+    val latestOpenTerminal by rememberUpdatedState(onOpenTerminal)
     val sentThumbs = remember { java.util.Collections.synchronizedSet(HashSet<String>()) }
     val wifiStatusRef = remember { AtomicReference("") }
     val initialSyncDone = remember { AtomicBoolean(false) }
@@ -864,6 +868,7 @@ fun ExactHtmlVideoLibraryView(
                                 when (id) {
                                     "url" -> onOpenCustomUrl()
                                     "browser" -> latestOpenBrowser("https://google.com")
+                                    "terminal" -> latestOpenTerminal()
                                     "settings" -> { /* В v5 настройки открываются прямо в HTML */ }
                                     "share" -> { /* В v5 раздача открывается прямо в HTML */ }
                                     else -> Toast.makeText(context, "Выбран пункт: $id", Toast.LENGTH_SHORT).show()
@@ -1186,6 +1191,27 @@ fun ExactHtmlVideoLibraryView(
                                 }.toString()
                             } catch (e: Exception) {
                                 "{}"
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun runDiagnostics(): String {
+                            return try {
+                                val items = runBlocking {
+                                    DiagnosticManager.runFullDiagnostics(context)
+                                }
+                                val arr = JSONArray()
+                                for (item in items) {
+                                    arr.put(JSONObject().apply {
+                                        put("id", item.id)
+                                        put("title", item.title)
+                                        put("status", item.status.name)
+                                        put("description", item.description)
+                                    })
+                                }
+                                arr.toString()
+                            } catch (e: Exception) {
+                                "[]"
                             }
                         }
 

@@ -350,6 +350,11 @@ svg.ic{width:1em;height:1em;display:block}
  <symbol id="i-trash" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"/></g></symbol>
  <symbol id="i-archive" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><rect x="3" y="4" width="18" height="4" rx="1.5"/><path d="M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/><path d="M12 4v4"/></g></symbol>
  <symbol id="i-speed" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.6 17.4a9 9 0 1 1 14.8 0"/><path d="M12 13l4-4"/><circle cx="12" cy="13" r="1.5" fill="currentColor"/></g></symbol>
+ <symbol id="i-diag" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.7 3.7a2.5 2.5 0 0 1 3.5 3.5L7.2 21.2a2.5 2.5 0 0 1-3.5-3.5z"/><path d="M14.2 6.3L7.7 3.7a2.5 2.5 0 0 0-3.5 3.5l2.6 6.5M9.8 17.7l6.5 2.6a2.5 2.5 0 0 0 3.5-3.5l-2.6-6.5"/><circle cx="12" cy="12" r="1" fill="currentColor"/></g></symbol>
+ <symbol id="i-ok" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 4.8-5"/></g></symbol>
+ <symbol id="i-warn" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.8L2.8 20h18.4z"/><path d="M12 10v4.5M12 17.3v.2"/></g></symbol>
+ <symbol id="i-err" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></g></symbol>
+ <symbol id="i-term" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M7.5 10l3 2.5-3 2.5M12.5 15h4"/></g></symbol>
 </defs></svg>
 
 <div class="app"><div class="screen">
@@ -505,25 +510,9 @@ svg.ic{width:1em;height:1em;display:block}
       <div id="l-orientations" style="display:flex;flex-direction:column;gap:calc(12*var(--u))"></div>
     </div>
 
-    <div class="row item" style="--i:9"><b>Веб-браузер</b><span class="caps">Chromium</span></div>
-    <div class="card item" id="btn-settings-open-browser" style="--i:10"><div class="tile"><svg class="ic"><use href="#i-globe"/></svg></div>
-      <div class="body"><div class="t">Открыть встроенный браузер</div><div class="s" style="white-space:normal">Полноценный веб-просмотр и загрузка файлов</div></div>
-      <div class="chev"><svg class="ic"><use href="#i-chev"/></svg></div></div>
-
-    <div class="row item" style="--i:11"><b>О приложении</b></div>
-    <div class="card static item" style="--i:12"><div class="tile"><svg class="ic"><use href="#i-info"/></svg></div>
+    <div class="row item" style="--i:9"><b>О приложении</b></div>
+    <div class="card static item" style="--i:10"><div class="tile"><svg class="ic"><use href="#i-info"/></svg></div>
       <div class="body"><div class="t">Nexora</div><div class="s" style="white-space:normal">Современный мультимедийный проигрыватель</div><div class="m">Версия 1.1.0 (LibVLC 3.6.0 + AI Theme Engine)</div></div></div>
-
-    <div class="row item" style="--i:13"><b>Система</b><span class="caps">GPU / CPU</span></div>
-    <div class="card item" id="btn-settings-performance" style="--i:14"><div class="tile"><svg class="ic"><use href="#i-speed"/></svg></div>
-      <div class="body"><div class="t">Производительность</div><div class="s" id="perf-summary" style="white-space:normal">Vulkan, OpenGL, многопоточность (8 ядер CPU)</div></div>
-      <div class="chev"><svg class="ic"><use href="#i-chev"/></svg></div></div>
-    <div class="card item" id="btn-settings-consumption" style="--i:15"><div class="tile"><svg class="ic"><use href="#i-chip"/></svg></div>
-      <div class="body"><div class="t">Потребления</div><div class="s" id="cons-summary" style="white-space:normal">Мониторинг ОЗУ и нагрузки на все 8 ядер CPU</div></div>
-      <div class="chev"><svg class="ic"><use href="#i-chev"/></svg></div></div>
-    <div class="card item" id="btn-settings-device" style="--i:16"><div class="tile"><svg class="ic"><use href="#i-info"/></svg></div>
-      <div class="body"><div class="t">Информация о телефоне</div><div class="s" id="device-summary" style="white-space:normal">Характеристики ОС, дисплея, батареи и памяти</div></div>
-      <div class="chev"><svg class="ic"><use href="#i-chev"/></svg></div></div>
   </div></section>
 
   <!-- ============ ЕЩЁ → Настройки → Информация о телефоне ============ -->
@@ -648,6 +637,20 @@ svg.ic{width:1em;height:1em;display:block}
     <div id="l-cons-cores" style="display:flex;flex-direction:column;gap:calc(12*var(--u))"></div>
   </div></section>
 
+  <!-- ============ ЕЩЁ → Системная диагностика ============ -->
+  <section class="sub" id="s-diagnostics"><div class="scroll">
+    <div class="subhead item"><button class="backbtn" data-back aria-label="Назад"><svg class="ic"><use href="#i-back"/></svg></button>
+      <div><h1>Системная диагностика</h1><p>Проверка CPU, ОЗУ, ПЗУ, сети, libVLC и WebView</p></div></div>
+
+    <div class="card static col item" style="--i:1;gap:calc(14*var(--u))">
+      <button class="pbtn fill" id="btn-diag-run" type="button" style="width:100%;justify-content:center;padding:calc(22*var(--u));font-size:calc(28*var(--u))">
+        <svg class="ic"><use href="#i-diag"/></svg><span id="diag-btn-lbl">Запустить полную диагностику</span>
+      </button>
+    </div>
+
+    <div id="l-diag-results" class="item" style="--i:2;display:flex;flex-direction:column;gap:calc(14*var(--u))"></div>
+  </div></section>
+
   <div class="toast" id="toast"></div>
 
   <button class="fab show" id="fab" aria-label="Воспроизвести"><svg class="ic"><use href="#i-play"/></svg></button>
@@ -687,7 +690,12 @@ let moreItems = [
   { id: "settings", icon: "dots", title: "Настройки плеера", subtitle: "Аудио, видео и декодеры", count: "Параметры" },
   { id: "url", icon: "search", title: "Открыть ссылку потока", subtitle: "Воспроизведение HTTP, HLS, RTSP", count: "Сеть" },
   { id: "share", icon: "list", title: "Wi-Fi & HTTP Раздача", subtitle: "Локальный обмен файлами по сети", count: "Сервер" },
-  { id: "browser", icon: "globe", title: "Веб-браузер", subtitle: "Встроенный Chromium с загрузками", count: "Веб" }
+  { id: "browser", icon: "globe", title: "Веб-браузер", subtitle: "Встроенный Chromium с загрузками", count: "Веб" },
+  { id: "performance", icon: "speed", title: "Производительность", subtitle: "Vulkan, OpenGL, многопоточность (8 ядер CPU)", count: "GPU / CPU" },
+  { id: "consumption", icon: "chip", title: "Потребления", subtitle: "Мониторинг ОЗУ и нагрузки на все 8 ядер CPU", count: "Монитор" },
+  { id: "device", icon: "info", title: "Информация о телефоне", subtitle: "Характеристики ОС, дисплея, батареи и памяти", count: "Система" },
+  { id: "diagnostics", icon: "diag", title: "Диагностика", subtitle: "Проверка ошибок движков, RAM, CPU и сети", count: "Проверка" },
+  { id: "terminal", icon: "term", title: "Linux-окружение (Termux)", subtitle: "Консоль, пакеты APK и поддержка su", count: "Shell" }
 ];
 
 /* Sample fallback data */
@@ -1197,13 +1205,29 @@ function renderPlaylists() {
   });
 }
 
+function syncMoreHardwareSubtitles(s) {
+  const cfg = s || getSettings();
+  const cores = cfg.cpu_cores || 8;
+  const perfSub = 'Vulkan, OpenGL, многопоточность (' + cores + ' ядер CPU)';
+  const consSub = 'Мониторинг ОЗУ и нагрузки на все ' + cores + ' ядер CPU';
+  moreItems.forEach(item => {
+    if (item.id === 'performance') item.subtitle = perfSub;
+    if (item.id === 'consumption') item.subtitle = consSub;
+  });
+  const perfCard = document.querySelector('#l-more .card[data-id="performance"] .s');
+  if (perfCard) perfCard.textContent = perfSub;
+  const consCard = document.querySelector('#l-more .card[data-id="consumption"] .s');
+  if (consCard) consCard.textContent = consSub;
+}
+
 function renderMore() {
+  syncMoreHardwareSubtitles();
   draw('l-more', moreItems, (a, i) => `
     <div class="card" data-s="${esc(a.title)}" data-id="${esc(a.id)}">
-      <div class="tile">${ic(a.icon)}</div>
+      <div class="tile"${a.id === 'diagnostics' ? ' style="color:#ff6b6b;border-color:rgba(244,67,54,.35);background:rgba(244,67,54,.10)"' : (a.id === 'terminal' ? ' style="color:#00FF66;border-color:rgba(0,255,102,.35);background:rgba(0,255,102,.10)"' : '')}>${ic(a.icon)}</div>
       <div class="body">
         <div class="t">${esc(a.title)}</div>
-        <div class="s">${esc(a.subtitle)}</div>
+        <div class="s" style="white-space:normal">${esc(a.subtitle)}</div>
       </div>
       <div class="chev">${ic('chev')}</div>
     </div>
@@ -1613,8 +1637,7 @@ function renderSettings(){
   const cores = s.cpu_cores || 8;
   const vSup = s.vulkan_supported !== false;
   const vUsed = (eng === 'vulkan') || (eng === 'auto' && vSup);
-  if ($('perf-summary')) $('perf-summary').textContent = 'Vulkan, OpenGL, многопоточность (' + cores + ' ядер CPU)';
-  if ($('cons-summary')) $('cons-summary').textContent = 'Мониторинг ОЗУ и нагрузки на все ' + cores + ' ядер CPU';
+  syncMoreHardwareSubtitles(s);
   if ($('perf-cores')) $('perf-cores').textContent = cores + ' ядер / потоков';
   if ($('perf-vulkan')) $('perf-vulkan').textContent = vSup ? 'Поддерживается' : 'Не обнаружен';
   if ($('perf-pipeline')) {
@@ -1631,13 +1654,6 @@ function renderSettings(){
 buildOrientations();
 buildRenderEngines();
 document.querySelectorAll('[data-set]').forEach(b=>b.addEventListener('click',()=>setSetting(b.dataset.set, String(!getSettings()[b.dataset.set]))));
-$('btn-settings-open-browser')?.addEventListener('click', ()=>{
-  if (hasB('onMoreItemClick')) callB('onMoreItemClick', 'browser');
-  else window.open('https://google.com', '_blank');
-});
-$('btn-settings-performance')?.addEventListener('click', ()=> openSub('performance'));
-$('btn-settings-consumption')?.addEventListener('click', ()=> openSub('consumption'));
-$('btn-settings-device')?.addEventListener('click', ()=> openSub('device'));
 $('btn-perf-consumption')?.addEventListener('click', ()=> openSub('consumption'));
 
 function renderConsumption(fromSettings){
@@ -1735,6 +1751,63 @@ function renderDeviceInfo(){
   if ($('dev-rom-total')) $('dev-rom-total').textContent = tot.toFixed(2) + ' ГБ';
 }
 
+let diagScanning = false;
+function renderDiagnostics(){
+  if (diagScanning) return;
+  diagScanning = true;
+  const btn = $('btn-diag-run');
+  const lbl = $('diag-btn-lbl');
+  const box = $('l-diag-results');
+  if (btn) btn.disabled = true;
+  if (lbl) lbl.textContent = 'Сканирование компонентов...';
+  if (box) box.innerHTML = '';
+
+  setTimeout(() => {
+    let items = [];
+    try {
+      if (PREVIEW) {
+        items = [
+          { id: 'cpu', title: 'Центральный процессор (CPU)', status: 'SUCCESS', description: 'Обнаружено ядер: 8. Все потоки доступны для декодирования.' },
+          { id: 'ram', title: 'Оперативная память (RAM)', status: 'SUCCESS', description: 'Свободно: 3420 МБ из 8192 МБ (58% занято).' },
+          { id: 'storage', title: 'Внутреннее хранилище (ПЗУ)', status: 'SUCCESS', description: 'Доступ к файловой системе и архивам активен.' },
+          { id: 'network', title: 'Сетевой интерфейс / HTTP-сервер', status: 'SUCCESS', description: 'Сеть активна, локальный стриминг-сервер готов к работе.' },
+          { id: 'vlc', title: 'Медиа-движок (libVLC)', status: 'SUCCESS', description: 'Нативные библиотеки и vout-конвейер подключены.' },
+          { id: 'webview', title: 'Chromium WebView', status: 'SUCCESS', description: 'Веб-движок функционирует штатно.' }
+        ];
+      } else if (hasB('runDiagnostics')) {
+        items = JSON.parse(callB('runDiagnostics') || '[]');
+      }
+    } catch(e) {
+      items = [];
+    }
+
+    if (box) {
+      const meta = {
+        SUCCESS: { ico: 'ok', color: '#4CAF50', label: 'Норма', border: 'rgba(76,175,80,.35)' },
+        WARNING: { ico: 'warn', color: '#FF9800', label: 'Предупреждение', border: 'rgba(255,152,0,.35)' },
+        ERROR:   { ico: 'err', color: '#F44336', label: 'Ошибка', border: 'rgba(244,67,54,.4)' }
+      };
+      box.innerHTML = items.map(it => {
+        const m = meta[it.status] || meta.WARNING;
+        return `<div class="card static" style="margin-bottom:0;border-color:${m.border};align-items:flex-start;gap:calc(20*var(--u))">` +
+          `<div class="tile" style="color:${m.color};border-color:${m.border};background:rgba(255,255,255,.04)"><svg class="ic"><use href="#i-${m.ico}"/></svg></div>` +
+          `<div class="body">` +
+            `<div style="display:flex;align-items:center;justify-content:space-between;gap:calc(12*var(--u))">` +
+              `<div class="t" style="white-space:normal">${esc(it.title)}</div>` +
+              `<span style="flex:none;font-size:calc(21*var(--u));font-weight:700;color:${m.color}">${esc(m.label)}</span>` +
+            `</div>` +
+            `<div class="s" style="white-space:normal;margin-top:calc(6*var(--u))">${esc(it.description)}</div>` +
+          `</div>` +
+        `</div>`;
+      }).join('');
+    }
+    if (btn) btn.disabled = false;
+    if (lbl) lbl.textContent = 'Запустить полную диагностику';
+    diagScanning = false;
+  }, 60);
+}
+$('btn-diag-run')?.addEventListener('click', () => renderDiagnostics());
+
 /* ---------- open / close sub-pages (same slide + rise animation) ---------- */
 let activeSub = null, subStack = [], subTimer = null;
 document.querySelectorAll('.sub').forEach(p => p.insertBefore(document.querySelector('.bgtop').cloneNode(true), p.firstChild));
@@ -1755,6 +1828,7 @@ function openSub(name){
   if (name === 'settings' || name === 'performance') renderSettings();
   if (name === 'consumption') renderConsumption();
   if (name === 'device') renderDeviceInfo();
+  if (name === 'diagnostics') renderDiagnostics();
   startSubTimer(name);
   fab && fab.classList.remove('show');
 }
@@ -1784,9 +1858,13 @@ window.onSettingsState = () => { if (activeSub === 'settings' || activeSub === '
 
 /* ---------- Ещё: item click router ---------- */
 function openMoreItem(id){
-  if (id === 'share'    && (PREVIEW || hasB('shareGetState'))) return openSub('share');
-  if (id === 'settings' && (PREVIEW || hasB('getSettings')))   return openSub('settings');
-  if (hasB('onMoreItemClick')) callB('onMoreItemClick', id);     // url (and legacy fallback)
+  if (id === 'share'       && (PREVIEW || hasB('shareGetState'))) return openSub('share');
+  if (id === 'settings'    && (PREVIEW || hasB('getSettings')))   return openSub('settings');
+  if (id === 'performance') return openSub('performance');
+  if (id === 'consumption') return openSub('consumption');
+  if (id === 'device')      return openSub('device');
+  if (id === 'diagnostics') return openSub('diagnostics');
+  if (hasB('onMoreItemClick')) callB('onMoreItemClick', id);     // url, browser
 }
 
 /* Initial render */

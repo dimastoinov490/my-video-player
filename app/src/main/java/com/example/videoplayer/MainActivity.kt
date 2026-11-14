@@ -36,6 +36,7 @@ import com.example.videoplayer.archive.ArchiveSource
 import com.example.videoplayer.archive.ArchiveStreamServer
 import com.example.videoplayer.ui.ArchiveBrowserScreen
 import com.example.videoplayer.ui.FullBrowserScreen
+import com.example.videoplayer.ui.LinuxTerminalScreen
 import com.example.videoplayer.ui.OrientationHelper
 import com.example.videoplayer.ui.PlayerScreen
 import com.example.videoplayer.ui.VideoLibraryScreen
@@ -127,6 +128,7 @@ class MainActivity : FragmentActivity() {
                     var activeBrowserUrl by remember { mutableStateOf<String?>(null) }
                     var archiveRefreshTick by remember { mutableIntStateOf(0) }
                     var showCustomUrlDialog by remember { mutableStateOf(false) }
+                    var showLinuxTerminal by remember { mutableStateOf(false) }
                     var urlInput by remember { mutableStateOf("") }
 
                     val safArchivePicker = rememberLauncherForActivityResult(
@@ -204,8 +206,21 @@ class MainActivity : FragmentActivity() {
                                 onOpenBrowser = { url ->
                                     activeBrowserUrl = url
                                 },
+                                onOpenTerminal = {
+                                    showLinuxTerminal = true
+                                },
                                 browseRefreshTick = archiveRefreshTick
                             )
+
+                            AnimatedVisibility(
+                                visible = showLinuxTerminal,
+                                enter = subEnterTransition,
+                                exit = subExitTransition
+                            ) {
+                                LinuxTerminalScreen(
+                                    onBack = { showLinuxTerminal = false }
+                                )
+                            }
 
                             // Воспроизведение по ссылке с плавной анимацией появления
                             AnimatedVisibility(

@@ -79,6 +79,7 @@ fun VideoLibraryScreen(
     onOpenArchive: (ArchiveSource, File?) -> Unit = { _, _ -> },
     onOpenArchivePicker: () -> Unit = {},
     onOpenBrowser: (String) -> Unit = {},
+    onOpenTerminal: () -> Unit = {},
     browseRefreshTick: Int = 0
 ) {
     val context = LocalContext.current
@@ -185,6 +186,7 @@ fun VideoLibraryScreen(
                 onOpenArchive = onOpenArchive,
                 onOpenArchivePicker = onOpenArchivePicker,
                 onOpenBrowser = onOpenBrowser,
+                onOpenTerminal = onOpenTerminal,
                 browseRefreshTick = browseRefreshTick,
                 onRefreshVideos = {
                     Toast.makeText(context, "Обновление списка видео…", Toast.LENGTH_SHORT).show()
