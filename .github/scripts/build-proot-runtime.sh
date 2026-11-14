@@ -17,7 +17,9 @@ git clone --filter=blob:none https://github.com/termux/termux-packages.git "$TER
 git -C "$TERMUX_DIR" checkout --detach "$TERMUX_PACKAGES_REF"
 (
   cd "$TERMUX_DIR"
-  ./scripts/run-docker.sh -d ./build-package.sh -I -C -a "$TERMUX_ARCH" \
+  # Force the three runtime packages to emit fresh .deb files even when
+  # Termux's Docker image already has their build markers installed.
+  ./scripts/run-docker.sh -d ./build-package.sh -f -I -C -a "$TERMUX_ARCH" \
     proot libtalloc libandroid-shmem
 )
 find_package_deb() {
@@ -25,12 +27,15 @@ find_package_deb() {
   local found=""
   while IFS= read -r deb; do
     [[ "$(dpkg-deb -f "$deb" Package)" == "$wanted" ]] || continue
-    [[ "$(dpkg-deb -f "$deb" Architecture)" == "$TERMUX_ARCH" ]] || continue
+    local package_arch
+    package_arch="$(dpkg-deb -f "$deb" Architecture)"
+    [[ "$package_arch" == "$TERMUX_ARCH" || "$package_arch" == "all" ]] || continue
     found="$deb"
     break
   done < <(find "$TERMUX_DIR/output" -type f -name '*.deb' -print)
   [[ -n "$found" ]] || {
-    echo "Missing $wanted package for $TERMUX_ARCH in Termux build output" >&2
+    echo "Missing $wanted package for $TERMUX_ARCH in Termux build output:" >&2
+    find "$TERMUX_DIR/output" -type f -name '*.deb' -print >&2 || true
     exit 1
   }
   printf '%s\n' "$found"
