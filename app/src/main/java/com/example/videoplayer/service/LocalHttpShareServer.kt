@@ -232,25 +232,8 @@ object LocalHttpShareServer {
         loadDevicesIfNeeded(context)
         com.example.videoplayer.player.LinuxInstaller.ensureWebFilesSeeded(context)
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
-            if (!requestedManageStorageOnce) {
-                requestedManageStorageOnce = true
-                try {
-                    val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
-                        data = Uri.parse("package:${context.packageName}")
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    context.startActivity(intent)
-                } catch (_: Exception) {
-                    try {
-                        val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION).apply {
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        }
-                        context.startActivity(intent)
-                    } catch (_: Exception) {}
-                }
-            }
-        }
+        // Do not launch the system-wide "all files" access settings from a server start.
+        // Storage access should be granted explicitly by the user through scoped media/SAF flows.
 
         return try {
             val protocol = HttpServerConfig.getProtocol(context)

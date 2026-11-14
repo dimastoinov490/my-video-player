@@ -6,7 +6,6 @@ import org.apache.ftpserver.FtpServer
 import org.apache.ftpserver.FtpServerFactory
 import org.apache.ftpserver.listener.ListenerFactory
 import org.apache.ftpserver.usermanager.impl.BaseUser
-import org.apache.ftpserver.usermanager.impl.WritePermission
 import java.net.InetAddress
 import java.net.NetworkInterface
 
@@ -26,8 +25,8 @@ object LocalFtpServer {
             listenerFactory.port = port
             serverFactory.addListener("default", listenerFactory.createListener())
 
-            // FTP access is intentionally confined to the app's dedicated share folder.
-            // Never expose the device-wide external storage root through an anonymous FTP account.
+            // Anonymous FTP is read-only and confined to this dedicated app share folder.
+            // FTP has no transport encryption here, so do not permit remote uploads or writes.
             val shareDirectory = File(
                 context.getExternalFilesDir(null) ?: context.filesDir,
                 "ftp_share"
@@ -42,7 +41,6 @@ object LocalFtpServer {
             val user = BaseUser().apply {
                 name = "anonymous"
                 homeDirectory = shareDirectory.canonicalPath
-                authorities = listOf(WritePermission())
             }
             serverFactory.userManager.save(user)
 

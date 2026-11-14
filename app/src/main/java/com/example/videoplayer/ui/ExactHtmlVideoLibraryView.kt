@@ -388,8 +388,14 @@ fun ExactHtmlVideoLibraryView(
                     setBackgroundColor(android.graphics.Color.parseColor("#020306"))
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true
+                    // This WebView loads trusted app assets; keep file access only for those assets.
                     settings.allowFileAccess = true
-                    settings.allowContentAccess = true
+                    settings.allowContentAccess = false
+                    settings.allowFileAccessFromFileURLs = false
+                    settings.allowUniversalAccessFromFileURLs = false
+                    settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                    settings.javaScriptCanOpenWindowsAutomatically = false
+                    settings.setSupportMultipleWindows(false)
                     settings.cacheMode = WebSettings.LOAD_NO_CACHE
                     settings.useWideViewPort = true
                     settings.loadWithOverviewMode = false
@@ -412,6 +418,31 @@ fun ExactHtmlVideoLibraryView(
                     }
 
                     webViewClient = object : WebViewClient() {
+                        override fun shouldOverrideUrlLoading(
+                            view: WebView?,
+                            request: android.webkit.WebResourceRequest?
+                        ): Boolean {
+                            val target = request?.url ?: return true
+                            val targetUrl = target.toString()
+                            // Keep the privileged JavaScript bridge on the bundled UI origin only.
+                            if (target.scheme == "file" && targetUrl.startsWith("file:///android_asset/")) {
+                                return false
+                            }
+                            if (target.scheme == "about" && targetUrl == "about:blank") {
+                                return false
+                            }
+                            // External navigation must leave this WebView so remote pages never
+                            // receive access to AndroidBridge.
+                            if (target.scheme == "https" || target.scheme == "http") {
+                                try {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, target))
+                                } catch (_: Exception) {
+                                    Toast.makeText(context, "Не удалось открыть ссылку", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                            return true
+                        }
+
                         override fun onPageFinished(view: WebView?, url: String?) {
                             super.onPageFinished(view, url)
                             view?.let {

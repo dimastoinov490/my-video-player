@@ -17,7 +17,11 @@ import java.net.URLDecoder
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.ThreadFactory
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
@@ -38,9 +42,17 @@ object ArchiveStreamServer {
     @Volatile
     private var acceptThread: Thread? = null
 
-    private val clientExecutor = Executors.newCachedThreadPool { r ->
-        Thread(r, "ArchiveHttpClient").apply { isDaemon = true }
-    }
+    // Bound concurrent local clients: a cached pool can create an unbounded number
+    // of threads when a local process opens many slow or idle connections.
+    private val clientExecutor = ThreadPoolExecutor(
+        2,
+        8,
+        30L,
+        TimeUnit.SECONDS,
+        ArrayBlockingQueue(32),
+        ThreadFactory { r -> Thread(r, "ArchiveHttpClient").apply { isDaemon = true } },
+        ThreadPoolExecutor.AbortPolicy()
+    )
 
     data class StreamHandle(
         val sessionId: String,
@@ -230,8 +242,13 @@ object ArchiveStreamServer {
                 while (!socket.isClosed) {
                     try {
                         val client = socket.accept()
-                        clientExecutor.execute {
-                            handleClient(client)
+                        try {
+                            clientExecutor.execute {
+                                handleClient(client)
+                            }
+                        } catch (_: RejectedExecutionException) {
+                            // Close excess connections immediately instead of leaking sockets.
+                            runCatching { client.close() }
                         }
                     } catch (_: IOException) {
                         break

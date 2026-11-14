@@ -720,7 +720,8 @@ fun configureFullChromiumSettings(webView: WebView) {
         javaScriptEnabled = true
         domStorageEnabled = true
         databaseEnabled = true
-        javaScriptCanOpenWindowsAutomatically = true
+        // Do not allow scripts to spawn unsolicited windows.
+        javaScriptCanOpenWindowsAutomatically = false
 
         // Отрендерить страницы как на ПК/телефоне с полным масштабом
         loadWithOverviewMode = true
@@ -733,9 +734,11 @@ fun configureFullChromiumSettings(webView: WebView) {
         cacheMode = WebSettings.LOAD_DEFAULT
 
         // Безопасность и контент
-        mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-        allowFileAccess = true
-        allowContentAccess = true
+        // HTTPS pages must not silently load insecure HTTP subresources.
+        mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+        // The browser does not need direct file:// or content:// access for normal browsing.
+        allowFileAccess = false
+        allowContentAccess = false
 
         // Мультимедиа
         mediaPlaybackRequiresUserGesture = false
