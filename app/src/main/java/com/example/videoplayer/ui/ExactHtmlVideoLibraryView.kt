@@ -1106,8 +1106,11 @@ fun ExactHtmlVideoLibraryView(
                                     val uri = Uri.parse(url)
                                     val scheme = uri.scheme?.lowercase()
                                     if (openInApp && (scheme == "http" || scheme == "https")) {
-                                        // Keep all in-app links inside the same browser screen used by the main UI.
-                                        latestOpenBrowser(url)
+                                        val intent = Intent(context, BrowserActivity::class.java).apply {
+                                            putExtra("url", url)
+                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        }
+                                        context.startActivity(intent)
                                     } else {
                                         val intent = Intent(Intent.ACTION_VIEW, uri).apply {
                                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
