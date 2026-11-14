@@ -386,7 +386,11 @@ fun ExactHtmlVideoLibraryView(
                         @JavascriptInterface
                         fun playLastVideo() {
                             Handler(Looper.getMainLooper()).post {
-                                val target = latestVideos.firstOrNull()?.uri?.toString() ?: "sample://western_full"
+                                val target = latestVideos.firstOrNull()?.uri?.toString()
+                                if (target.isNullOrBlank()) {
+                                    Toast.makeText(context, "Видеотека пуста", Toast.LENGTH_SHORT).show()
+                                    return@post
+                                }
                                 onVideoSelected(target)
                             }
                         }
@@ -699,6 +703,7 @@ fun ExactHtmlVideoLibraryView(
                                 if (key == "orientation_mode") {
                                     val saved = OrientationHelper.setMode(context, value)
                                     (context as? android.app.Activity)?.let { OrientationHelper.apply(it, saved) }
+                                    webViewRef?.evaluateJavascript("if (window.onSettingsState) { window.onSettingsState(); }", null)
                                     return@post
                                 }
                                 if (key == "auto_rotate") {
@@ -707,6 +712,7 @@ fun ExactHtmlVideoLibraryView(
                                         if (value.toBoolean()) OrientationHelper.MODE_SENSOR else OrientationHelper.MODE_PORTRAIT
                                     )
                                     (context as? android.app.Activity)?.let { OrientationHelper.apply(it, saved) }
+                                    webViewRef?.evaluateJavascript("if (window.onSettingsState) { window.onSettingsState(); }", null)
                                     return@post
                                 }
                                 val validKeys = setOf("hw_accel", "bg_play", "show_buffering_status", "open_in_app_browser")
@@ -714,6 +720,7 @@ fun ExactHtmlVideoLibraryView(
                                     val prefs = context.getSharedPreferences("video_prefs", Context.MODE_PRIVATE)
                                     prefs.edit().putBoolean(key, value.toBoolean()).apply()
                                 }
+                                webViewRef?.evaluateJavascript("if (window.onSettingsState) { window.onSettingsState(); }", null)
                             }
                         }
 
