@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -99,7 +98,7 @@ fun FullBrowserScreen(
         val host = input.substringBefore('/').substringBefore(':')
         val localHost = host.equals("localhost", true) || host == "127.0.0.1" ||
             host.startsWith("192.168.") || host.startsWith("10.") ||
-            (host.startsWith("172.") && host.substringAfter('.', "").substringBefore('.').toIntOrNull() in 16..31) ||
+            (host.startsWith("172.") && (host.substringAfter('.', "").substringBefore('.').toIntOrNull()?.let { it in 16..31 } == true)) ||
             host.endsWith(".local", true)
         val target = when {
             input.startsWith("http://", true) || input.startsWith("https://", true) -> input
