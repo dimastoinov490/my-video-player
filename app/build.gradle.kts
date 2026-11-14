@@ -95,7 +95,8 @@ android {
 
     packaging {
         jniLibs {
-            useLegacyPackaging = false
+            // PRoot and its loader must be real executable files in nativeLibraryDir.
+            useLegacyPackaging = true
             pickFirsts += listOf(
                 "lib/*/lib7-Zip-JBinding.so",
                 "lib/*/libc++_shared.so"
