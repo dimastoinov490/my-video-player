@@ -476,10 +476,12 @@ fun PlayerScreen(
                         .apply()
                 }
                 resumePositionApplied = false
-                useNativeFallback = true
-                // Stop the failed VLC session before starting VideoView to avoid
+                // Stop the failed VLC session before mounting VideoView to avoid
                 // retaining decoder resources or overlapping audio during fallback.
-                coroutineScope.launch { playerManager.stop() }
+                coroutineScope.launch {
+                    playerManager.stop()
+                    useNativeFallback = true
+                }
                 infoFeedbackText = "Включен резервный медиа-движок Android"
             }
         }
@@ -605,8 +607,10 @@ fun PlayerScreen(
                                             playerManager.playUrl(videoUri)
                                         }
                                     } catch (_: Throwable) {
-                                        useNativeFallback = true
-                                        coroutineScope.launch { playerManager.stop() }
+                                        coroutineScope.launch {
+                                            playerManager.stop()
+                                            useNativeFallback = true
+                                        }
                                     }
                                 }
 
