@@ -659,17 +659,31 @@ object ArchiveManager {
             return stream
         }
 
-        // Если SAF-провайдер отдал pipe (не поддерживает seek), сохраняем во временный кэш
-        val cacheDir = File(context.cacheDir, "archive_saf_cache").apply { mkdirs() }
+        // Если SAF-провайдер отдал pipe (не поддерживает seek), сохраняем во временный кэш.
+        // Не оставляем частичный файл, если копирование или открытие RandomAccessFile завершилось ошибкой.
+        val cacheDir = File(context.cacheDir, "archive_saf_cache")
+        if (!cacheDir.exists() && !cacheDir.mkdirs() && !cacheDir.isDirectory) {
+            throw IOException("Не удалось создать временный кэш архива: ${cacheDir.absolutePath}")
+        }
+        if (!cacheDir.isDirectory) {
+            throw IOException("Путь временного кэша архива не является папкой: ${cacheDir.absolutePath}")
+        }
         val tempFile = File.createTempFile("saf_", "_${displayName.replace('/', '_')}", cacheDir)
-        fis.use { input ->
-            pfd.use {
-                FileOutputStream(tempFile).use { out ->
-                    input.copyTo(out, 64 * 1024)
+        val raf = try {
+            fis.use { input ->
+                pfd.use {
+                    FileOutputStream(tempFile).use { out ->
+                        input.copyTo(out, 64 * 1024)
+                    }
                 }
             }
+            RandomAccessFile(tempFile, "r")
+        } catch (t: Throwable) {
+            runCatching { fis.close() }
+            runCatching { pfd.close() }
+            runCatching { tempFile.delete() }
+            throw t
         }
-        val raf = RandomAccessFile(tempFile, "r")
         val rafCloseable = Closeable {
             runCatching { raf.close() }
             runCatching { tempFile.delete() }
