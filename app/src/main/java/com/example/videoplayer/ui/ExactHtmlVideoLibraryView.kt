@@ -40,6 +40,10 @@ import com.example.videoplayer.model.PlaylistManager
 import com.example.videoplayer.model.VideoItem
 import com.example.videoplayer.model.VideoThumbnailLoader
 import com.example.videoplayer.player.AppPreferences
+import com.example.videoplayer.player.CpuMonitor
+import com.example.videoplayer.player.DeviceInfoHelper
+import com.example.videoplayer.player.MemoryMonitor
+import com.example.videoplayer.player.VlcEngineConfigurator
 import com.example.videoplayer.service.HttpBroadcastFolder
 import com.example.videoplayer.service.HttpServerConfig
 import com.example.videoplayer.service.LocalHttpShareServer
@@ -1094,17 +1098,92 @@ fun ExactHtmlVideoLibraryView(
                                 val oriMode = OrientationHelper.getMode(context)
                                 val rot = oriMode == OrientationHelper.MODE_SENSOR || oriMode == OrientationHelper.MODE_SYSTEM
                                 val openInApp = prefs.getBoolean("open_in_app_browser", true)
+                                val profile = VlcEngineConfigurator.getHardwareProfile(context)
+                                val ram = MemoryMonitor.getRamInfo(context)
+                                val dev = DeviceInfoHelper.getDetails(context)
 
                                 val json = JSONObject()
                                 json.put("hw_accel", hw)
                                 json.put("force_vulkan", forceVulkan)
                                 json.put("render_engine_mode", renderEngine)
+                                json.put("cpu_cores", profile.cpuCores)
+                                json.put("vulkan_supported", profile.isVulkanSupported)
+                                json.put("vulkan_used", profile.isVulkanUsed)
+                                json.put("ram_total_mb", ram.totalMb)
+                                json.put("ram_available_mb", ram.availableMb)
+                                json.put("ram_used_mb", ram.usedMb)
+                                json.put("ram_usage_percent", ram.usagePercent)
+                                json.put("device_summary", "${dev.manufacturer} ${dev.model} • Android ${dev.androidVersion}")
                                 json.put("bg_play", bg)
                                 json.put("show_buffering_status", buff)
                                 json.put("auto_rotate", rot)
                                 json.put("orientation_mode", oriMode)
                                 json.put("open_in_app_browser", openInApp)
                                 json.toString()
+                            } catch (e: Exception) {
+                                "{}"
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun getRamInfo(): String {
+                            return try {
+                                val ram = MemoryMonitor.getRamInfo(context)
+                                JSONObject().apply {
+                                    put("totalMb", ram.totalMb)
+                                    put("availableMb", ram.availableMb)
+                                    put("usedMb", ram.usedMb)
+                                    put("usagePercent", ram.usagePercent)
+                                }.toString()
+                            } catch (e: Exception) {
+                                "{}"
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun getCpuInfo(): String {
+                            return try {
+                                val cores = CpuMonitor.getSnapshot()
+                                val avg = if (cores.isNotEmpty()) cores.sumOf { it.usagePercent } / cores.size else 0
+                                val coresArr = JSONArray()
+                                for (c in cores) {
+                                    coresArr.put(JSONObject().apply {
+                                        put("coreId", c.coreId)
+                                        put("usagePercent", c.usagePercent)
+                                        if (c.freqMhz != null) put("freqMhz", c.freqMhz)
+                                    })
+                                }
+                                JSONObject().apply {
+                                    put("avgUsagePercent", avg)
+                                    put("coreCount", cores.size)
+                                    put("cores", coresArr)
+                                }.toString()
+                            } catch (e: Exception) {
+                                "{}"
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun getDeviceInfo(): String {
+                            return try {
+                                val d = DeviceInfoHelper.getDetails(context)
+                                JSONObject().apply {
+                                    put("manufacturer", d.manufacturer)
+                                    put("model", d.model)
+                                    put("androidVersion", d.androidVersion)
+                                    put("sdkLevel", d.sdkLevel)
+                                    put("securityPatch", d.securityPatch)
+                                    put("buildId", d.buildId)
+                                    put("screenResolution", d.screenResolution)
+                                    put("screenDensity", d.screenDensity)
+                                    put("refreshRate", d.refreshRate.toDouble())
+                                    put("batteryLevel", d.batteryLevel)
+                                    put("batteryVoltage", d.batteryVoltage.toDouble())
+                                    put("batteryTemp", d.batteryTemp.toDouble())
+                                    put("batteryTech", d.batteryTech)
+                                    put("storageTotalGb", d.storageTotalGb.toDouble())
+                                    put("storageFreeGb", d.storageFreeGb.toDouble())
+                                }.toString()
                             } catch (e: Exception) {
                                 "{}"
                             }

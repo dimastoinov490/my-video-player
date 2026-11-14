@@ -36,7 +36,10 @@ import com.example.videoplayer.ui.theme.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onNavigateToPerformance: (() -> Unit)? = null,
+    onNavigateToConsumption: (() -> Unit)? = null,
+    onNavigateToDeviceInfo: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val theme = LocalAppTheme.current
@@ -49,11 +52,38 @@ fun SettingsScreen(
     var showAiStudio by remember { mutableStateOf(false) }
     var showScreenshotDialog by remember { mutableStateOf(false) }
     var showBrowser by remember { mutableStateOf(false) }
+    var showPerformanceScreen by remember { mutableStateOf(false) }
+    var showConsumptionScreen by remember { mutableStateOf(false) }
+    var showDeviceInfoScreen by remember { mutableStateOf(false) }
+    val hardwareProfile = remember(showPerformanceScreen, showConsumptionScreen) {
+        VlcEngineConfigurator.getHardwareProfile(context)
+    }
 
     if (showBrowser) {
         FullBrowserScreen(initialUrl = "https://google.com") {
             showBrowser = false
         }
+        return
+    }
+
+    if (showPerformanceScreen) {
+        PerformanceSettingsScreen(
+            onBack = { showPerformanceScreen = false }
+        )
+        return
+    }
+
+    if (showConsumptionScreen) {
+        ConsumptionScreen(
+            onBack = { showConsumptionScreen = false }
+        )
+        return
+    }
+
+    if (showDeviceInfoScreen) {
+        DeviceInfoScreen(
+            onBack = { showDeviceInfoScreen = false }
+        )
         return
     }
 
@@ -498,6 +528,157 @@ fun SettingsScreen(
                                 fontSize = 12.sp
                             )
                         }
+                    }
+                }
+            }
+
+            item {
+                OutlinedCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("settings_performance_card")
+                        .clickable {
+                            if (onNavigateToPerformance != null) {
+                                onNavigateToPerformance()
+                            } else {
+                                showPerformanceScreen = true
+                            }
+                        },
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.outlinedCardColors(containerColor = theme.surface),
+                    border = BorderStroke(1.dp, theme.primary.copy(alpha = 0.4f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Speed,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Производительность",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = Color.White,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Vulkan, OpenGL, многопоточность (${hardwareProfile.cpuCores} ядер CPU)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = GrayText
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = "Открыть",
+                            tint = GrayText
+                        )
+                    }
+                }
+            }
+
+            item {
+                OutlinedCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("settings_consumption_card")
+                        .clickable {
+                            if (onNavigateToConsumption != null) {
+                                onNavigateToConsumption()
+                            } else {
+                                showConsumptionScreen = true
+                            }
+                        },
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.outlinedCardColors(containerColor = theme.surface),
+                    border = BorderStroke(1.dp, theme.secondary.copy(alpha = 0.4f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Memory,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Потребления",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = Color.White,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Мониторинг ОЗУ и нагрузки на все ${hardwareProfile.cpuCores} ядер CPU",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = GrayText
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = "Открыть",
+                            tint = GrayText
+                        )
+                    }
+                }
+            }
+
+            item {
+                OutlinedCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
+                        .testTag("settings_device_info_card")
+                        .clickable {
+                            if (onNavigateToDeviceInfo != null) {
+                                onNavigateToDeviceInfo()
+                            } else {
+                                showDeviceInfoScreen = true
+                            }
+                        },
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.outlinedCardColors(containerColor = theme.surface),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Информация о телефоне",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = Color.White,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Характеристики ОС, дисплея, батареи и памяти",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = GrayText
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = "Открыть",
+                            tint = GrayText
+                        )
                     }
                 }
             }
