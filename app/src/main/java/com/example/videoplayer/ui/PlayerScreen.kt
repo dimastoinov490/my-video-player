@@ -70,6 +70,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -252,6 +255,28 @@ fun PlayerScreen(
     }
 
     val activity = context as? Activity
+    // The background-playback switch is persisted by the library settings screen.
+    // Respect it when the Activity leaves the foreground; keeping it enabled does not
+    // replace a dedicated media foreground service, but prevents an intentional pause.
+    DisposableEffect(activity, playerManager) {
+        val lifecycleOwner = activity as? LifecycleOwner
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                val allowBackgroundPlayback = context
+                    .getSharedPreferences("video_prefs", Context.MODE_PRIVATE)
+                    .getBoolean("bg_play", false)
+                if (!allowBackgroundPlayback) {
+                    playerManager.pause()
+                    try { nativeMediaPlayer?.pause() } catch (_: Throwable) {}
+                }
+            }
+        }
+        lifecycleOwner?.lifecycle?.addObserver(observer)
+        onDispose {
+            lifecycleOwner?.lifecycle?.removeObserver(observer)
+        }
+    }
+
     val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
     val maxVolume = remember { audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1) }
 
