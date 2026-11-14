@@ -411,7 +411,7 @@ object LinuxInstaller {
         while (remaining > 0L) {
             val toRead = minOf(remaining, buf.size.toLong()).toInt()
             val n = input.read(buf, 0, toRead)
-            if (n <= 0) break
+            if (n <= 0) throw IOException("Неожиданный конец TAR-архива в метаданных")
             baos.write(buf, 0, n)
             remaining -= n
         }
@@ -441,7 +441,7 @@ object LinuxInstaller {
         while (remaining > 0L) {
             val toRead = minOf(remaining, buf.size.toLong()).toInt()
             val n = input.read(buf, 0, toRead)
-            if (n <= 0) break
+            if (n <= 0) throw IOException("Неожиданный конец TAR-архива при пропуске данных")
             remaining -= n
         }
     }
