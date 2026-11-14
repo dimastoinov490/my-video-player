@@ -807,6 +807,7 @@ function renderAudio() {
         <div class="t">${esc(a.title)}</div>
         <div class="s">${esc(a.artist||'')}</div>
         <div class="m">${esc(a.meta||'')}</div>
+        ${a.technical ? `<div class="m" style="color:var(--accent);font-size:11px">${esc(a.technical)}</div>` : ''}
       </div>
       <div class="addbtn" data-act="add" data-title="${esc(a.title)}" data-uri="${esc(a.uri||'')}">${ic('addlist')}</div>
       <div class="playbtn" data-act="play" data-uri="${esc(a.uri||'')}">${ic('play')}</div>
