@@ -499,23 +499,50 @@ fun ExactHtmlVideoLibraryView(
 
                         @JavascriptInterface
                         fun playAudio(uri: String) {
+                            val singleTrack = JSONArray().put(JSONObject().put("uri", uri))
+                            playAudioQueue(singleTrack.toString(), 0)
+                        }
+
+                        @JavascriptInterface
+                        fun playAudioQueue(queueJson: String, selectedIndex: Int) {
                             Handler(Looper.getMainLooper()).post {
                                 val controller = latestAudioController
                                 if (controller == null) {
                                     Toast.makeText(context, "Аудиоплеер ещё подключается", Toast.LENGTH_SHORT).show()
                                     return@post
                                 }
-                                val metadata = MediaMetadata.Builder()
-                                    .setTitle(uri.substringAfterLast('/').substringBefore('?').ifBlank { "Аудио" })
-                                    .build()
-                                controller.setMediaItem(
-                                    MediaItem.Builder()
-                                        .setUri(uri)
-                                        .setMediaMetadata(metadata)
-                                        .build()
-                                )
-                                controller.prepare()
-                                controller.play()
+                                try {
+                                    val source = JSONArray(queueJson)
+                                    val mediaItems = ArrayList<MediaItem>(source.length())
+                                    for (index in 0 until source.length()) {
+                                        val track = source.optJSONObject(index) ?: continue
+                                        val uri = track.optString("uri").trim()
+                                        if (uri.isBlank()) continue
+                                        val metadata = MediaMetadata.Builder()
+                                            .setTitle(track.optString("title").ifBlank {
+                                                uri.substringAfterLast('/').substringBefore('?').ifBlank { "Аудио" }
+                                            })
+                                            .setArtist(track.optString("artist").ifBlank { null })
+                                            .setAlbumTitle(track.optString("album").ifBlank { null })
+                                            .build()
+                                        mediaItems.add(
+                                            MediaItem.Builder()
+                                                .setUri(uri)
+                                                .setMediaMetadata(metadata)
+                                                .build()
+                                        )
+                                    }
+                                    if (mediaItems.isEmpty()) {
+                                        Toast.makeText(context, "В очереди нет доступных аудиофайлов", Toast.LENGTH_SHORT).show()
+                                        return@post
+                                    }
+                                    val safeIndex = selectedIndex.coerceIn(0, mediaItems.lastIndex)
+                                    controller.setMediaItems(mediaItems, safeIndex, 0L)
+                                    controller.prepare()
+                                    controller.play()
+                                } catch (error: Exception) {
+                                    Toast.makeText(context, "Не удалось открыть очередь аудио", Toast.LENGTH_SHORT).show()
+                                }
                             }
                         }
 
