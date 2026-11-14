@@ -712,6 +712,7 @@ fun ExactHtmlVideoLibraryView(
                                         if (value.toBoolean()) OrientationHelper.MODE_SENSOR else OrientationHelper.MODE_PORTRAIT
                                     )
                                     (context as? android.app.Activity)?.let { OrientationHelper.apply(it, saved) }
+                                    webViewRef?.evaluateJavascript("if (window.onSettingsState) { window.onSettingsState(); }", null)
                                     return@post
                                 }
                                 val validKeys = setOf("hw_accel", "bg_play", "show_buffering_status", "open_in_app_browser")
