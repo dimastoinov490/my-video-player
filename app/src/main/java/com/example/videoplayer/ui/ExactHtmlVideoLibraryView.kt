@@ -29,6 +29,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.C
@@ -104,6 +107,7 @@ fun ExactHtmlVideoLibraryView(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val coroutineScope = rememberCoroutineScope()
     var audioController by remember { mutableStateOf<MediaController?>(null) }
 
@@ -121,6 +125,20 @@ fun ExactHtmlVideoLibraryView(
             audioController = null
             MediaController.releaseFuture(controllerFuture)
         }
+    }
+
+    // Respect the app's background playback preference for the Media3 session too.
+    DisposableEffect(lifecycleOwner, audioController) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                val allowBackgroundPlayback = context
+                    .getSharedPreferences("video_prefs", Context.MODE_PRIVATE)
+                    .getBoolean("bg_play", false)
+                if (!allowBackgroundPlayback) audioController?.pause()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     val latestAudioController by rememberUpdatedState(audioController)
