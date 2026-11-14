@@ -136,11 +136,10 @@ object ArchiveStreamServer {
     }
 
     fun startSession(context: Context, spec: ArchivePlaybackSpec): StreamHandle {
-        ensureServerStarted()
-
         val sessionId = UUID.randomUUID().toString().replace("-", "")
         val safeName = spec.entryName.replace(Regex("[^a-zA-Z0-9._-]"), "_").ifBlank { "video.bin" }
         val session = synchronized(serverLock) {
+            ensureServerStartedLocked()
             cleanupStaleCacheLocked(context)
             val rootDir = File(context.cacheDir, CACHE_DIR_NAME)
             if (!rootDir.exists() && !rootDir.mkdirs() && !rootDir.isDirectory) {
@@ -236,11 +235,11 @@ object ArchiveStreamServer {
     }
 
     fun stopAll() {
-        val keys = sessions.keys.toList()
-        for (k in keys) {
-            sessions.remove(k)?.cancelAndDelete()
-        }
         synchronized(serverLock) {
+            val keys = sessions.keys.toList()
+            for (key in keys) {
+                sessions.remove(key)?.cancelAndDelete()
+            }
             try {
                 serverSocket?.close()
             } catch (_: Throwable) {}
@@ -251,18 +250,21 @@ object ArchiveStreamServer {
     }
 
     private fun ensureServerStarted() {
+        synchronized(serverLock) {
+            ensureServerStartedLocked()
+        }
+    }
+
+    // Caller must hold serverLock so shutdown cannot race server creation/session registration.
+    private fun ensureServerStartedLocked() {
         val existing = serverSocket
         if (existing != null && !existing.isClosed && listenPort > 0) return
 
-        synchronized(serverLock) {
-            val current = serverSocket
-            if (current != null && !current.isClosed && listenPort > 0) return
+        val socket = ServerSocket(0, 32, InetAddress.getByName("127.0.0.1"))
+        serverSocket = socket
+        listenPort = socket.localPort
 
-            val socket = ServerSocket(0, 32, InetAddress.getByName("127.0.0.1"))
-            serverSocket = socket
-            listenPort = socket.localPort
-
-            val thread = Thread({
+        val thread = Thread({
                 while (!socket.isClosed) {
                     try {
                         val client = socket.accept()
@@ -284,8 +286,7 @@ object ArchiveStreamServer {
                 isDaemon = true
                 start()
             }
-            acceptThread = thread
-        }
+        acceptThread = thread
     }
 
     private fun handleClient(socket: Socket) {
