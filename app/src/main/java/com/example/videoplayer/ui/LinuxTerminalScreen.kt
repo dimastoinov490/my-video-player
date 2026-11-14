@@ -34,6 +34,7 @@ import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.PrintWriter
+import java.util.concurrent.atomic.AtomicReference
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,6 +54,8 @@ fun LinuxTerminalScreen(
     var inputText by remember { mutableStateOf("") }
     var processWriter by remember { mutableStateOf<PrintWriter?>(null) }
     var activeProcess by remember { mutableStateOf<Process?>(null) }
+    // Keep a non-Compose handle so disposal can kill a process even before UI state is published.
+    val processRef = remember { AtomicReference<Process?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var statusText by remember { mutableStateOf("Инициализация окружения...") }
 
@@ -62,6 +65,10 @@ fun LinuxTerminalScreen(
         onDispose {
             try {
                 processWriter?.close()
+            } catch (_: Exception) {
+            }
+            try {
+                processRef.getAndSet(null)?.destroy()
             } catch (_: Exception) {
             }
             try {
@@ -113,6 +120,8 @@ fun LinuxTerminalScreen(
                 LinuxInstaller.ensureBootstrapScript(context)
                 val process = TermuxEngine.createTermuxSession(context).start()
                 sessionProcess = process
+                // Publish immediately: readLine() is blocking and does not react to coroutine cancellation.
+                processRef.set(process)
                 val writer = PrintWriter(process.outputStream, true)
                 withContext(Dispatchers.Main) {
                     activeProcess = process
@@ -159,6 +168,7 @@ fun LinuxTerminalScreen(
             } finally {
                 // Also covers cancellation between process.start() and publishing it to Compose state.
                 sessionProcess?.let { process ->
+                    processRef.compareAndSet(process, null)
                     try {
                         process.destroy()
                     } catch (_: Exception) {
