@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
-TERMUX_ARCH="\${1:?Termux architecture is required}"
-ANDROID_ABI="\${2:?Android ABI is required}"
-TERMUX_PACKAGES_REF="\${TERMUX_PACKAGES_REF:?Pinned Termux packages commit is required}"
+TERMUX_ARCH="${1:?Termux architecture is required}"
+ANDROID_ABI="${2:?Android ABI is required}"
+TERMUX_PACKAGES_REF="${TERMUX_PACKAGES_REF:?Pinned Termux packages commit is required}"
 case "$TERMUX_ARCH:$ANDROID_ABI" in
   aarch64:arm64-v8a|arm:armeabi-v7a) ;;
   *) echo "Unsupported architecture pair: $TERMUX_ARCH:$ANDROID_ABI" >&2; exit 2 ;;
 esac
-WORK_DIR="\${RUNNER_TEMP:-/tmp}/proot-runtime-\${TERMUX_ARCH}"
+WORK_DIR="${RUNNER_TEMP:-/tmp}/proot-runtime-${TERMUX_ARCH}"
 TERMUX_DIR="$WORK_DIR/termux-packages"
 EXTRACT_DIR="$WORK_DIR/extracted"
 OUTPUT_DIR="$GITHUB_WORKSPACE/app/src/main/jniLibs/$ANDROID_ABI"
