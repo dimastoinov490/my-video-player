@@ -831,7 +831,10 @@ function renderAudio() {
       }
       const uri = (playBtn ? playBtn.getAttribute('data-uri') : card.getAttribute('data-uri'));
       if (uri) {
-        if (window.AndroidBridge && window.AndroidBridge.playAudio) {
+        if (window.AndroidBridge && window.AndroidBridge.playAudioQueue) {
+          const selectedIndex = items.findIndex(track => track.uri === uri);
+          window.AndroidBridge.playAudioQueue(JSON.stringify(items), Math.max(0, selectedIndex));
+        } else if (window.AndroidBridge && window.AndroidBridge.playAudio) {
           window.AndroidBridge.playAudio(uri);
         } else {
           playMedia(uri);
