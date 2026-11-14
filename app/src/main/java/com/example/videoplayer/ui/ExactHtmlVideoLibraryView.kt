@@ -522,8 +522,8 @@ fun ExactHtmlVideoLibraryView(
                                             .setTitle(track.optString("title").ifBlank {
                                                 uri.substringAfterLast('/').substringBefore('?').ifBlank { "Аудио" }
                                             })
-                                            .setArtist(track.optString("artist").ifBlank { null })
-                                            .setAlbumTitle(track.optString("album").ifBlank { null })
+                                            .setArtist(track.optString("artist").takeIf { it.isNotBlank() })
+                                            .setAlbumTitle(track.optString("album").takeIf { it.isNotBlank() })
                                             .build()
                                         mediaItems.add(
                                             MediaItem.Builder()
