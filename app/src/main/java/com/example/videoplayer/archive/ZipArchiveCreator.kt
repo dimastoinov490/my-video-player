@@ -114,7 +114,7 @@ object ZipArchiveCreator {
                 throw IOException("Нельзя включить создаваемый архив в самого себя")
             }
 
-            val cleanPath = archivePath.replace('\\\\', '/').trimStart('/')
+            val cleanPath = archivePath.replace('\\', '/').trimStart('/')
             if (cleanPath.isBlank() || cleanPath.split('/').any { it == ".." || it == "." }) {
                 throw IOException("Недопустимый путь в архиве: $archivePath")
             }
