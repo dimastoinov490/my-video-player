@@ -84,14 +84,25 @@ class VlcPlayerManager(private val context: Context) {
     }
 
     init {
+        var createdVlc: LibVLC? = null
+        var createdPlayer: MediaPlayer? = null
         try {
             val vlc = LibVLC(context.applicationContext, options)
+            createdVlc = vlc
             val mp = MediaPlayer(vlc)
+            createdPlayer = mp
             mp.setEventListener(eventListener)
             libVLC = vlc
             mediaPlayer = mp
         } catch (e: Throwable) {
             Log.e("VlcPlayerManager", "Failed to initialize LibVLC engine", e)
+            try {
+                createdPlayer?.setEventListener(null)
+                createdPlayer?.release()
+            } catch (_: Throwable) {}
+            try {
+                createdVlc?.release()
+            } catch (_: Throwable) {}
             libVLC = null
             mediaPlayer = null
             onStatusChanged?.invoke("Error: LibVLC unavailable")
@@ -203,10 +214,10 @@ class VlcPlayerManager(private val context: Context) {
                 } else {
                     Media(vlc, uri)
                 }
-            } else if (urlOrUri.startsWith("http://") || urlOrUri.startsWith("https://") || urlOrUri.startsWith("rtsp://") || urlOrUri.startsWith("ftp://") || urlOrUri.startsWith("file://")) {
-                Media(vlc, Uri.parse(urlOrUri))
+            } else if (targetUrl.startsWith("http://") || targetUrl.startsWith("https://") || targetUrl.startsWith("rtsp://") || targetUrl.startsWith("ftp://") || targetUrl.startsWith("file://")) {
+                Media(vlc, Uri.parse(targetUrl))
             } else {
-                Media(vlc, urlOrUri)
+                Media(vlc, targetUrl)
             }
 
             // Let VLC select the available hardware/software decoder.

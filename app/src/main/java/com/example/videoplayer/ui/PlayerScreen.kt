@@ -286,6 +286,7 @@ fun PlayerScreen(
 
     var nativeVideoView by remember { mutableStateOf<VideoView?>(null) }
     var nativeMediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
+    var hasStartedVlcPlayback by remember(videoUri) { mutableStateOf(false) }
 
     BackHandler {
         onBack()
@@ -483,7 +484,12 @@ fun PlayerScreen(
                         .apply()
                 }
                 resumePositionApplied = false
-                useNativeFallback = true
+                // Stop the failed VLC session before mounting VideoView to avoid
+                // retaining decoder resources or overlapping audio during fallback.
+                coroutineScope.launch {
+                    playerManager.stop()
+                    useNativeFallback = true
+                }
                 infoFeedbackText = "Включен резервный медиа-движок Android"
             }
         }
@@ -602,9 +608,17 @@ fun PlayerScreen(
                                 override fun surfaceCreated(holder: SurfaceHolder) {
                                     try {
                                         playerManager.attachSurface(this@apply)
-                                        playerManager.playUrl(videoUri)
+                                        // SurfaceView can be recreated on rotation or window changes.
+                                        // Reattach the existing VLC output without resetting the current media.
+                                        if (!hasStartedVlcPlayback) {
+                                            hasStartedVlcPlayback = true
+                                            playerManager.playUrl(videoUri)
+                                        }
                                     } catch (_: Throwable) {
-                                        useNativeFallback = true
+                                        coroutineScope.launch {
+                                            playerManager.stop()
+                                            useNativeFallback = true
+                                        }
                                     }
                                 }
 
@@ -662,7 +676,9 @@ fun PlayerScreen(
                                     isPlaying = false
                                 }
                             }
-                            setOnErrorListener { _, _, _ ->
+                            setOnErrorListener { _, what, extra ->
+                                isPlaying = false
+                                statusText = "Ошибка воспроизведения ($what/$extra)"
                                 Toast.makeText(ctx, "Ошибка воспроизведения", Toast.LENGTH_SHORT).show()
                                 true
                             }
