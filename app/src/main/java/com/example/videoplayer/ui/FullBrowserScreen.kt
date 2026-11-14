@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -126,14 +128,14 @@ fun FullBrowserScreen(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(Color(0xFF120A05))) {
+    Column(modifier = Modifier.fillMaxSize().navigationBarsPadding().background(Color(0xFF120A05))) {
         Surface(
             color = Color(0xFF120A05),
             modifier = Modifier.fillMaxWidth(),
             shadowElevation = 3.dp
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 7.dp),
+                modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 4.dp, vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(2.dp)
             ) {
