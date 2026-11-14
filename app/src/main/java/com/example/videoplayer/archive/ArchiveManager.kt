@@ -497,10 +497,20 @@ object ArchiveManager {
         onBytesWritten: (Long) -> Unit
     ) {
         ensureInitialized()
-        outputFile.parentFile?.mkdirs()
+        val parent = outputFile.parentFile
+        if (parent != null && !parent.exists() && !parent.mkdirs() && !parent.isDirectory) {
+            throw IOException("Не удалось создать папку временного видео: ${parent.absolutePath}")
+        }
+        if (parent != null && !parent.isDirectory) {
+            throw IOException("Путь временного видео не является папкой: ${parent.absolutePath}")
+        }
+        if (!outputFile.createNewFile()) {
+            throw IOException("Временный файл видео уже существует: ${outputFile.absolutePath}")
+        }
 
-        openSession(context, source, password).use { session ->
-            val archive = session.archive
+        try {
+            openSession(context, source, password).use { session ->
+                val archive = session.archive
             var writtenTotal = 0L
             var fos: BufferedOutputStream? = null
             var opResult: ExtractOperationResult = ExtractOperationResult.OK
@@ -568,6 +578,10 @@ object ArchiveManager {
             if (opResult != ExtractOperationResult.OK) {
                 throw IOException("Не удалось извлечь видео из архива ($opResult)")
             }
+            }
+        } catch (t: Throwable) {
+            runCatching { outputFile.delete() }
+            throw t
         }
     }
 
