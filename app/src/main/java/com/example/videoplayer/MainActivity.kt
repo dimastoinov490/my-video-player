@@ -35,7 +35,7 @@ import com.example.videoplayer.archive.ArchivePlaybackSpec
 import com.example.videoplayer.archive.ArchiveSource
 import com.example.videoplayer.archive.ArchiveStreamServer
 import com.example.videoplayer.ui.ArchiveBrowserScreen
-import com.example.videoplayer.ui.FullBrowserScreen
+import com.example.videoplayer.ui.BrowserActivity
 import com.example.videoplayer.ui.LinuxTerminalScreen
 import com.example.videoplayer.ui.OrientationHelper
 import com.example.videoplayer.ui.PlayerScreen
@@ -125,7 +125,6 @@ class MainActivity : FragmentActivity() {
                 ) {
                     var selectedVideoUri by remember { mutableStateOf<String?>(null) }
                     var selectedArchivePlayback by remember { mutableStateOf<ArchivePlaybackSpec?>(null) }
-                    var activeBrowserUrl by remember { mutableStateOf<String?>(null) }
                     var archiveRefreshTick by remember { mutableIntStateOf(0) }
                     var showCustomUrlDialog by remember { mutableStateOf(false) }
                     var showLinuxTerminal by remember { mutableStateOf(false) }
@@ -180,11 +179,6 @@ class MainActivity : FragmentActivity() {
                                 pendingArchiveState = null
                             }
                         )
-                    } else if (activeBrowserUrl != null) {
-                        FullBrowserScreen(
-                            initialUrl = activeBrowserUrl!!,
-                            onClose = { activeBrowserUrl = null }
-                        )
                     } else {
                         Box(modifier = Modifier.fillMaxSize()) {
                             VideoLibraryScreen(
@@ -204,7 +198,9 @@ class MainActivity : FragmentActivity() {
                                     safArchivePicker.launch(arrayOf("*/*"))
                                 },
                                 onOpenBrowser = { url ->
-                                    activeBrowserUrl = url
+                                    startActivity(
+                                        Intent(this@MainActivity, BrowserActivity::class.java).putExtra("url", url)
+                                    )
                                 },
                                 onOpenTerminal = {
                                     showLinuxTerminal = true

@@ -377,9 +377,15 @@ h1 .a{color:var(--text)}h1 .b{color:var(--o2)}
 (function(){
   var fr=document.querySelector('.frame');
   var noRot=/[?&]rotate=0/.test(location.search);
-  function fit(){
+  function isEditingField(el){
+    return !!el && (el.tagName==='INPUT' || el.tagName==='TEXTAREA' || el.tagName==='SELECT' || el.isContentEditable);
+  }
+  function fit(force){
+    /* Android WebView resizes its viewport when the keyboard opens. Keep the
+       last canvas scale while a form field is active so the whole page won't shrink. */
+    if(!force && isEditingField(document.activeElement) && fr.dataset.fitReady==='1') return;
     var w=window.innerWidth, h=window.innerHeight;
-    var rot=(!noRot && h>w*1.05);               /* телефон вертикально: поворот на 90°, как на главной */
+    var rot=(!noRot && h>w*1.05);
     var W=rot?h:w, H=rot?w:h;
     var s=Math.min((W-24)/1280, (H-24)/680);
     var cw=(W-24)/s, ch=Math.min((H-24)/s, 900);
@@ -390,8 +396,14 @@ h1 .a{color:var(--text)}h1 .b{color:var(--o2)}
     if(rot){ fr.style.left='0px'; fr.style.top='0px'; t='translateX('+w+'px) rotate(90deg) translate(12px,12px) scale('+s+')'; }
     else   { fr.style.left='12px'; fr.style.top='12px'; t='scale('+s+')'; }
     fr.style.transform=t; fr.style.webkitTransform=t;
+    fr.dataset.fitReady='1';
   }
-  window.addEventListener('resize',fit); window.addEventListener('orientationchange',function(){setTimeout(fit,120);}); fit();
+  window.addEventListener('resize',function(){ fit(false); });
+  window.addEventListener('orientationchange',function(){ setTimeout(function(){ fit(true); },160); });
+  document.addEventListener('focusout',function(){
+    setTimeout(function(){ if(!isEditingField(document.activeElement)) fit(true); },180);
+  });
+  fit(true);
 })();
 </script>
 </body>

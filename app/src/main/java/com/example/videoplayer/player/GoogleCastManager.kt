@@ -35,8 +35,12 @@ class GoogleCastManager(context: Context) {
     ): CastStartResult {
         val cast = castContext ?: return CastStartResult.UNAVAILABLE
         val mediaUrl = normalizeCastUrl(source) ?: return CastStartResult.UNSUPPORTED_URI
-        val remoteClient = cast.sessionManager.currentCastSession?.remoteMediaClient
-            ?: return CastStartResult.NOT_CONNECTED
+        val remoteClient = try {
+            cast.sessionManager.currentCastSession?.remoteMediaClient
+        } catch (error: Exception) {
+            Log.e(TAG, "Unable to access the active Google Cast session", error)
+            return CastStartResult.UNAVAILABLE
+        } ?: return CastStartResult.NOT_CONNECTED
 
         return try {
             val metadata = MediaMetadata(MediaMetadata.MEDIA_TYPE_MOVIE).apply {
@@ -53,14 +57,23 @@ class GoogleCastManager(context: Context) {
                 .build()
 
             remoteClient.load(request).setResultCallback { result ->
-                val succeeded = result.status.isSuccess
+                val succeeded = try {
+                    result.status.isSuccess
+                } catch (error: Exception) {
+                    Log.e(TAG, "Unable to read Google Cast load result", error)
+                    false
+                }
                 if (!succeeded) {
                     Log.w(
                         TAG,
                         "Cast receiver rejected media: code=${result.status.statusCode}, message=${result.status.statusMessage}"
                     )
                 }
-                onResult(succeeded)
+                try {
+                    onResult(succeeded)
+                } catch (callbackError: Exception) {
+                    Log.e(TAG, "Cast result callback failed", callbackError)
+                }
             }
             CastStartResult.STARTED
         } catch (error: Exception) {
