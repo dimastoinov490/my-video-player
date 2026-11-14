@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import android.view.SurfaceView
+import com.example.videoplayer.archive.ArchiveStreamServer
 import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
@@ -14,12 +15,9 @@ import com.example.videoplayer.ui.VideoScaleMode
 data class PlaybackTrack(val id: Int, val name: String)
 
 class VlcPlayerManager(private val context: Context) {
-    // Keep VLC's normal frame scheduling and decoder selection. Forcing
-    // software decoding and disabling late-frame dropping can hurt playback
-    // smoothness and battery life on real devices.
-    private val options = arrayListOf(
-        "--rtsp-tcp"
-    )
+    private var mediaRepository: MediaRepository? = MediaRepository(context)
+    val hardwareProfile: VlcEngineConfigurator.HardwareProfile =
+        mediaRepository?.hardwareProfile ?: VlcEngineConfigurator.getHardwareProfile(context.applicationContext)
 
     private var libVLC: LibVLC? = null
     private var mediaPlayer: MediaPlayer? = null
@@ -84,25 +82,16 @@ class VlcPlayerManager(private val context: Context) {
     }
 
     init {
-        var createdVlc: LibVLC? = null
-        var createdPlayer: MediaPlayer? = null
-        try {
-            val vlc = LibVLC(context.applicationContext, options)
-            createdVlc = vlc
-            val mp = MediaPlayer(vlc)
-            createdPlayer = mp
+        val repo = mediaRepository
+        val vlc = repo?.getLibVlc()
+        val mp = repo?.getPlayer()
+        if (vlc != null && mp != null) {
             mp.setEventListener(eventListener)
             libVLC = vlc
             mediaPlayer = mp
-        } catch (e: Throwable) {
-            Log.e("VlcPlayerManager", "Failed to initialize LibVLC engine", e)
-            try {
-                createdPlayer?.setEventListener(null)
-                createdPlayer?.release()
-            } catch (_: Throwable) {}
-            try {
-                createdVlc?.release()
-            } catch (_: Throwable) {}
+        } else {
+            repo?.release()
+            mediaRepository = null
             libVLC = null
             mediaPlayer = null
             onStatusChanged?.invoke("Error: LibVLC unavailable")
@@ -231,6 +220,32 @@ class VlcPlayerManager(private val context: Context) {
         }
     }
 
+    fun playArchiveZip(archivePath: String, entryPath: String) {
+        if (isReleased) return
+        val vlc = libVLC
+        val mp = mediaPlayer
+        if (vlc == null || mp == null) {
+            onStatusChanged?.invoke("Error: LibVLC unavailable")
+            return
+        }
+        try {
+            try {
+                currentPfd?.close()
+            } catch (_: Throwable) {}
+            currentPfd = null
+
+            val zipUri = ArchiveStreamServer.buildDirectZipUri(archivePath, entryPath)
+            val media = Media(vlc, zipUri)
+            mp.media = media
+            media.release()
+            mp.play()
+            setVideoScale(currentScaleMode)
+        } catch (e: Throwable) {
+            Log.e("VlcPlayerManager", "playArchiveZip error", e)
+            onStatusChanged?.invoke("Error: ${e.message}")
+        }
+    }
+
     fun getAudioTracks(): List<PlaybackTrack> {
         if (isReleased) return emptyList()
         return try {
@@ -339,27 +354,35 @@ class VlcPlayerManager(private val context: Context) {
     fun release() {
         if (isReleased) return
         isReleased = true
-        try {
-            currentPfd?.close()
-        } catch (_: Throwable) {}
+        val pfdToClose = currentPfd
         currentPfd = null
-
-        try {
-            mediaPlayer?.let { mp ->
-                mp.setEventListener(null)
-                if (mp.isPlaying) {
-                    mp.stop()
-                }
-                mp.vlcVout?.detachViews()
-                mp.release()
-            }
-        } catch (_: Throwable) {}
+        val repoToRelease = mediaRepository
+        mediaRepository = null
+        val mpToRelease = mediaPlayer
         mediaPlayer = null
+        libVLC = null
+
+        onStatusChanged = null
+        onTimeChanged = null
+        onVideoAspectChanged = null
+        onTracksChanged = null
 
         try {
-            libVLC?.release()
+            mpToRelease?.setEventListener(null)
+            mpToRelease?.vlcVout?.detachViews()
         } catch (_: Throwable) {}
-        libVLC = null
+
+        Thread({
+            try {
+                pfdToClose?.close()
+            } catch (_: Throwable) {}
+            try {
+                repoToRelease?.release()
+            } catch (_: Throwable) {}
+        }, "VlcReleaseThread").apply {
+            isDaemon = true
+            start()
+        }
     }
 }
 

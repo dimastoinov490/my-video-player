@@ -67,12 +67,44 @@
             android:name="com.example.videoplayer.MainActivity"
             android:configChanges="smallestScreenSize|screenSize|screenLayout|orientation|keyboardHidden"
             android:supportsPictureInPicture="true"
+            android:launchMode="singleTop"
             android:exported="true"
             android:label="@string/app_name"
             android:theme="@style/Theme.VideoPlayer">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
+                <data android:mimeType="application/x-rar-compressed" />
+                <data android:mimeType="application/vnd.rar" />
+                <data android:mimeType="application/x-7z-compressed" />
+                <data android:mimeType="application/x-tar" />
+                <data android:mimeType="application/gzip" />
+                <data android:mimeType="application/x-gzip" />
+                <data android:mimeType="application/x-iso9660-image" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="file" />
+                <data android:scheme="content" />
+                <data android:host="*" />
+                <data android:mimeType="*/*" />
+                <data android:pathPattern=".*\\.zip" />
+                <data android:pathPattern=".*\\.rar" />
+                <data android:pathPattern=".*\\.7z" />
+                <data android:pathPattern=".*\\.tar" />
+                <data android:pathPattern=".*\\.gz" />
+                <data android:pathPattern=".*\\.iso" />
             </intent-filter>
         </activity>
 

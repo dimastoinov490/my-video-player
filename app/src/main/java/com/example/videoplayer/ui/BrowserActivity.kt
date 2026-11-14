@@ -438,38 +438,10 @@ class BrowserActivity : FragmentActivity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun setupWebView() {
-        webView.settings.apply {
-            javaScriptEnabled = true
-            domStorageEnabled = true
-            databaseEnabled = true
-            mediaPlaybackRequiresUserGesture = false
-            allowFileAccess = true
-            allowContentAccess = true
-            useWideViewPort = true
-            loadWithOverviewMode = true
-            setSupportZoom(true)
-            builtInZoomControls = true
-            displayZoomControls = false
-            userAgentString = userAgentString.replace("; wv", "")
-        }
+        configureFullChromiumSettings(webView)
+        webView.settings.userAgentString = webView.settings.userAgentString.replace("; wv", "")
 
-        webView.setDownloadListener { url, _, contentDisposition, mimeType, _ ->
-            try {
-                val request = DownloadManager.Request(Uri.parse(url)).apply {
-                    setMimeType(mimeType)
-                    val filename = URLUtil.guessFileName(url, contentDisposition, mimeType)
-                    setDescription("Загрузка файла $filename")
-                    setTitle(filename)
-                    setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                    setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, filename)
-                }
-                val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-                dm.enqueue(request)
-                Toast.makeText(this, "Загрузка начата...", Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) {
-                Toast.makeText(this, "Ошибка загрузки: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
+        setupDownloadListener(this, webView)
 
         webView.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
@@ -737,5 +709,74 @@ class BrowserActivity : FragmentActivity() {
             webView.destroy()
         } catch (_: Exception) {}
         super.onDestroy()
+    }
+}
+
+@SuppressLint("SetJavaScriptEnabled")
+@Suppress("DEPRECATION")
+fun configureFullChromiumSettings(webView: WebView) {
+    with(webView.settings) {
+        // Производительность и движок
+        javaScriptEnabled = true
+        domStorageEnabled = true
+        databaseEnabled = true
+        javaScriptCanOpenWindowsAutomatically = true
+
+        // Отрендерить страницы как на ПК/телефоне с полным масштабом
+        loadWithOverviewMode = true
+        useWideViewPort = true
+        setSupportZoom(true)
+        builtInZoomControls = true
+        displayZoomControls = false
+
+        // Кэш и работа в офлайне
+        cacheMode = WebSettings.LOAD_DEFAULT
+
+        // Безопасность и контент
+        mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+        allowFileAccess = true
+        allowContentAccess = true
+
+        // Мультимедиа
+        mediaPlaybackRequiresUserGesture = false
+
+        // Агент (чтобы сайты отдавали полную версию)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            safeBrowsingEnabled = true
+        }
+    }
+    // Аппаратное ускорение рендеринга (как в чистом Chrome)
+    webView.setLayerType(WebView.LAYER_TYPE_HARDWARE, null)
+}
+
+@Suppress("DEPRECATION")
+fun setupDownloadListener(context: Context, webView: WebView) {
+    webView.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
+        try {
+            val fileName = URLUtil.guessFileName(url, contentDisposition, mimeType)
+            val request = DownloadManager.Request(Uri.parse(url)).apply {
+                setMimeType(mimeType)
+                val cookies = CookieManager.getInstance().getCookie(url)
+                if (!cookies.isNullOrBlank()) {
+                    addRequestHeader("Cookie", cookies)
+                }
+                if (!userAgent.isNullOrBlank()) {
+                    addRequestHeader("User-Agent", userAgent)
+                }
+                setTitle(fileName)
+                setDescription("Загрузка файла...")
+                setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                    allowScanningByMediaScanner()
+                }
+            }
+
+            val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+            downloadManager.enqueue(request)
+            Toast.makeText(context, "Загрузка файла начата: $fileName", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Toast.makeText(context, "Ошибка скачивания: ${e.localizedMessage ?: e.message}", Toast.LENGTH_LONG).show()
+        }
     }
 }

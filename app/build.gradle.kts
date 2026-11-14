@@ -94,6 +94,13 @@ android {
     }
 
     packaging {
+        jniLibs {
+            useLegacyPackaging = false
+            pickFirsts += listOf(
+                "lib/*/lib7-Zip-JBinding.so",
+                "lib/*/libc++_shared.so"
+            )
+        }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
             excludes += "META-INF/INDEX.LIST"
@@ -128,6 +135,7 @@ dependencies {
 
     implementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
     implementation("org.bouncycastle:bcpkix-jdk18on:1.78.1")
+    implementation("com.sorrowblue.sevenzipjbinding:7-Zip-JBinding-4Android:16.02-2.4")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

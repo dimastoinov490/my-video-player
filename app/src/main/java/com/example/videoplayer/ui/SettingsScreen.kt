@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -21,9 +22,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.videoplayer.player.AppPreferences
+import com.example.videoplayer.player.VlcEngineConfigurator
 import com.example.videoplayer.ui.ai.AiDesignStudioDialog
 import com.example.videoplayer.ui.ai.UiTemplateFromScreenshotDialog
 import com.example.videoplayer.ui.theme.*
@@ -43,6 +48,14 @@ fun SettingsScreen(
     var orientationMode by remember { mutableStateOf(OrientationHelper.getMode(context)) }
     var showAiStudio by remember { mutableStateOf(false) }
     var showScreenshotDialog by remember { mutableStateOf(false) }
+    var showBrowser by remember { mutableStateOf(false) }
+
+    if (showBrowser) {
+        FullBrowserScreen(initialUrl = "https://google.com") {
+            showBrowser = false
+        }
+        return
+    }
 
     BackHandler { onBack() }
 
@@ -100,6 +113,8 @@ fun SettingsScreen(
                             prefs.edit().putBoolean("hw_accel", it).apply()
                         }
                     )
+                    HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                    RenderEngineSettingsItem()
                     HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
                     SettingsSwitchItem(
                         icon = Icons.Default.Settings,
@@ -403,6 +418,45 @@ fun SettingsScreen(
 
             item {
                 Text(
+                    "БРАУЗЕР",
+                    color = theme.primary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 1.sp
+                )
+            }
+
+            item {
+                SettingsCard {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        OutlinedButton(
+                            onClick = { showBrowser = true },
+                            border = BorderStroke(1.dp, theme.primary.copy(alpha = 0.7f)),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("settings_open_browser_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Language,
+                                contentDescription = null,
+                                tint = theme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "Открыть встроенный браузер",
+                                color = Color.White,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 14.sp
+                            )
+                        }
+                    }
+                }
+            }
+
+            item {
+                Text(
                     "О ПРИЛОЖЕНИИ",
                     color = theme.primary,
                     fontSize = 12.sp,
@@ -520,6 +574,128 @@ private fun SettingsSwitchItem(
                 uncheckedThumbColor = GrayText,
                 uncheckedTrackColor = Color.White.copy(alpha = 0.1f)
             )
+        )
+    }
+}
+
+@Composable
+fun RenderEngineSettingsItem() {
+    val context = LocalContext.current
+    val theme = LocalAppTheme.current
+    var currentEngine by remember { mutableStateOf(AppPreferences.getRenderEngine(context)) }
+    var showDialog by remember { mutableStateOf(false) }
+    val hardwareProfile = remember(currentEngine) {
+        VlcEngineConfigurator.getHardwareProfile(context, currentEngine)
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { showDialog = true }
+            .padding(16.dp)
+            .testTag("render_engine_settings_item"),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Default.Memory,
+            contentDescription = null,
+            tint = theme.primary,
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(modifier = Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "Графический движок плеера",
+                color = Color.White,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = "Текущий: ${currentEngine.title}",
+                color = theme.primary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = "CPU потоки: ${hardwareProfile.cpuCores} • Vulkan: ${if (hardwareProfile.isVulkanSupported) "поддерживается" else "нет"}",
+                color = GrayText,
+                fontSize = 11.sp
+            )
+        }
+        Icon(
+            imageVector = Icons.Default.ChevronRight,
+            contentDescription = "Выбрать",
+            tint = GrayText
+        )
+    }
+
+    if (showDialog) {
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            containerColor = theme.surface,
+            titleContentColor = Color.White,
+            title = {
+                Text(
+                    text = "Выберите движок рендеринга",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    AppPreferences.RenderEngine.entries.forEach { engine ->
+                        val isSelected = currentEngine == engine
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .selectable(
+                                    selected = isSelected,
+                                    role = Role.RadioButton,
+                                    onClick = {
+                                        currentEngine = engine
+                                        AppPreferences.setRenderEngine(context, engine)
+                                        showDialog = false
+                                    }
+                                )
+                                .padding(vertical = 10.dp, horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = isSelected,
+                                onClick = null,
+                                colors = RadioButtonDefaults.colors(
+                                    selectedColor = theme.primary,
+                                    unselectedColor = GrayText
+                                )
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = engine.title,
+                                    color = if (isSelected) Color.White else Color.LightGray,
+                                    fontSize = 14.sp,
+                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                                )
+                                Text(
+                                    text = engine.description,
+                                    color = GrayText,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { showDialog = false },
+                    modifier = Modifier.testTag("render_engine_dialog_close")
+                ) {
+                    Text("Закрыть", color = theme.primary)
+                }
+            }
         )
     }
 }

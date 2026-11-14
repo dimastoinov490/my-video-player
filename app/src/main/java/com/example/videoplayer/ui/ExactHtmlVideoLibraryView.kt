@@ -6,11 +6,15 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.media.MediaScannerConnection
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.util.Base64
+import android.view.View
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
 import android.webkit.WebSettings
@@ -27,12 +31,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import com.example.videoplayer.archive.ArchiveFileUtils
+import com.example.videoplayer.archive.ArchiveSource
 import com.example.videoplayer.model.AudioItem
 import com.example.videoplayer.model.MediaStoreHelper
 import com.example.videoplayer.model.Playlist
 import com.example.videoplayer.model.PlaylistManager
 import com.example.videoplayer.model.VideoItem
 import com.example.videoplayer.model.VideoThumbnailLoader
+import com.example.videoplayer.player.AppPreferences
 import com.example.videoplayer.service.HttpBroadcastFolder
 import com.example.videoplayer.service.HttpServerConfig
 import com.example.videoplayer.service.LocalHttpShareServer
@@ -50,6 +57,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -68,6 +76,10 @@ fun ExactHtmlVideoLibraryView(
     onOpenSettings: () -> Unit,
     onOpenCustomUrl: () -> Unit,
     onRefreshVideos: () -> Unit,
+    onOpenArchive: (ArchiveSource, File?) -> Unit = { _, _ -> },
+    onOpenArchivePicker: () -> Unit = {},
+    onOpenBrowser: (String) -> Unit = {},
+    browseRefreshTick: Int = 0,
     currentNavIndex: Int = 0,
     modifier: Modifier = Modifier
 ) {
@@ -75,22 +87,31 @@ fun ExactHtmlVideoLibraryView(
     val coroutineScope = rememberCoroutineScope()
     val latestRefresh by rememberUpdatedState(onRefreshVideos)
     val latestVideos by rememberUpdatedState(videos)
+    val latestOpenArchive by rememberUpdatedState(onOpenArchive)
+    val latestOpenArchivePicker by rememberUpdatedState(onOpenArchivePicker)
+    val latestOpenBrowser by rememberUpdatedState(onOpenBrowser)
     val sentThumbs = remember { java.util.Collections.synchronizedSet(HashSet<String>()) }
     val wifiStatusRef = remember { AtomicReference("") }
+    val initialSyncDone = remember { AtomicBoolean(false) }
+    val lastSentVideosRef = remember { AtomicReference<List<VideoItem>?>(null) }
+    var isPageReady by remember { mutableStateOf(false) }
+    var thumbsJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
-    var currentBrowsePath by remember {
-        mutableStateOf(
-            try {
-                Environment.getExternalStorageDirectory().absolutePath
-            } catch (_: Exception) {
-                "/storage/emulated/0"
-            }
-        )
+    val rootBrowsePath = remember {
+        try {
+            Environment.getExternalStorageDirectory().absolutePath
+        } catch (_: Exception) {
+            "/storage/emulated/0"
+        }
     }
+    var currentBrowsePath by remember { mutableStateOf(rootBrowsePath) }
 
     fun sendThumbsToWeb(webView: WebView, list: List<VideoItem>) {
-        coroutineScope.launch(Dispatchers.IO) {
+        if (list.isEmpty()) return
+        thumbsJob?.cancel()
+        thumbsJob = coroutineScope.launch(Dispatchers.IO) {
             for (v in list) {
+                if (webViewRef !== webView) break
                 val uriStr = v.uri.toString()
                 if (!sentThumbs.add(uriStr)) continue
 
@@ -98,7 +119,7 @@ fun ExactHtmlVideoLibraryView(
                 // or while a provider is opening the content URI. Retry a few times.
                 var dataUri: String? = null
                 repeat(3) { attempt ->
-                    if (dataUri == null) {
+                    if (dataUri == null && webViewRef === webView) {
                         dataUri = VideoThumbnailLoader.getDataUri(context, v)
                         if (dataUri == null && attempt < 2) {
                             kotlinx.coroutines.delay(350L * (attempt + 1))
@@ -133,34 +154,45 @@ fun ExactHtmlVideoLibraryView(
         }
     }
 
-    fun sendVideosToWeb(webView: WebView, vList: List<VideoItem>) {
-        val jsonArray = JSONArray()
-        val dateFormat = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
-        for (v in vList) {
-            val obj = JSONObject()
-            obj.put("title", v.displayName)
-            val sizeMb = String.format(Locale.US, "%.1f MB", v.size / (1024.0 * 1024.0))
-            val dateStr = try {
-                dateFormat.format(Date(v.dateAdded * 1000L))
-            } catch (_: Exception) {
-                "19.09.2026"
+    fun sendVideosToWeb(webView: WebView, vList: List<VideoItem>, force: Boolean = false) {
+        if (!force && lastSentVideosRef.get() == vList) {
+            if (thumbsJob?.isActive != true) {
+                sendThumbsToWeb(webView, vList)
             }
-            obj.put("meta", "$sizeMb • $dateStr")
-            obj.put("badge", if (v.width >= 1920 || v.height >= 1080) "HD" else "SD")
-            val totalSec = v.duration / 1000
-            val m = totalSec / 60
-            val s = totalSec % 60
-            val h = m / 60
-            val durStr = if (h > 0) String.format(Locale.US, "%d:%02d:%02d", h, m % 60, s) else String.format(Locale.US, "%d:%02d", m, s)
-            obj.put("dur", durStr)
-            obj.put("uri", v.uri.toString())
-            jsonArray.put(obj)
+            return
         }
-        val js = "if (window.setVideos) { window.setVideos(${jsonArray.toString()}); }"
-        Handler(Looper.getMainLooper()).post {
-            webView.evaluateJavascript(js, null)
+        lastSentVideosRef.set(vList)
+        coroutineScope.launch {
+            val jsPayload = withContext(Dispatchers.Default) {
+                val jsonArray = JSONArray()
+                val dateFormat = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
+                for (v in vList) {
+                    val obj = JSONObject()
+                    obj.put("title", v.displayName)
+                    val sizeMb = String.format(Locale.US, "%.1f MB", v.size / (1024.0 * 1024.0))
+                    val dateStr = try {
+                        dateFormat.format(Date(v.dateAdded * 1000L))
+                    } catch (_: Exception) {
+                        "19.09.2026"
+                    }
+                    obj.put("meta", "$sizeMb • $dateStr")
+                    obj.put("badge", if (v.width >= 1920 || v.height >= 1080) "HD" else "SD")
+                    val totalSec = v.duration / 1000
+                    val m = totalSec / 60
+                    val s = totalSec % 60
+                    val h = m / 60
+                    val durStr = if (h > 0) String.format(Locale.US, "%d:%02d:%02d", h, m % 60, s) else String.format(Locale.US, "%d:%02d", m, s)
+                    obj.put("dur", durStr)
+                    obj.put("uri", v.uri.toString())
+                    jsonArray.put(obj)
+                }
+                "if (window.setVideos) { window.setVideos(${jsonArray.toString()}); }"
+            }
+            if (webViewRef === webView) {
+                webView.evaluateJavascript(jsPayload, null)
+                sendThumbsToWeb(webView, vList)
+            }
         }
-        sendThumbsToWeb(webView, vList)
     }
 
     fun sendAudiosToWeb(webView: WebView) {
@@ -189,50 +221,57 @@ fun ExactHtmlVideoLibraryView(
         }
     }
 
+    fun buildFolderListing(path: String): Pair<JSONArray, Pair<String, String>> {
+        val dir = File(path)
+        val jsonArray = JSONArray()
+        val pathTitle = dir.name.ifBlank { "Хранилище" }
+        val parent = dir.parentFile
+        val parentPath = if (parent != null && parent.canRead()) parent.absolutePath else ""
+
+        val items: Array<File> = try {
+            val files = dir.listFiles() ?: emptyArray<File>()
+            files.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() })).toTypedArray()
+        } catch (_: Exception) {
+            emptyArray<File>()
+        }
+
+        if (parentPath.isNotEmpty()) {
+            val upObj = JSONObject()
+            upObj.put("name", ".. [Назад в ${parent!!.name}]")
+            upObj.put("path", parentPath)
+            upObj.put("isDir", true)
+            upObj.put("isUp", true)
+            upObj.put("count", 0)
+            jsonArray.put(upObj)
+        }
+
+        for (f in items) {
+            if (f.name.startsWith(".")) continue
+            val obj = JSONObject()
+            val isDir = f.isDirectory
+            val isArchive = !isDir && ArchiveFileUtils.isArchiveFileName(f.name)
+            obj.put("name", f.name)
+            obj.put("path", f.absolutePath)
+            obj.put("isDir", isDir)
+            obj.put("isArchive", isArchive)
+            obj.put("isUp", false)
+            if (isDir) {
+                val count = try { f.list()?.size ?: 0 } catch (_: Exception) { 0 }
+                obj.put("count", count)
+            } else {
+                obj.put("sizeStr", ArchiveFileUtils.formatSize(f.length()))
+            }
+            jsonArray.put(obj)
+        }
+        return jsonArray to (pathTitle to parentPath)
+    }
+
     fun sendFoldersToWeb(webView: WebView, path: String) {
         coroutineScope.launch {
-            val dir = File(path)
-            val jsonArray = JSONArray()
-            var pathTitle = dir.name.ifBlank { "Хранилище" }
-
-            val items: Array<File> = withContext(Dispatchers.IO) {
-                try {
-                    val files = dir.listFiles() ?: emptyArray<File>()
-                    files.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() })).toTypedArray()
-                } catch (_: Exception) {
-                    emptyArray<File>()
-                }
-            }
-
-            // Up folder if not at root
-            val parent = dir.parentFile
-            if (parent != null && parent.canRead()) {
-                val upObj = JSONObject()
-                upObj.put("name", ".. [Назад в ${parent.name}]")
-                upObj.put("path", parent.absolutePath)
-                upObj.put("isDir", true)
-                upObj.put("count", 0)
-                jsonArray.put(upObj)
-            }
-
-            for (f in items) {
-                if (f.name.startsWith(".")) continue
-                val obj = JSONObject()
-                obj.put("name", f.name)
-                obj.put("path", f.absolutePath)
-                obj.put("isDir", f.isDirectory)
-                if (f.isDirectory) {
-                    val count = try { f.list()?.size ?: 0 } catch (_: Exception) { 0 }
-                    obj.put("count", count)
-                } else {
-                    val sizeMb = String.format(Locale.US, "%.1f MB", f.length() / (1024.0 * 1024.0))
-                    obj.put("sizeStr", sizeMb)
-                }
-                jsonArray.put(obj)
-            }
-
-            val escapedTitle = JSONObject.quote(pathTitle)
-            val js = "if (window.setFolders) { window.setFolders(${jsonArray.toString()}, $escapedTitle); }"
+            val (jsonArray, meta) = withContext(Dispatchers.IO) { buildFolderListing(path) }
+            val escapedTitle = JSONObject.quote(meta.first)
+            val escapedPath = JSONObject.quote(path)
+            val js = "if (window.setFolders) { window.setFolders(${jsonArray.toString()}, $escapedTitle, $escapedPath); }"
             withContext(Dispatchers.Main) {
                 webView.evaluateJavascript(js, null)
             }
@@ -270,21 +309,31 @@ fun ExactHtmlVideoLibraryView(
     }
 
     fun syncAllData(webView: WebView) {
-        sendVideosToWeb(webView, videos)
+        sendVideosToWeb(webView, latestVideos, force = true)
         sendAudiosToWeb(webView)
         sendFoldersToWeb(webView, currentBrowsePath)
         sendPlaylistsToWeb(webView)
     }
 
-    LaunchedEffect(videos) {
-        webViewRef?.let { sendVideosToWeb(it, videos) }
+    LaunchedEffect(videos, isPageReady) {
+        if (isPageReady) {
+            webViewRef?.let { sendVideosToWeb(it, videos) }
+        }
     }
 
-    LaunchedEffect(currentNavIndex) {
-        webViewRef?.evaluateJavascript(
-            "if (window.setActiveNavTab) { window.setActiveNavTab($currentNavIndex); }",
-            null
-        )
+    LaunchedEffect(currentNavIndex, isPageReady) {
+        if (isPageReady) {
+            webViewRef?.evaluateJavascript(
+                "if (window.setActiveNavTab) { window.setActiveNavTab($currentNavIndex); }",
+                null
+            )
+        }
+    }
+
+    LaunchedEffect(browseRefreshTick, isPageReady) {
+        if (isPageReady && browseRefreshTick > 0) {
+            webViewRef?.let { sendFoldersToWeb(it, currentBrowsePath) }
+        }
     }
 
     val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
@@ -326,6 +375,7 @@ fun ExactHtmlVideoLibraryView(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
                     )
+                    setLayerType(View.LAYER_TYPE_HARDWARE, null)
                     setBackgroundColor(android.graphics.Color.parseColor("#020306"))
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true
@@ -333,7 +383,7 @@ fun ExactHtmlVideoLibraryView(
                     settings.allowContentAccess = true
                     settings.cacheMode = WebSettings.LOAD_NO_CACHE
                     settings.useWideViewPort = true
-                    settings.loadWithOverviewMode = true
+                    settings.loadWithOverviewMode = false
 
                     webChromeClient = object : android.webkit.WebChromeClient() {
                         override fun onJsConfirm(
@@ -356,8 +406,11 @@ fun ExactHtmlVideoLibraryView(
                         override fun onPageFinished(view: WebView?, url: String?) {
                             super.onPageFinished(view, url)
                             view?.let {
-                                sentThumbs.clear()
-                                syncAllData(it)
+                                isPageReady = true
+                                if (initialSyncDone.compareAndSet(false, true)) {
+                                    sentThumbs.clear()
+                                    syncAllData(it)
+                                }
                                 if (currentNavIndex != 0) {
                                     it.evaluateJavascript(
                                         "if (window.setActiveNavTab) { window.setActiveNavTab($currentNavIndex); }",
@@ -425,6 +478,343 @@ fun ExactHtmlVideoLibraryView(
                         }
 
                         @JavascriptInterface
+                        fun openArchive(path: String) {
+                            Handler(Looper.getMainLooper()).post {
+                                val file = File(path)
+                                val baseName = file.name.substringBeforeLast('.').ifBlank { "Archive" }
+                                val destDir = File(currentBrowsePath, baseName)
+                                latestOpenArchive(ArchiveSource.FilePath(path, file.name), destDir)
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun openArchivePicker() {
+                            Handler(Looper.getMainLooper()).post {
+                                latestOpenArchivePicker()
+                            }
+                        }
+
+                        private fun requestAllFilesPermissionIfNeeded(): Boolean {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
+                                Toast.makeText(
+                                    context,
+                                    "Разрешите доступ ко всем файлам для операций с файлами",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                                try {
+                                    val permIntent = Intent(
+                                        Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                                        Uri.parse("package:${context.packageName}")
+                                    ).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+                                    context.startActivity(permIntent)
+                                } catch (_: Exception) {}
+                                return true
+                            }
+                            return false
+                        }
+
+                        private fun parsePathList(pathsJson: String): List<String> {
+                            return try {
+                                val arr = JSONArray(pathsJson)
+                                (0 until arr.length()).mapNotNull { idx ->
+                                    arr.optString(idx).takeIf { it.isNotBlank() }
+                                }
+                            } catch (_: Exception) {
+                                emptyList()
+                            }
+                        }
+
+                        private fun performTransferBatch(sourcePaths: List<String>, targetDirPath: String, isCopy: Boolean) {
+                            if (sourcePaths.isEmpty()) return
+                            coroutineScope.launch {
+                                val (statusMsg, needsPerm) = withContext(Dispatchers.IO) {
+                                    val dstDir = File(targetDirPath)
+                                    if (!dstDir.exists() || !dstDir.isDirectory) {
+                                        return@withContext ("Целевая папка недоступна" to false)
+                                    }
+                                    var okCount = 0
+                                    var skippedSame = 0
+                                    var skippedExists = 0
+                                    var skippedSelf = 0
+                                    var failedPerm = false
+                                    val scanPaths = mutableListOf<String>()
+
+                                    for (srcPath in sourcePaths) {
+                                        try {
+                                            val src = File(srcPath)
+                                            if (!src.exists()) continue
+                                            if (src.parentFile?.canonicalPath == dstDir.canonicalPath) {
+                                                skippedSame++
+                                                continue
+                                            }
+                                            if (src.isDirectory && (dstDir.canonicalPath == src.canonicalPath ||
+                                                    dstDir.canonicalPath.startsWith(src.canonicalPath + File.separator))) {
+                                                skippedSelf++
+                                                continue
+                                            }
+                                            val dst = File(dstDir, src.name)
+                                            if (dst.exists()) {
+                                                skippedExists++
+                                                continue
+                                            }
+
+                                            val success = if (isCopy) {
+                                                if (src.isDirectory) {
+                                                    val copied = src.copyRecursively(dst, overwrite = false)
+                                                    if (!copied && dst.exists()) dst.deleteRecursively()
+                                                    copied
+                                                } else {
+                                                    src.inputStream().use { input ->
+                                                        dst.outputStream().use { output ->
+                                                            input.copyTo(output)
+                                                        }
+                                                    }
+                                                    dst.exists() && dst.length() == src.length()
+                                                }
+                                            } else {
+                                                var moved = src.renameTo(dst)
+                                                if (!moved) {
+                                                    if (src.isFile) {
+                                                        src.inputStream().use { input ->
+                                                            dst.outputStream().use { output ->
+                                                                input.copyTo(output)
+                                                            }
+                                                        }
+                                                        if (dst.exists() && dst.length() == src.length()) {
+                                                            moved = src.delete()
+                                                        } else {
+                                                            dst.delete()
+                                                        }
+                                                    } else if (src.isDirectory) {
+                                                        if (src.copyRecursively(dst, overwrite = false)) {
+                                                            moved = src.deleteRecursively()
+                                                        } else if (dst.exists()) {
+                                                            dst.deleteRecursively()
+                                                        }
+                                                    }
+                                                }
+                                                moved
+                                            }
+
+                                            if (success) {
+                                                okCount++
+                                                scanPaths.add(dst.absolutePath)
+                                                if (!isCopy) scanPaths.add(src.absolutePath)
+                                            } else {
+                                                failedPerm = true
+                                            }
+                                        } catch (_: Exception) {
+                                            failedPerm = true
+                                        }
+                                    }
+
+                                    if (scanPaths.isNotEmpty()) {
+                                        MediaScannerConnection.scanFile(
+                                            context,
+                                            scanPaths.toTypedArray(),
+                                            null,
+                                            null
+                                        )
+                                    }
+
+                                    val verb = if (isCopy) "Скопировано" else "Перемещено"
+                                    val msg = when {
+                                        okCount > 0 && sourcePaths.size == 1 -> "$verb в «${dstDir.name}»"
+                                        okCount > 0 -> "$verb ($okCount из ${sourcePaths.size}) в «${dstDir.name}»"
+                                        skippedSame > 0 -> "Файлы уже находятся в этой папке"
+                                        skippedExists > 0 -> "В папке уже есть файл с таким именем"
+                                        skippedSelf > 0 -> "Нельзя перенести папку внутрь самой себя"
+                                        failedPerm -> "NEEDS_STORAGE_PERMISSION"
+                                        else -> "Не удалось выполнить операцию"
+                                    }
+                                    msg to (okCount == 0 && failedPerm)
+                                }
+
+                                if (statusMsg == "NEEDS_STORAGE_PERMISSION" || needsPerm) {
+                                    if (!requestAllFilesPermissionIfNeeded()) {
+                                        Toast.makeText(context, "Нет доступа на запись в выбранную папку", Toast.LENGTH_SHORT).show()
+                                    }
+                                } else {
+                                    Toast.makeText(context, statusMsg, Toast.LENGTH_SHORT).show()
+                                }
+
+                                sendFoldersToWeb(this@apply, currentBrowsePath)
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun moveFileToFolder(sourcePath: String, targetDirPath: String) {
+                            performTransferBatch(listOf(sourcePath), targetDirPath, isCopy = false)
+                        }
+
+                        @JavascriptInterface
+                        fun copyFilesToFolder(sourcePathsJson: String, targetDirPath: String) {
+                            val list = parsePathList(sourcePathsJson)
+                            performTransferBatch(list, targetDirPath, isCopy = true)
+                        }
+
+                        @JavascriptInterface
+                        fun moveFilesToFolder(sourcePathsJson: String, targetDirPath: String) {
+                            val list = parsePathList(sourcePathsJson)
+                            performTransferBatch(list, targetDirPath, isCopy = false)
+                        }
+
+                        @JavascriptInterface
+                        fun deleteFiles(pathsJson: String) {
+                            val list = parsePathList(pathsJson)
+                            if (list.isEmpty()) return
+                            coroutineScope.launch {
+                                val (msg, failedPerm) = withContext(Dispatchers.IO) {
+                                    var deleted = 0
+                                    var failed = false
+                                    val scanPaths = mutableListOf<String>()
+                                    for (p in list) {
+                                        try {
+                                            val f = File(p)
+                                            if (!f.exists()) continue
+                                            val ok = if (f.isDirectory) f.deleteRecursively() else f.delete()
+                                            if (ok) {
+                                                deleted++
+                                                scanPaths.add(f.absolutePath)
+                                            } else {
+                                                failed = true
+                                            }
+                                        } catch (_: Exception) {
+                                            failed = true
+                                        }
+                                    }
+                                    if (scanPaths.isNotEmpty()) {
+                                        MediaScannerConnection.scanFile(context, scanPaths.toTypedArray(), null, null)
+                                    }
+                                    val text = if (deleted > 0) "Удалено: $deleted" else "NEEDS_STORAGE_PERMISSION"
+                                    text to (deleted == 0 && failed)
+                                }
+                                if (msg == "NEEDS_STORAGE_PERMISSION" || failedPerm) {
+                                    if (!requestAllFilesPermissionIfNeeded()) {
+                                        Toast.makeText(context, "Не удалось удалить выбранные файлы", Toast.LENGTH_SHORT).show()
+                                    }
+                                } else {
+                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                }
+                                sendFoldersToWeb(this@apply, currentBrowsePath)
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun renameFile(path: String, newName: String) {
+                            val cleanName = newName.trim()
+                            if (cleanName.isEmpty() || cleanName.contains("/") || cleanName.contains("\\") || cleanName == "." || cleanName == "..") {
+                                Handler(Looper.getMainLooper()).post {
+                                    Toast.makeText(context, "Некорректное имя", Toast.LENGTH_SHORT).show()
+                                }
+                                return
+                            }
+                            coroutineScope.launch {
+                                val (msg, needsPerm) = withContext(Dispatchers.IO) {
+                                    try {
+                                        val src = File(path)
+                                        if (!src.exists()) return@withContext ("Объект не найден" to false)
+                                        val parent = src.parentFile ?: return@withContext ("Не удалось определить папку" to false)
+                                        val dst = File(parent, cleanName)
+                                        if (dst.absolutePath == src.absolutePath) {
+                                            return@withContext ("Имя не изменилось" to false)
+                                        }
+                                        if (dst.exists()) {
+                                            return@withContext ("Объект «$cleanName» уже существует" to false)
+                                        }
+                                        val ok = src.renameTo(dst)
+                                        if (ok) {
+                                            MediaScannerConnection.scanFile(
+                                                context,
+                                                arrayOf(src.absolutePath, dst.absolutePath),
+                                                null,
+                                                null
+                                            )
+                                            "Переименовано в «$cleanName»" to false
+                                        } else {
+                                            "NEEDS_STORAGE_PERMISSION" to true
+                                        }
+                                    } catch (_: Exception) {
+                                        "NEEDS_STORAGE_PERMISSION" to true
+                                    }
+                                }
+                                if (msg == "NEEDS_STORAGE_PERMISSION" || needsPerm) {
+                                    if (!requestAllFilesPermissionIfNeeded()) {
+                                        Toast.makeText(context, "Не удалось переименовать", Toast.LENGTH_SHORT).show()
+                                    }
+                                } else {
+                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                }
+                                sendFoldersToWeb(this@apply, currentBrowsePath)
+                            }
+                        }
+
+                        private fun formatBytes(bytes: Long): String {
+                            if (bytes < 1024) return "$bytes Б"
+                            val kb = bytes / 1024.0
+                            if (kb < 1024.0) return String.format(Locale.US, "%.1f КБ", kb)
+                            val mb = kb / 1024.0
+                            if (mb < 1024.0) return String.format(Locale.US, "%.2f МБ", mb)
+                            val gb = mb / 1024.0
+                            return String.format(Locale.US, "%.2f ГБ", gb)
+                        }
+
+                        @JavascriptInterface
+                        fun getFileInfo(path: String) {
+                            coroutineScope.launch {
+                                val infoJson = withContext(Dispatchers.IO) {
+                                    val f = File(path)
+                                    val obj = JSONObject()
+                                    obj.put("name", f.name.ifBlank { path })
+                                    obj.put("path", f.absolutePath)
+                                    obj.put("isDir", f.isDirectory)
+                                    val typeLabel = when {
+                                        f.isDirectory -> "Папка"
+                                        f.extension.lowercase() in setOf("mp4", "mkv", "avi", "mov", "webm", "flv", "ts", "3gp") -> "Видео (${f.extension.uppercase()})"
+                                        f.extension.lowercase() in setOf("mp3", "m4a", "aac", "flac", "ogg", "wav", "opus") -> "Аудио (${f.extension.uppercase()})"
+                                        f.extension.isNotBlank() -> "Файл (${f.extension.uppercase()})"
+                                        else -> "Файл"
+                                    }
+                                    obj.put("type", typeLabel)
+                                    var totalBytes = 0L
+                                    var filesCount = 0
+                                    var dirsCount = 0
+                                    if (f.isDirectory) {
+                                        try {
+                                            f.walkTopDown().maxDepth(6).take(5000).forEach { child ->
+                                                if (child.absolutePath != f.absolutePath) {
+                                                    if (child.isDirectory) dirsCount++
+                                                    else {
+                                                        filesCount++
+                                                        totalBytes += child.length()
+                                                    }
+                                                }
+                                            }
+                                        } catch (_: Exception) {}
+                                        obj.put("containsStr", "$dirsCount папок, $filesCount файлов")
+                                    } else {
+                                        totalBytes = try { f.length() } catch (_: Exception) { 0L }
+                                        obj.put("containsStr", "")
+                                    }
+                                    obj.put("sizeStr", "${formatBytes(totalBytes)} ($totalBytes Б)")
+                                    val modDate = try {
+                                        SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.getDefault()).format(Date(f.lastModified()))
+                                    } catch (_: Exception) { "—" }
+                                    obj.put("modifiedStr", modDate)
+                                    val perms = buildString {
+                                        append(if (f.canRead()) "Чтение" else "Нет чтения")
+                                        append(if (f.canWrite()) " / Запись" else " / Только чтение")
+                                    }
+                                    obj.put("permissions", perms)
+                                    obj.toString()
+                                }
+                                withContext(Dispatchers.Main) {
+                                    evaluateJavascript("if (window.showFileInfoModal) { window.showFileInfoModal($infoJson); }", null)
+                                }
+                            }
+                        }
+
+                        @JavascriptInterface
                         fun createPlaylist(name: String) {
                             Handler(Looper.getMainLooper()).post {
                                 PlaylistManager.createPlaylist(context, name)
@@ -469,6 +859,7 @@ fun ExactHtmlVideoLibraryView(
                             Handler(Looper.getMainLooper()).post {
                                 when (id) {
                                     "url" -> onOpenCustomUrl()
+                                    "browser" -> latestOpenBrowser("https://google.com")
                                     "settings" -> { /* В v5 настройки открываются прямо в HTML */ }
                                     "share" -> { /* В v5 раздача открывается прямо в HTML */ }
                                     else -> Toast.makeText(context, "Выбран пункт: $id", Toast.LENGTH_SHORT).show()
@@ -696,6 +1087,8 @@ fun ExactHtmlVideoLibraryView(
                             return try {
                                 val prefs = context.getSharedPreferences("video_prefs", Context.MODE_PRIVATE)
                                 val hw = prefs.getBoolean("hw_accel", true)
+                                val forceVulkan = AppPreferences.isForceVulkanEnabled(context)
+                                val renderEngine = AppPreferences.getRenderEngine(context).value
                                 val bg = prefs.getBoolean("bg_play", false)
                                 val buff = prefs.getBoolean("show_buffering_status", true)
                                 val oriMode = OrientationHelper.getMode(context)
@@ -704,6 +1097,8 @@ fun ExactHtmlVideoLibraryView(
 
                                 val json = JSONObject()
                                 json.put("hw_accel", hw)
+                                json.put("force_vulkan", forceVulkan)
+                                json.put("render_engine_mode", renderEngine)
                                 json.put("bg_play", bg)
                                 json.put("show_buffering_status", buff)
                                 json.put("auto_rotate", rot)
@@ -733,6 +1128,18 @@ fun ExactHtmlVideoLibraryView(
                                     webViewRef?.evaluateJavascript("if (window.onSettingsState) { window.onSettingsState(); }", null)
                                     return@post
                                 }
+                                if (key == "render_engine_mode") {
+                                    val chosen = AppPreferences.RenderEngine.entries.find { it.value == value }
+                                        ?: AppPreferences.RenderEngine.AUTO
+                                    AppPreferences.setRenderEngine(context, chosen)
+                                    webViewRef?.evaluateJavascript("if (window.onSettingsState) { window.onSettingsState(); }", null)
+                                    return@post
+                                }
+                                if (key == "force_vulkan") {
+                                    AppPreferences.setForceVulkanEnabled(context, value.toBoolean())
+                                    webViewRef?.evaluateJavascript("if (window.onSettingsState) { window.onSettingsState(); }", null)
+                                    return@post
+                                }
                                 val validKeys = setOf("hw_accel", "bg_play", "show_buffering_status", "open_in_app_browser")
                                 if (key in validKeys) {
                                     val prefs = context.getSharedPreferences("video_prefs", Context.MODE_PRIVATE)
@@ -745,7 +1152,10 @@ fun ExactHtmlVideoLibraryView(
                         @JavascriptInterface
                         fun requestInitialData() {
                             Handler(Looper.getMainLooper()).post {
-                                syncAllData(this@apply)
+                                isPageReady = true
+                                if (initialSyncDone.compareAndSet(false, true)) {
+                                    syncAllData(this@apply)
+                                }
                             }
                         }
                     }
@@ -755,8 +1165,13 @@ fun ExactHtmlVideoLibraryView(
                     webViewRef = this
                 }
             },
-            update = { webView ->
-                sendVideosToWeb(webView, videos)
+            update = {},
+            onRelease = { webView ->
+                thumbsJob?.cancel()
+                if (webViewRef === webView) webViewRef = null
+                webView.stopLoading()
+                webView.removeJavascriptInterface("AndroidBridge")
+                webView.destroy()
             },
             modifier = Modifier.fillMaxSize()
         )

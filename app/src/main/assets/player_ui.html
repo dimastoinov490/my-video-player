@@ -12,9 +12,9 @@
   --text:#eceef2;--muted:#8a90a0;--dim:#6c7280;--red:#f48a92;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html,body{height:100%;background:#000;overflow:hidden;font-family:Roboto,"Segoe UI",system-ui,sans-serif;color:var(--text)}
-.app{container-type:inline-size;height:100%;max-width:520px;margin:0 auto;background:var(--bg)}
-.screen{--u:.09765625cqw;position:relative;height:100%;overflow:hidden;
+html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:Roboto,"Segoe UI",system-ui,sans-serif;color:var(--text)}
+.app{container-type:size;width:100%;height:100%;max-width:520px;margin:0 auto;background:var(--bg)}
+.screen{--u:.09765625cqw;position:relative;width:100%;height:100%;overflow:hidden;
   background:radial-gradient(90% 25% at 25% 0%,#080a0d 0%,var(--bg) 100%)}
 svg.ic{width:1em;height:1em;display:block}
 .sprite{position:absolute;width:0;height:0;overflow:hidden}
@@ -25,7 +25,7 @@ svg.ic{width:1em;height:1em;display:block}
 .bgtop::after{content:"";position:absolute;inset:0;background:radial-gradient(38% 75% at 58% 100%,rgba(255,100,0,.12),transparent 70%)}
 
 /* ---------- Pages ---------- */
-.page{position:absolute;inset:0;display:none}
+.page{position:absolute;inset:0;display:none;contain:layout style}
 .page.active{display:block}
 .scroll{position:absolute;left:0;right:0;top:0;bottom:calc(158*var(--u));overflow-y:auto;padding:calc(24*var(--u)) calc(37*var(--u)) calc(30*var(--u));scrollbar-width:none}
 .scroll::-webkit-scrollbar{display:none}
@@ -53,7 +53,7 @@ svg.ic{width:1em;height:1em;display:block}
 .tile{flex:none;width:calc(104*var(--u));height:calc(104*var(--u));border-radius:calc(28*var(--u));display:grid;place-items:center;
   background:linear-gradient(145deg,#2c1708,#180c04);border:calc(2*var(--u)) solid rgba(255,122,0,.28);color:var(--orange);
   box-shadow:inset 0 0 calc(16*var(--u)) rgba(255,110,0,.12)}
-.tile svg{font-size:calc(54*var(--u));filter:drop-shadow(0 0 calc(7*var(--u)) rgba(255,110,0,.45))}
+.tile svg{font-size:calc(54*var(--u))}
 .body{flex:1;min-width:0}
 .t{font-size:calc(33*var(--u));font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .s{margin-top:calc(8*var(--u));font-size:calc(26*var(--u));color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -147,7 +147,7 @@ svg.ic{width:1em;height:1em;display:block}
   background:linear-gradient(90deg,#ff6a00,#ff9a30 50%,rgba(255,106,0,0));box-shadow:0 0 calc(16*var(--u)) rgba(255,100,0,.85)}
 
 /* ======================= ЕЩЁ: sub-pages (v4) ======================= */
-.sub{position:absolute;inset:0;display:none;z-index:6;background:radial-gradient(90% 25% at 25% 0%,#080a0d 0%,var(--bg) 100%)}
+.sub{position:absolute;inset:0;display:none;z-index:6;contain:layout style;background:radial-gradient(90% 25% at 25% 0%,#080a0d 0%,var(--bg) 100%)}
 .sub.active{display:block;animation:subin .45s cubic-bezier(.2,.9,.3,1) both}
 .sub.leaving{display:block;animation:subout .26s ease both}
 @keyframes subin{from{opacity:0;transform:translateX(calc(70*var(--u)))}}
@@ -206,6 +206,111 @@ svg.ic{width:1em;height:1em;display:block}
 @keyframes flash{40%{border-color:rgba(255,122,0,.8);box-shadow:0 0 calc(30*var(--u)) rgba(255,110,0,.4)}}
 
 .hide-block{display:none}
+
+/* ======================= ZArchiver Context Menu & Clipboard Bar ======================= */
+.zpaste{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(168*var(--u));z-index:12;
+  width:min(calc(100% - 28px), 520px);display:none;align-items:center;gap:10px;padding:10px 12px;border-radius:18px;
+  background:linear-gradient(180deg,#18110b,#0d0906);border:1.5px solid rgba(255,122,0,.6);
+  box-shadow:0 10px 28px rgba(0,0,0,.78),0 0 22px rgba(255,110,0,.25)}
+.zpaste.show{display:flex}
+.zpaste-ico{flex:none;width:36px;height:36px;border-radius:10px;display:grid;place-items:center;
+  background:rgba(255,122,0,.16);color:var(--orange);border:1px solid rgba(255,122,0,.35)}
+.zpaste-ico svg{font-size:18px}
+.zpaste-meta{flex:1;min-width:0}
+.zpaste-meta b{display:block;font-size:12px;color:var(--orange);text-transform:uppercase;letter-spacing:.4px}
+.zpaste-meta span{display:block;font-size:13px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.zpaste-btn{height:36px;padding:0 14px;border-radius:12px;border:0;font:inherit;font-size:13px;font-weight:700;
+  color:#1a0a00;background:linear-gradient(135deg,#ff9a1f,var(--orange-hot) 60%,#f84a00);cursor:pointer;flex:none}
+.zpaste-btn:active{transform:scale(.94)}
+.zpaste-close{width:34px;height:34px;border-radius:10px;border:1px solid rgba(255,255,255,.15);
+  background:rgba(255,255,255,.06);color:var(--muted);font:inherit;font-size:15px;display:grid;place-items:center;cursor:pointer;flex:none}
+
+.zmodal{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;padding:18px;
+  background:rgba(0,0,0,.82)}
+.zmodal.show{display:flex;animation:zfade .18s ease}
+@keyframes zfade{from{opacity:0}}
+.zcard{width:min(100%, 370px);max-height:86vh;overflow-y:auto;border-radius:22px;padding:16px;
+  background:linear-gradient(180deg,#131720,#0a0c10);border:1.5px solid rgba(255,122,0,.42);
+  box-shadow:0 18px 46px rgba(0,0,0,.85),0 0 28px rgba(255,110,0,.18);scrollbar-width:none}
+.zcard::-webkit-scrollbar{display:none}
+.zhead{display:flex;align-items:center;gap:12px;padding-bottom:12px;margin-bottom:10px;border-bottom:1px solid rgba(255,255,255,.09)}
+.zhead-ico{flex:none;width:44px;height:44px;border-radius:13px;display:grid;place-items:center;
+  background:linear-gradient(145deg,#2c1708,#180c04);border:1px solid rgba(255,122,0,.35);color:var(--orange)}
+.zhead-ico svg{font-size:24px}
+.zhead-meta{flex:1;min-width:0}
+.zhead-meta b{display:block;font-size:15px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.zhead-meta small{display:block;font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.zmenu{display:flex;flex-direction:column;gap:6px}
+.zact{width:100%;min-height:48px;padding:10px 14px;border-radius:14px;border:1px solid rgba(255,255,255,.08);
+  background:rgba(255,255,255,.035);color:#fff;font:inherit;font-size:14.5px;font-weight:600;
+  display:flex;align-items:center;gap:13px;cursor:pointer;text-align:left;transition:background .15s,transform .12s,border-color .15s}
+.zact:active{transform:scale(.98);background:rgba(255,122,0,.16);border-color:rgba(255,122,0,.5)}
+.zact svg{font-size:20px;color:var(--orange);flex:none}
+.zact.danger{color:#ff9aa2;border-color:rgba(244,138,146,.22);background:rgba(244,138,146,.07)}
+.zact.danger svg{color:#ff808b}
+.zact-cancel{width:100%;height:44px;margin-top:8px;border-radius:14px;border:1px solid rgba(255,255,255,.12);
+  background:transparent;color:var(--muted);font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+.zinput{width:100%;height:46px;padding:0 14px;border-radius:13px;border:1.5px solid rgba(255,122,0,.45);
+  background:#07090d;color:#fff;font:inherit;font-size:14.5px;outline:0;margin:8px 0 14px}
+.zinput:focus{border-color:var(--orange);box-shadow:0 0 14px rgba(255,110,0,.22)}
+.zbtns{display:flex;gap:10px}
+.zbtn{flex:1;height:44px;border-radius:13px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.06);
+  color:#fff;font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+.zbtn:active{transform:scale(.96)}
+.zbtn.primary{border:0;color:#1a0a00;font-weight:700;background:linear-gradient(135deg,#ff9a1f,var(--orange-hot) 60%,#f84a00)}
+.zbtn.danger{border:0;color:#280408;font-weight:700;background:linear-gradient(135deg,#ff9aa2,#f05b69)}
+.zinfo-list{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
+.zinfo-row{padding:8px 10px;border-radius:11px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.06)}
+.zinfo-row span{display:block;font-size:11px;color:var(--muted);margin-bottom:2px}
+.zinfo-row b{display:block;font-size:13px;color:#fff;word-break:break-all;font-weight:600}
+#l-browse .card{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+#l-browse .card.holding{transform:scale(.97);border-color:rgba(255,122,0,.75);box-shadow:0 0 calc(24*var(--u)) rgba(255,110,0,.25)}
+#p-browse .scroll.has-paste{padding-bottom:calc(130*var(--u))}
+
+/* ======================= LANDSCAPE ADAPTIVE LAYOUT ======================= */
+@media (orientation: landscape) and (min-width: 521px) {
+  .app{max-width:100%;width:100%;margin:0}
+  .screen{--u:clamp(0.32px, 0.102cqh, 0.48px)}
+  .bgtop{height:calc(108*var(--u))}
+  .hbtn{top:calc(14*var(--u));height:calc(74*var(--u))}
+  .hbtn.round{width:calc(74*var(--u))}
+  .hbtn svg{font-size:calc(38*var(--u))}
+  .hbtn.history{left:auto;right:max(calc(32*var(--u)), calc(50% - 370px))}
+  .hbtn.hsearch{left:auto;right:calc(max(calc(32*var(--u)), calc(50% - 370px)) + 92*var(--u))}
+  .tabs{left:max(calc(32*var(--u)), calc(50% - 370px));right:calc(max(calc(32*var(--u)), calc(50% - 370px)) + 196*var(--u));
+    width:auto;max-width:calc(620*var(--u));top:calc(13*var(--u));height:calc(76*var(--u))}
+  .tab{top:calc(2*var(--u));height:calc(70*var(--u));font-size:calc(27*var(--u));gap:calc(14*var(--u))}
+  .tab svg{font-size:calc(38*var(--u))}
+  .tab.t1{left:0;width:50%}
+  .tab.t2{left:50%;width:50%}
+  .pill{left:calc(2*var(--u));top:calc(2*var(--u));width:calc(50% - 4*var(--u));height:calc(70*var(--u))}
+  .underline{left:calc(14*var(--u));top:calc(64*var(--u));width:calc(50% - 28*var(--u));height:calc(7*var(--u))}
+  .tabs.second .pill{transform:translateX(calc(100% + 4*var(--u)))}
+  .tabs.second .underline{transform:translateX(calc(100% + 28*var(--u)))}
+  .vlist{left:50%;right:auto;transform:translateX(-50%);width:min(calc(100% - 64*var(--u)), 740px);
+    top:calc(108*var(--u));bottom:calc(126*var(--u))}
+  #video-list{grid-template-columns:repeat(auto-fill, minmax(156px, 1fr));gap:calc(16*var(--u))}
+  #video-list .vcard .t{font-size:calc(22*var(--u))}
+  #video-list .vcard .m{font-size:calc(17*var(--u))}
+  .scroll{bottom:calc(126*var(--u));padding:calc(18*var(--u)) max(calc(36*var(--u)), calc(50% - 360px)) calc(28*var(--u))}
+  .row{margin:calc(18*var(--u)) calc(6*var(--u)) calc(14*var(--u))}
+  #l-audio,#l-playlists,#l-more,#l-folders,#l-server-styles,#l-orientations,#l-render-engines{
+    display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:calc(16*var(--u));
+  }
+  #l-audio .card,#l-playlists .card,#l-more .card,#l-folders .card,#l-server-styles .card,#l-orientations .card,#l-render-engines .card{
+    margin-bottom:0;
+  }
+  .zpaste{bottom:calc(134*var(--u));width:min(calc(100% - 48*var(--u)), 700px)}
+  .fab{right:max(calc(32*var(--u)), calc(50% - 370px));bottom:calc(138*var(--u));width:calc(92*var(--u));height:calc(92*var(--u))}
+  .fab svg{font-size:calc(44*var(--u))}
+  .nav{left:50%;transform:translateX(-50%);width:min(calc(100% - 48*var(--u)), 740px);right:auto;
+    bottom:calc(8*var(--u));height:calc(108*var(--u));display:flex;align-items:stretch;padding:0 calc(12*var(--u))}
+  .ni{position:relative;left:auto !important;top:auto;flex:1;width:auto;height:100%;
+    flex-direction:row;gap:calc(14*var(--u));padding-bottom:0;font-size:calc(24*var(--u))}
+  .ni svg{font-size:calc(38*var(--u))}
+  .nav-active{top:calc(2*var(--u));height:calc(104*var(--u));border-radius:calc(38*var(--u))}
+  .toast{bottom:calc(142*var(--u))}
+}
 </style>
 </head>
 <body>
@@ -238,6 +343,12 @@ svg.ic{width:1em;height:1em;display:block}
  <symbol id="i-palette" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 0 18c1.4 0 2-.9 2-1.8 0-1.2-1-1.6-1-2.6 0-.9.7-1.6 1.7-1.6H17a4 4 0 0 0 4-4C21 6.5 17 3 12 3z"/><circle cx="7.5" cy="11" r="1.1" fill="currentColor"/><circle cx="10.5" cy="7.2" r="1.1" fill="currentColor"/><circle cx="15" cy="7.8" r="1.1" fill="currentColor"/></g></symbol>
  <symbol id="i-info" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.8v.2"/></g></symbol>
  <symbol id="i-plus" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" d="M12 4.5v15M4.5 12h15"/></symbol>
+ <symbol id="i-up" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M12 19V6M6 12l6-6 6 6"/></symbol>
+ <symbol id="i-grip" viewBox="0 0 24 24"><g fill="currentColor"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></g></symbol>
+ <symbol id="i-move-r" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" d="M4 12h15M13 6l6 6-6 6"/></symbol>
+ <symbol id="i-edit" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></g></symbol>
+ <symbol id="i-trash" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"/></g></symbol>
+ <symbol id="i-archive" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><rect x="3" y="4" width="18" height="4" rx="1.5"/><path d="M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/><path d="M12 4v4"/></g></symbol>
 </defs></svg>
 
 <div class="app"><div class="screen">
@@ -246,10 +357,10 @@ svg.ic{width:1em;height:1em;display:block}
   <div class="bgtop"><svg viewBox="0 60 1024 140" preserveAspectRatio="none">
     <defs>
       <linearGradient id="gl" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a00" stop-opacity=".9"/><stop offset="1" stop-color="#ff7a00" stop-opacity=".25"/></linearGradient>
-      <filter id="blur"><feGaussianBlur stdDeviation="8"/></filter>
     </defs>
     <path d="M0 0 H775 C700 35 668 62 646 112 C622 168 600 188 556 189 H0 Z" fill="#06080b" opacity=".95"/>
-    <path d="M556 189 C600 188 622 168 646 112 C668 62 700 35 775 0" fill="none" stroke="#ff5a00" stroke-width="26" opacity=".4" filter="url(#blur)"/>
+    <path d="M556 189 C600 188 622 168 646 112 C668 62 700 35 775 0" fill="none" stroke="#ff5a00" stroke-width="26" opacity=".10"/>
+    <path d="M556 189 C600 188 622 168 646 112 C668 62 700 35 775 0" fill="none" stroke="#ff5a00" stroke-width="12" opacity=".20"/>
     <path d="M556 189 C600 188 622 168 646 112 C668 62 700 35 775 0" fill="none" stroke="url(#gl)" stroke-width="3"/>
   </svg></div>
 
@@ -273,11 +384,23 @@ svg.ic{width:1em;height:1em;display:block}
   </div></section>
 
   <!-- ============ BROWSE ============ -->
-  <section class="page" id="p-browse"><div class="scroll">
-    <label class="search item"><svg class="ic"><use href="#i-search"/></svg><input id="q-browse" placeholder="Поиск файлов и папок..."></label>
-    <div class="row item" style="--i:1"><b id="browse-path-title">Хранилище /</b><span id="n-browse">0 объектов</span></div>
-    <div id="l-browse"></div>
-  </div></section>
+  <section class="page" id="p-browse">
+    <div class="scroll" id="browse-scroll">
+      <div style="display:flex;align-items:center;gap:calc(14*var(--u))">
+        <label class="search item" style="flex:1"><svg class="ic"><use href="#i-search"/></svg><input id="q-browse" placeholder="Поиск файлов и папок..."></label>
+        <button class="hbtn round item" id="btn-saf-archive" type="button" aria-label="Открыть архив через системный проводник" style="position:static;flex:none;width:calc(92*var(--u));height:calc(92*var(--u));color:var(--orange);border-color:rgba(255,122,0,.45)"><svg class="ic"><use href="#i-archive"/></svg></button>
+      </div>
+      <div class="row item" style="--i:1"><b id="browse-path-title">Хранилище /</b><span id="n-browse">0 объектов</span></div>
+      <div id="l-browse"></div>
+    </div>
+    <div class="zpaste" id="zpaste">
+      <div class="zpaste-ico"><svg class="ic"><use href="#i-copy"/></svg></div>
+      <div class="zpaste-meta"><b id="zpaste-mode">Копировать</b><span id="zpaste-name">—</span></div>
+      <button class="zpaste-btn" id="zpaste-go" type="button">Вставить</button>
+      <button class="zpaste-close" id="zpaste-cancel" type="button" aria-label="Отменить">✕</button>
+    </div>
+  </section>
+  <div class="zmodal" id="zmodal"><div class="zcard" id="zmodal-card"></div></div>
 
   <!-- ============ PLAYLISTS ============ -->
   <section class="page" id="p-playlists"><div class="scroll">
@@ -366,6 +489,13 @@ svg.ic{width:1em;height:1em;display:block}
     <div class="card static item" style="--i:2"><div class="tile"><svg class="ic"><use href="#i-chip"/></svg></div>
       <div class="body"><div class="t">Аппаратное декодирование</div><div class="s" style="white-space:normal">Использовать аппаратный декодер LibVLC</div></div>
       <button class="sw" data-set="hw_accel" role="switch" aria-checked="false"><i></i></button></div>
+    <div class="card static col item" style="--i:2">
+      <div style="display:flex;align-items:center;gap:calc(20*var(--u))">
+        <div class="tile"><svg class="ic"><use href="#i-chip"/></svg></div>
+        <div class="body"><div class="t">Движок рендеринга GPU / CPU</div><div class="s" style="white-space:normal">Применяется при следующем запуске видео</div></div>
+      </div>
+      <div id="l-render-engines" style="display:flex;flex-direction:column;gap:calc(12*var(--u))"></div>
+    </div>
     <div class="card static item" style="--i:3"><div class="tile"><svg class="ic"><use href="#i-note1"/></svg></div>
       <div class="body"><div class="t">Фоновое воспроизведение</div><div class="s" style="white-space:normal">Продолжать звук при блокировке экрана</div></div>
       <button class="sw" data-set="bg_play" role="switch" aria-checked="false"><i></i></button></div>
@@ -380,6 +510,11 @@ svg.ic{width:1em;height:1em;display:block}
       </div>
       <div id="l-orientations" style="display:flex;flex-direction:column;gap:calc(12*var(--u))"></div>
     </div>
+
+    <div class="row item" style="--i:9"><b>Веб-браузер</b><span class="caps">Chromium</span></div>
+    <div class="card item" id="btn-settings-open-browser" style="--i:10"><div class="tile"><svg class="ic"><use href="#i-globe"/></svg></div>
+      <div class="body"><div class="t">Открыть встроенный браузер</div><div class="s" style="white-space:normal">Полноценный веб-просмотр и загрузка файлов</div></div>
+      <div class="chev"><svg class="ic"><use href="#i-chev"/></svg></div></div>
 
     <div class="row item" style="--i:11"><b>О приложении</b></div>
     <div class="card static item" style="--i:12"><div class="tile"><svg class="ic"><use href="#i-info"/></svg></div>
@@ -424,7 +559,8 @@ let allPlaylists = [];
 let moreItems = [
   { id: "settings", icon: "dots", title: "Настройки плеера", subtitle: "Аудио, видео и декодеры", count: "Параметры" },
   { id: "url", icon: "search", title: "Открыть ссылку потока", subtitle: "Воспроизведение HTTP, HLS, RTSP", count: "Сеть" },
-  { id: "share", icon: "list", title: "Wi-Fi & HTTP Раздача", subtitle: "Локальный обмен файлами по сети", count: "Сервер" }
+  { id: "share", icon: "list", title: "Wi-Fi & HTTP Раздача", subtitle: "Локальный обмен файлами по сети", count: "Сервер" },
+  { id: "browser", icon: "globe", title: "Веб-браузер", subtitle: "Встроенный Chromium с загрузками", count: "Веб" }
 ];
 
 /* Sample fallback data */
@@ -460,6 +596,7 @@ function renderVideos() {
     listEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted)">Видео пока нет</div>';
     return;
   }
+  const frag = document.createDocumentFragment();
   items.forEach(v => {
     const card = document.createElement('div');
     card.className = 'vcard';
@@ -502,8 +639,9 @@ function renderVideos() {
       playMedia(v.uri || v.title);
     });
 
-    listEl.appendChild(card);
+    frag.appendChild(card);
   });
+  listEl.appendChild(frag);
 }
 
 function renderAudio() {
@@ -554,6 +692,231 @@ function renderAudio() {
   });
 }
 
+let currentBrowsePath = '/storage/emulated/0';
+let browseClipboard = null; // { mode: 'copy'|'move', path, name, isDir }
+let suppressBrowseClick = false;
+
+function isAudioFile(name) {
+  return /\.(mp3|m4a|aac|flac|ogg|wav|opus)$/i.test(name || '');
+}
+
+function updatePasteBar() {
+  const bar = document.getElementById('zpaste');
+  const scr = document.getElementById('browse-scroll');
+  const modeEl = document.getElementById('zpaste-mode');
+  const nameEl = document.getElementById('zpaste-name');
+  if (!bar) return;
+  if (browseClipboard) {
+    if (modeEl) modeEl.textContent = browseClipboard.mode === 'copy' ? 'Копировать в папку' : 'Переместить в папку';
+    if (nameEl) nameEl.textContent = browseClipboard.name;
+    bar.querySelector('use')?.setAttribute('href', browseClipboard.mode === 'copy' ? '#i-copy' : '#i-move-r');
+    bar.classList.add('show');
+    if (scr) scr.classList.add('has-paste');
+  } else {
+    bar.classList.remove('show');
+    if (scr) scr.classList.remove('has-paste');
+  }
+}
+
+function closeZModal() {
+  const m = document.getElementById('zmodal');
+  if (!m || !m.classList.contains('show')) return false;
+  m.classList.remove('show');
+  return true;
+}
+
+function openZModal(html) {
+  const m = document.getElementById('zmodal');
+  const card = document.getElementById('zmodal-card');
+  if (!m || !card) return;
+  card.innerHTML = html;
+  m.classList.add('show');
+}
+
+document.getElementById('zmodal')?.addEventListener('click', (e) => {
+  if (e.target.id === 'zmodal') closeZModal();
+});
+
+document.getElementById('zpaste-cancel')?.addEventListener('click', () => {
+  browseClipboard = null;
+  updatePasteBar();
+});
+
+document.getElementById('zpaste-go')?.addEventListener('click', () => {
+  if (!browseClipboard || !currentBrowsePath) return;
+  const op = browseClipboard;
+  if (window.AndroidBridge) {
+    if (op.mode === 'copy' && window.AndroidBridge.copyFilesToFolder) {
+      window.AndroidBridge.copyFilesToFolder(JSON.stringify([op.path]), currentBrowsePath);
+    } else if (op.mode === 'move' && window.AndroidBridge.moveFilesToFolder) {
+      window.AndroidBridge.moveFilesToFolder(JSON.stringify([op.path]), currentBrowsePath);
+    }
+  } else if (PREVIEW) {
+    toast((op.mode === 'copy' ? 'Скопировано: ' : 'Перемещено: ') + op.name);
+  }
+  browseClipboard = null;
+  updatePasteBar();
+});
+
+document.getElementById('btn-saf-archive')?.addEventListener('click', () => {
+  if (window.AndroidBridge && window.AndroidBridge.openArchivePicker) {
+    window.AndroidBridge.openArchivePicker();
+  } else if (PREVIEW) {
+    toast('Открытие архива (SAF)');
+  }
+});
+
+function openZArchiverMenu(item) {
+  const ico = item.isDir ? 'folderf' : (item.isArchive ? 'archive' : (isAudioFile(item.name) ? 'note1' : 'clap'));
+  const sub = item.isDir ? (item.count + ' папок/файлов') : ((item.isArchive ? 'Архив • ' : '') + (item.sizeStr || 'Файл'));
+  openZModal(`
+    <div class="zhead">
+      <div class="zhead-ico">${ic(ico)}</div>
+      <div class="zhead-meta"><b>${esc(item.name)}</b><small>${esc(sub)}</small></div>
+    </div>
+    <div class="zmenu">
+      ${item.isArchive ? `<button class="zact" type="button" data-zact="open-archive">${ic('archive')}<span>Открыть архив / Распаковать</span></button>` : ''}
+      <button class="zact" type="button" data-zact="copy">${ic('copy')}<span>Копировать</span></button>
+      <button class="zact" type="button" data-zact="move">${ic('move-r')}<span>Переместить</span></button>
+      <button class="zact" type="button" data-zact="rename">${ic('edit')}<span>Переименовать</span></button>
+      <button class="zact" type="button" data-zact="info">${ic('info')}<span>Информация</span></button>
+      <button class="zact danger" type="button" data-zact="delete">${ic('trash')}<span>Удалить</span></button>
+    </div>
+    <button class="zact-cancel" type="button" id="z-close">Отмена</button>
+  `);
+  document.getElementById('z-close')?.addEventListener('click', closeZModal);
+  document.querySelectorAll('[data-zact]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const act = btn.getAttribute('data-zact');
+      closeZModal();
+      if (act === 'open-archive') {
+        if (window.AndroidBridge && window.AndroidBridge.openArchive) {
+          window.AndroidBridge.openArchive(item.path);
+        } else if (PREVIEW) {
+          toast('Открытие архива: ' + item.name);
+        }
+      } else if (act === 'copy') {
+        browseClipboard = { mode: 'copy', path: item.path, name: item.name, isDir: item.isDir };
+        updatePasteBar();
+        toast('Откройте нужную папку и нажмите «Вставить»');
+      } else if (act === 'move') {
+        browseClipboard = { mode: 'move', path: item.path, name: item.name, isDir: item.isDir };
+        updatePasteBar();
+        toast('Откройте нужную папку и нажмите «Вставить»');
+      } else if (act === 'rename') {
+        openRenameModal(item);
+      } else if (act === 'info') {
+        requestFileInfo(item);
+      } else if (act === 'delete') {
+        openDeleteModal(item);
+      }
+    });
+  });
+}
+
+function openRenameModal(item) {
+  openZModal(`
+    <div class="zhead">
+      <div class="zhead-ico">${ic('edit')}</div>
+      <div class="zhead-meta"><b>Переименовать</b><small>${esc(item.name)}</small></div>
+    </div>
+    <input class="zinput" id="z-rename-in" value="${esc(item.name)}" autocomplete="off" spellcheck="false">
+    <div class="zbtns">
+      <button class="zbtn" type="button" id="z-ren-cancel">Отмена</button>
+      <button class="zbtn primary" type="button" id="z-ren-ok">Сохранить</button>
+    </div>
+  `);
+  const inp = document.getElementById('z-rename-in');
+  if (inp) {
+    inp.focus();
+    const dot = !item.isDir ? item.name.lastIndexOf('.') : -1;
+    inp.setSelectionRange(0, dot > 0 ? dot : item.name.length);
+  }
+  const doRename = () => {
+    const newName = (inp ? inp.value : '').trim();
+    if (!newName) return;
+    closeZModal();
+    if (window.AndroidBridge && window.AndroidBridge.renameFile) {
+      window.AndroidBridge.renameFile(item.path, newName);
+    } else if (PREVIEW) {
+      toast('Переименовано в «' + newName + '»');
+    }
+  };
+  document.getElementById('z-ren-cancel')?.addEventListener('click', closeZModal);
+  document.getElementById('z-ren-ok')?.addEventListener('click', doRename);
+  inp?.addEventListener('keydown', (e) => { if (e.key === 'Enter') doRename(); });
+}
+
+function openDeleteModal(item) {
+  openZModal(`
+    <div class="zhead">
+      <div class="zhead-ico" style="color:#ff808b;border-color:rgba(244,138,146,.4)">${ic('trash')}</div>
+      <div class="zhead-meta"><b>Удалить объект?</b><small>${esc(item.name)}</small></div>
+    </div>
+    <p style="font-size:13px;color:var(--muted);line-height:1.45;margin-bottom:14px">
+      ${item.isDir ? 'Папка и всё её содержимое будут удалены без возможности восстановления.' : 'Файл будет удалён без возможности восстановления.'}
+    </p>
+    <div class="zbtns">
+      <button class="zbtn" type="button" id="z-del-cancel">Отмена</button>
+      <button class="zbtn danger" type="button" id="z-del-ok">Удалить</button>
+    </div>
+  `);
+  document.getElementById('z-del-cancel')?.addEventListener('click', closeZModal);
+  document.getElementById('z-del-ok')?.addEventListener('click', () => {
+    closeZModal();
+    if (window.AndroidBridge && window.AndroidBridge.deleteFiles) {
+      window.AndroidBridge.deleteFiles(JSON.stringify([item.path]));
+    } else if (PREVIEW) {
+      toast('Удалено: ' + item.name);
+    }
+  });
+}
+
+function requestFileInfo(item) {
+  if (window.AndroidBridge && window.AndroidBridge.getFileInfo) {
+    window.AndroidBridge.getFileInfo(item.path);
+  } else {
+    window.showFileInfoModal({
+      name: item.name,
+      path: item.path,
+      isDir: item.isDir,
+      type: item.isDir ? 'Папка' : 'Файл',
+      containsStr: item.isDir ? (item.count + ' объектов') : '',
+      sizeStr: item.sizeStr || '—',
+      modifiedStr: '—',
+      permissions: 'Чтение / Запись'
+    });
+  }
+}
+
+window.showFileInfoModal = function(info) {
+  try {
+    const d = typeof info === 'string' ? JSON.parse(info) : info;
+    const rows = [
+      ['Имя', d.name || '—'],
+      ['Тип', d.type || '—'],
+      ['Путь', d.path || '—'],
+      ['Размер', d.sizeStr || '—']
+    ];
+    if (d.containsStr) rows.push(['Содержимое', d.containsStr]);
+    rows.push(['Изменён', d.modifiedStr || '—']);
+    rows.push(['Доступ', d.permissions || '—']);
+    openZModal(`
+      <div class="zhead">
+        <div class="zhead-ico">${ic('info')}</div>
+        <div class="zhead-meta"><b>Информация</b><small>${esc(d.name || '')}</small></div>
+      </div>
+      <div class="zinfo-list">
+        ${rows.map(r => `<div class="zinfo-row"><span>${esc(r[0])}</span><b>${esc(r[1])}</b></div>`).join('')}
+      </div>
+      <button class="zbtn primary" style="width:100%" type="button" id="z-info-ok">Закрыть</button>
+    `);
+    document.getElementById('z-info-ok')?.addEventListener('click', closeZModal);
+  } catch (e) {
+    console.error('showFileInfoModal error', e);
+  }
+};
+
 function renderBrowse() {
   const items = allFolders.length > 0 ? allFolders : (PREVIEW ? [
     { name: "DCIM", path: "/storage/emulated/0/DCIM", count: 3, isDir: true },
@@ -570,27 +933,103 @@ function renderBrowse() {
     return;
   }
 
-  draw('l-browse', items, (a, i) => `
-    <div class="card" data-s="${esc(a.name)}" data-path="${esc(a.path||'')}" data-isdir="${a.isDir ? '1':'0'}">
-      <div class="tile">${ic(a.isDir ? 'folderf' : 'clap')}</div>
-      <div class="body">
-        <div class="t">${esc(a.name)}</div>
-        <div class="s">${a.isDir ? (a.count + ' папок/файлов') : (a.sizeStr || 'Файл')}</div>
-      </div>
-      <div class="chev">${ic('chev')}</div>
-    </div>
-  `);
+  draw('l-browse', items, (a) => {
+    const isUp = !!a.isUp || (a.name && a.name.startsWith('.. '));
+    const isArchive = !!a.isArchive || (!a.isDir && /\.(zip|rar|7z|tar|gz|tgz|bz2|xz|iso|cbz|cbr|001)$/i.test(a.name || ''));
+    const icoName = isUp ? 'up' : (a.isDir ? 'folderf' : (isArchive ? 'archive' : (isAudioFile(a.name) ? 'note1' : 'clap')));
+    const sub = isUp ? 'На уровень выше' : (a.isDir ? (a.count + ' папок/файлов') : ((isArchive ? 'Архив • ' : '') + (a.sizeStr || 'Файл')));
+    return `
+      <div class="card" data-s="${esc(a.name)}" data-name="${esc(a.name)}" data-path="${esc(a.path||'')}" data-isdir="${a.isDir ? '1':'0'}" data-isarchive="${isArchive ? '1':'0'}" data-isup="${isUp ? '1':'0'}" data-count="${a.count||0}" data-size="${esc(a.sizeStr||'')}">
+        <div class="tile">${ic(icoName)}</div>
+        <div class="body">
+          <div class="t">${esc(a.name)}</div>
+          <div class="s">${esc(sub)}</div>
+        </div>
+        <div class="chev">${ic('chev')}</div>
+      </div>`;
+  });
 
   document.querySelectorAll('#l-browse .card').forEach(card => {
-    card.addEventListener('click', () => {
-      const path = card.getAttribute('data-path');
-      const isDir = card.getAttribute('data-isdir') === '1';
-      if (isDir) {
+    const isUp = card.getAttribute('data-isup') === '1';
+    const itemObj = {
+      name: card.getAttribute('data-name') || '',
+      path: card.getAttribute('data-path') || '',
+      isDir: card.getAttribute('data-isdir') === '1',
+      isArchive: card.getAttribute('data-isarchive') === '1',
+      count: Number(card.getAttribute('data-count') || 0),
+      sizeStr: card.getAttribute('data-size') || ''
+    };
+
+    if (!isUp) {
+      let holdTimer = null;
+      let startX = 0;
+      let startY = 0;
+      const clearHold = () => {
+        clearTimeout(holdTimer);
+        holdTimer = null;
+        card.classList.remove('holding');
+      };
+      const triggerMenu = () => {
+        clearHold();
+        suppressBrowseClick = true;
+        openZArchiverMenu(itemObj);
+        setTimeout(() => { suppressBrowseClick = false; }, 220);
+      };
+
+      card.addEventListener('touchstart', (e) => {
+        if (!e.touches.length) return;
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        card.classList.add('holding');
+        clearTimeout(holdTimer);
+        holdTimer = setTimeout(triggerMenu, 380);
+      }, { passive: true });
+      card.addEventListener('touchmove', (e) => {
+        if (!holdTimer || !e.touches.length) return;
+        if (Math.hypot(e.touches[0].clientX - startX, e.touches[0].clientY - startY) > 10) clearHold();
+      }, { passive: true });
+      card.addEventListener('touchend', clearHold);
+      card.addEventListener('touchcancel', clearHold);
+
+      card.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        startX = e.clientX;
+        startY = e.clientY;
+        card.classList.add('holding');
+        clearTimeout(holdTimer);
+        holdTimer = setTimeout(triggerMenu, 380);
+      });
+      card.addEventListener('mousemove', (e) => {
+        if (!holdTimer) return;
+        if (Math.hypot(e.clientX - startX, e.clientY - startY) > 10) clearHold();
+      });
+      card.addEventListener('mouseup', clearHold);
+      card.addEventListener('mouseleave', clearHold);
+      card.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        triggerMenu();
+      });
+    }
+
+    card.addEventListener('click', (e) => {
+      if (suppressBrowseClick) {
+        e.preventDefault();
+        return;
+      }
+      if (itemObj.isDir) {
         if (window.AndroidBridge && window.AndroidBridge.openFolder) {
-          window.AndroidBridge.openFolder(path);
+          window.AndroidBridge.openFolder(itemObj.path);
+        } else if (PREVIEW) {
+          currentBrowsePath = itemObj.path;
         }
-      } else {
-        if (path) playMedia(path);
+      } else if (itemObj.isArchive) {
+        if (window.AndroidBridge && window.AndroidBridge.openArchive) {
+          window.AndroidBridge.openArchive(itemObj.path);
+        } else if (PREVIEW) {
+          toast('Открытие архива: ' + itemObj.name);
+        }
+      } else if (itemObj.path) {
+        playMedia(itemObj.path);
       }
     });
   });
@@ -695,15 +1134,38 @@ tabs.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{
 
 /* ---- Bottom nav: switches pages, bump slides to the tapped item ---- */
 const navX=[0,209,405,603,800],navActive=document.getElementById('navActive'),fab=document.getElementById('fab');
+let activeNavIndex = 0;
+const landscapeMq = window.matchMedia('(orientation: landscape) and (min-width: 521px)');
+function updateNavIndicator() {
+  if (!navActive) return;
+  const buttons = document.querySelectorAll('.ni');
+  const activeBtn = buttons[activeNavIndex];
+  if (landscapeMq.matches && activeBtn) {
+    navActive.style.width = activeBtn.offsetWidth + 'px';
+    navActive.style.transform = 'translateX(' + activeBtn.offsetLeft + 'px)';
+  } else {
+    navActive.style.width = '';
+    if (navX[activeNavIndex] !== undefined) {
+      navActive.style.transform = 'translateX(calc(' + navX[activeNavIndex] + '*var(--u)))';
+    }
+  }
+}
+const scheduleNavSync = () => {
+  requestAnimationFrame(updateNavIndicator);
+  setTimeout(updateNavIndicator, 120);
+};
+window.addEventListener('resize', scheduleNavSync);
+window.addEventListener('orientationchange', scheduleNavSync);
+landscapeMq.addEventListener && landscapeMq.addEventListener('change', scheduleNavSync);
+
 function switchNavTab(tabName, i) {
+  activeNavIndex = i;
   if (typeof closeSubs === "function") closeSubs(true);
   document.querySelectorAll('.ni').forEach((x, idx)=>{
     if (idx === i) x.classList.add('active');
     else x.classList.remove('active');
   });
-  if (navActive && navX[i] !== undefined) {
-    navActive.style.transform='translateX(calc('+navX[i]+'*var(--u)))';
-  }
+  updateNavIndicator();
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   const targetPage = document.getElementById('p-'+tabName);
   if (targetPage) targetPage.classList.add('active');
@@ -822,9 +1284,10 @@ window.setAudios = function(audiosJson) {
   }
 };
 
-window.setFolders = function(foldersJson, pathTitle) {
+window.setFolders = function(foldersJson, pathTitle, fullPath) {
   try {
     allFolders = typeof foldersJson === 'string' ? JSON.parse(foldersJson) : foldersJson;
+    if (fullPath) currentBrowsePath = fullPath;
     if (pathTitle) {
       const titleEl = document.getElementById('browse-path-title');
       if (titleEl) titleEl.textContent = pathTitle + " /";
@@ -861,7 +1324,7 @@ const $ = id => document.getElementById(id);
 const mock = {
   share: { running:false, url:'http://192.168.1.23:8080', port:8080, error:'', authRequired:false, username:'admin', password:'1234', folder:'all', serverStyle:'nexora_media',
            wifi:{ enabled:false, ssid:'Nexora-Direct-Share', pass:'nexora8888', qrPayload:'WIFI:T:WPA;S:Nexora-Direct-Share;P:nexora8888;;', status:'' } },
-  settings: { hw_accel:true, bg_play:false, show_buffering_status:true, auto_rotate:false, orientation_mode:'portrait' }
+  settings: { hw_accel:true, force_vulkan:false, render_engine_mode:'auto', bg_play:false, show_buffering_status:true, auto_rotate:false, orientation_mode:'portrait' }
 };
 const FOLDERS = [
   ['all','Вся библиотека (Видео и Музыка)'], ['movies','Папка Movies (Фильмы)'], ['downloads','Папка Downloads (Загрузки)'],
@@ -965,6 +1428,22 @@ function buildOrientations(){
     el.addEventListener('click', () => setSetting('orientation_mode', el.dataset.ori));
   });
 }
+function buildRenderEngines(){
+  const box = $('l-render-engines');
+  if (!box) return;
+  const engines = [
+    ['auto', 'Автоматически (Рекомендуется)', 'Система сама определит оптимальный GPU/CPU драйвер под устройство.'],
+    ['vulkan', 'Vulkan (Максимальный GPU)', 'Принудительный низкоуровневый графический конвейер Vulkan.'],
+    ['gles2', 'OpenGL ES 2.0 (Стабильный)', 'Проверенный и совместимый графический API для любых чипсетов.'],
+    ['software', 'Software (Чистый CPU)', 'Отключение аппаратного ускорения, вся нагрузка идёт на все ядра CPU.']
+  ];
+  box.innerHTML = engines.map((e) =>
+    `<div class="card" data-engine="${e[0]}" style="padding:calc(18*var(--u)) calc(22*var(--u))"><div class="body"><div class="t" style="white-space:normal;font-size:calc(27*var(--u))">${esc(e[1])}</div><div class="s" style="white-space:normal">${esc(e[2])}</div></div><div class="rd">${ic('check')}</div></div>`
+  ).join('');
+  box.querySelectorAll('[data-engine]').forEach((el) => {
+    el.addEventListener('click', () => setSetting('render_engine_mode', el.dataset.engine));
+  });
+}
 function getSettings(){
   if (PREVIEW) return mock.settings;
   try { return JSON.parse(callB('getSettings') || '{}'); } catch(e){ return {}; }
@@ -981,9 +1460,16 @@ function renderSettings(){
   document.querySelectorAll('[data-set]').forEach(b=>setSw(b, !!s[b.dataset.set]));
   const ori = s.orientation_mode || 'portrait';
   document.querySelectorAll('#l-orientations [data-ori]').forEach(c=>c.classList.toggle('sel', c.dataset.ori === ori));
+  const eng = s.render_engine_mode || 'auto';
+  document.querySelectorAll('#l-render-engines [data-engine]').forEach(c=>c.classList.toggle('sel', c.dataset.engine === eng));
 }
 buildOrientations();
+buildRenderEngines();
 document.querySelectorAll('[data-set]').forEach(b=>b.addEventListener('click',()=>setSetting(b.dataset.set, String(!getSettings()[b.dataset.set]))));
+$('btn-settings-open-browser')?.addEventListener('click', ()=>{
+  if (hasB('onMoreItemClick')) callB('onMoreItemClick', 'browser');
+  else window.open('https://google.com', '_blank');
+});
 
 /* ---------- open / close sub-pages (same slide + rise animation) ---------- */
 let activeSub = null, subTimer = null;
@@ -1003,7 +1489,7 @@ function closeSubs(instant){
   return true;
 }
 document.querySelectorAll('[data-back]').forEach(b=>b.addEventListener('click',()=>closeSubs()));
-window.nexoraBack = () => closeSubs();             // Android back button: window.nexoraBack() returns true if it closed a sub-page
+window.nexoraBack = () => closeZModal() || closeSubs(); // Android back button: close modal or sub-page first
 window.onShareState = () => { if (activeSub === 'share') renderShare(); };   // optional push from native
 window.onSettingsState = () => { if (activeSub === 'settings' || activeSub === 'share') renderSettings(); };
 
@@ -1020,6 +1506,7 @@ renderAudio();
 renderBrowse();
 renderPlaylists();
 renderMore();
+scheduleNavSync();
 
 if (window.AndroidBridge && window.AndroidBridge.requestInitialData) {
   window.AndroidBridge.requestInitialData();

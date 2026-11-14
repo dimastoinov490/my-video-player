@@ -49,7 +49,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.videoplayer.R
+import com.example.videoplayer.archive.ArchiveSource
 import com.example.videoplayer.model.MediaStoreHelper
+import java.io.File
 import com.example.videoplayer.model.VideoItem
 import com.example.videoplayer.ui.theme.*
 import androidx.compose.ui.graphics.Brush
@@ -73,7 +75,11 @@ import java.util.Locale
 fun VideoLibraryScreen(
     onVideoSelected: (String) -> Unit,
     onOpenCustomUrl: () -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    onOpenArchive: (ArchiveSource, File?) -> Unit = { _, _ -> },
+    onOpenArchivePicker: () -> Unit = {},
+    onOpenBrowser: (String) -> Unit = {},
+    browseRefreshTick: Int = 0
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -176,6 +182,10 @@ fun VideoLibraryScreen(
                 onOpenMenu = onOpenSettings,
                 onOpenSettings = onOpenSettings,
                 onOpenCustomUrl = onOpenCustomUrl,
+                onOpenArchive = onOpenArchive,
+                onOpenArchivePicker = onOpenArchivePicker,
+                onOpenBrowser = onOpenBrowser,
+                browseRefreshTick = browseRefreshTick,
                 onRefreshVideos = {
                     Toast.makeText(context, "Обновление списка видео…", Toast.LENGTH_SHORT).show()
                     videoLoadJob?.cancel()

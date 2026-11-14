@@ -74,6 +74,9 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.example.videoplayer.R
+import com.example.videoplayer.archive.ArchivePlaybackSpec
+import com.example.videoplayer.archive.ArchiveSource
+import com.example.videoplayer.archive.ArchiveStreamServer
 import com.example.videoplayer.model.MediaStoreHelper
 import com.example.videoplayer.player.PlaybackTrack
 import com.example.videoplayer.player.GoogleCastManager
@@ -203,12 +206,13 @@ private fun extractLanMonitorBeatEndpoint(videoUri: String): String? {
 @Composable
 fun PlayerScreen(
     videoUri: String,
+    archiveSpec: ArchivePlaybackSpec? = null,
     isInPipMode: Boolean = false,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
     val config = ThemeConfigManager.currentConfig
-    var resolvedTitle by remember(videoUri) { mutableStateOf("Видео") }
+    var resolvedTitle by remember(videoUri, archiveSpec) { mutableStateOf(archiveSpec?.entryName ?: "Видео") }
     val progressPrefs = remember { context.getSharedPreferences("playback_progress", Context.MODE_PRIVATE) }
     val progressKey = remember(videoUri) { playbackProgressKey(videoUri) }
     var savedResumePositionMs by remember(videoUri) { mutableLongStateOf(progressPrefs.getLong(progressKey, 0L)) }
@@ -219,6 +223,10 @@ fun PlayerScreen(
     val playerManager = remember { VlcPlayerManager(context) }
     val castManager = remember { GoogleCastManager(context) }
     var useNativeFallback by remember { mutableStateOf(!playerManager.isEngineReady) }
+    var activeArchiveSessionId by remember(videoUri, archiveSpec) { mutableStateOf<String?>(null) }
+    var activeArchiveStreamUrl by remember(videoUri, archiveSpec) { mutableStateOf<String?>(null) }
+    var triedDirectZip by remember(videoUri, archiveSpec) { mutableStateOf(false) }
+    val latestArchiveSessionId by rememberUpdatedState(activeArchiveSessionId)
 
     var isPlaying by remember { mutableStateOf(true) }
     var currentTimeMs by remember { mutableLongStateOf(0L) }
@@ -243,9 +251,13 @@ fun PlayerScreen(
 
     // ContentResolver queries and the fallback media scan can block; resolve the
     // title off the main thread so opening a video never stalls the player UI.
-    LaunchedEffect(videoUri) {
-        resolvedTitle = withContext(Dispatchers.IO) {
-            resolveVideoTitle(context, videoUri)
+    LaunchedEffect(videoUri, archiveSpec) {
+        if (archiveSpec != null) {
+            resolvedTitle = archiveSpec.entryName
+        } else {
+            resolvedTitle = withContext(Dispatchers.IO) {
+                resolveVideoTitle(context, videoUri)
+            }
         }
     }
 
@@ -315,6 +327,9 @@ fun PlayerScreen(
                     .putLong("${progressKey}_duration", duration)
                     .apply()
             }
+            try {
+                ArchiveStreamServer.stopSession(latestArchiveSessionId)
+            } catch (_: Throwable) {}
             try {
                 playerManager.release()
             } catch (_: Throwable) {}
@@ -405,7 +420,10 @@ fun PlayerScreen(
     val beatPosMs by rememberUpdatedState(currentTimeMs)
     val beatDurMs by rememberUpdatedState(totalDurationMs)
     val beatTitle by rememberUpdatedState(resolvedTitle)
-    val monitorBeatUrl = remember(videoUri) { extractLanMonitorBeatEndpoint(videoUri) }
+    val monitorBeatUrl = remember(videoUri, archiveSpec) {
+        if (archiveSpec != null || ArchiveStreamServer.isArchiveStreamUrl(videoUri)) null
+        else extractLanMonitorBeatEndpoint(videoUri)
+    }
 
     LaunchedEffect(isPlaying, monitorBeatUrl) {
         val endpoint = monitorBeatUrl ?: return@LaunchedEffect
@@ -473,24 +491,42 @@ fun PlayerScreen(
                     savedResumeDurationMs = 0L
                 }
             } else if (status.startsWith("Error")) {
-                val fallbackPosition = latestCurrentTimeMs
-                val fallbackDuration = latestTotalDurationMs
-                if (fallbackPosition > 0L) {
-                    savedResumePositionMs = fallbackPosition
-                    savedResumeDurationMs = fallbackDuration
-                    progressPrefs.edit()
-                        .putLong(progressKey, fallbackPosition)
-                        .putLong("${progressKey}_duration", fallbackDuration)
-                        .apply()
+                val spec = archiveSpec
+                if (spec != null && triedDirectZip && activeArchiveSessionId == null) {
+                    triedDirectZip = false
+                    infoFeedbackText = "Переключение на потоковый мост архива..."
+                    coroutineScope.launch {
+                        try {
+                            val handle = withContext(Dispatchers.IO) {
+                                ArchiveStreamServer.startSession(context, spec)
+                            }
+                            activeArchiveSessionId = handle.sessionId
+                            activeArchiveStreamUrl = handle.streamUrl
+                            playerManager.playUrl(handle.streamUrl)
+                        } catch (t: Throwable) {
+                            infoFeedbackText = t.message ?: "Ошибка чтения видео из архива"
+                        }
+                    }
+                } else {
+                    val fallbackPosition = latestCurrentTimeMs
+                    val fallbackDuration = latestTotalDurationMs
+                    if (fallbackPosition > 0L) {
+                        savedResumePositionMs = fallbackPosition
+                        savedResumeDurationMs = fallbackDuration
+                        progressPrefs.edit()
+                            .putLong(progressKey, fallbackPosition)
+                            .putLong("${progressKey}_duration", fallbackDuration)
+                            .apply()
+                    }
+                    resumePositionApplied = false
+                    // Stop the failed VLC session before mounting VideoView to avoid
+                    // retaining decoder resources or overlapping audio during fallback.
+                    coroutineScope.launch {
+                        playerManager.stop()
+                        useNativeFallback = true
+                    }
+                    infoFeedbackText = "Включен резервный медиа-движок Android"
                 }
-                resumePositionApplied = false
-                // Stop the failed VLC session before mounting VideoView to avoid
-                // retaining decoder resources or overlapping audio during fallback.
-                coroutineScope.launch {
-                    playerManager.stop()
-                    useNativeFallback = true
-                }
-                infoFeedbackText = "Включен резервный медиа-движок Android"
             }
         }
         playerManager.onTracksChanged = {
@@ -612,7 +648,31 @@ fun PlayerScreen(
                                         // Reattach the existing VLC output without resetting the current media.
                                         if (!hasStartedVlcPlayback) {
                                             hasStartedVlcPlayback = true
-                                            playerManager.playUrl(videoUri)
+                                            val spec = archiveSpec
+                                            if (spec != null) {
+                                                if (ArchiveStreamServer.shouldPreferDirectZip(spec)) {
+                                                    triedDirectZip = true
+                                                    val path = (spec.source as ArchiveSource.FilePath).path
+                                                    playerManager.playArchiveZip(path, spec.entryPath)
+                                                } else {
+                                                    infoFeedbackText = "Потоковая распаковка из архива..."
+                                                    coroutineScope.launch {
+                                                        try {
+                                                            val handle = withContext(Dispatchers.IO) {
+                                                                ArchiveStreamServer.startSession(context, spec)
+                                                            }
+                                                            activeArchiveSessionId = handle.sessionId
+                                                            activeArchiveStreamUrl = handle.streamUrl
+                                                            playerManager.playUrl(handle.streamUrl)
+                                                        } catch (t: Throwable) {
+                                                            infoFeedbackText = t.message ?: "Не удалось открыть видео из архива"
+                                                            statusText = "Error: ${t.message}"
+                                                        }
+                                                    }
+                                                }
+                                            } else {
+                                                playerManager.playUrl(videoUri)
+                                            }
                                         }
                                     } catch (_: Throwable) {
                                         coroutineScope.launch {
@@ -640,10 +700,11 @@ fun PlayerScreen(
                     factory = { ctx ->
                         VideoView(ctx).apply {
                             nativeVideoView = this
+                            val targetUriStr = activeArchiveStreamUrl ?: videoUri
                             val uri = when {
-                                videoUri.startsWith("sample://") -> Uri.parse("https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4")
-                                videoUri.startsWith("content://") || videoUri.startsWith("file://") || videoUri.startsWith("http") -> Uri.parse(videoUri)
-                                else -> Uri.fromFile(File(videoUri))
+                                targetUriStr.startsWith("sample://") -> Uri.parse("https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4")
+                                targetUriStr.startsWith("content://") || targetUriStr.startsWith("file://") || targetUriStr.startsWith("http") -> Uri.parse(targetUriStr)
+                                else -> Uri.fromFile(File(targetUriStr))
                             }
                             setVideoURI(uri)
                             setOnPreparedListener { mp ->

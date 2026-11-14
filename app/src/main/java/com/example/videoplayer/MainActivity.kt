@@ -1,13 +1,16 @@
 package com.example.videoplayer
 
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
@@ -26,15 +29,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
+import com.example.videoplayer.archive.ArchiveFileUtils
+import com.example.videoplayer.archive.ArchiveManager
+import com.example.videoplayer.archive.ArchivePlaybackSpec
+import com.example.videoplayer.archive.ArchiveSource
+import com.example.videoplayer.archive.ArchiveStreamServer
+import com.example.videoplayer.ui.ArchiveBrowserScreen
+import com.example.videoplayer.ui.FullBrowserScreen
 import com.example.videoplayer.ui.OrientationHelper
 import com.example.videoplayer.ui.PlayerScreen
 import com.example.videoplayer.ui.VideoLibraryScreen
 import com.example.videoplayer.ui.theme.*
+import java.io.File
 
 class MainActivity : FragmentActivity() {
     private var inPipState by mutableStateOf(false)
     private var orientationModeState by mutableStateOf(OrientationHelper.MODE_PORTRAIT)
     private var prefListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
+    private var pendingArchiveState by mutableStateOf<Pair<ArchiveSource, File?>?>(null)
 
     override fun onPictureInPictureModeChanged(
         isInPictureInPictureMode: Boolean,
@@ -53,13 +65,39 @@ class MainActivity : FragmentActivity() {
                 .unregisterOnSharedPreferenceChangeListener(it)
         }
         prefListener = null
+        ArchiveStreamServer.stopAll()
         super.onDestroy()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingArchiveIntent(intent)
+    }
+
+    private fun handleIncomingArchiveIntent(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_VIEW) return
+        val uri = intent.data ?: return
+        val name = ArchiveManager.resolveDisplayName(this, uri)
+        val mime = intent.type.orEmpty().lowercase()
+        val isArchiveMime = mime.contains("zip") || mime.contains("rar") || mime.contains("7z") ||
+            mime.contains("tar") || mime.contains("gzip") || mime.contains("iso")
+        if (isArchiveMime || ArchiveFileUtils.isArchiveFileName(name)) {
+            val source = if (uri.scheme == "file" && !uri.path.isNullOrBlank()) {
+                ArchiveSource.FilePath(uri.path!!, name)
+            } else {
+                ArchiveSource.ContentUri(uri, name)
+            }
+            pendingArchiveState = source to ArchiveManager.defaultExtractDir(name)
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ThemeManager.init(this)
         ThemeConfigManager.init(this)
+        ArchiveStreamServer.cleanupStaleCache(this)
+        handleIncomingArchiveIntent(intent)
         orientationModeState = OrientationHelper.getMode(this)
         OrientationHelper.apply(this, orientationModeState)
         val prefs = getSharedPreferences(OrientationHelper.PREFS_NAME, Context.MODE_PRIVATE)
@@ -85,8 +123,27 @@ class MainActivity : FragmentActivity() {
                     color = theme.background
                 ) {
                     var selectedVideoUri by remember { mutableStateOf<String?>(null) }
+                    var selectedArchivePlayback by remember { mutableStateOf<ArchivePlaybackSpec?>(null) }
+                    var activeBrowserUrl by remember { mutableStateOf<String?>(null) }
+                    var archiveRefreshTick by remember { mutableIntStateOf(0) }
                     var showCustomUrlDialog by remember { mutableStateOf(false) }
                     var urlInput by remember { mutableStateOf("") }
+
+                    val safArchivePicker = rememberLauncherForActivityResult(
+                        contract = ActivityResultContracts.OpenDocument()
+                    ) { uri ->
+                        if (uri != null) {
+                            try {
+                                contentResolver.takePersistableUriPermission(
+                                    uri,
+                                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                )
+                            } catch (_: Throwable) {}
+                            val name = ArchiveManager.resolveDisplayName(this@MainActivity, uri)
+                            pendingArchiveState = ArchiveSource.ContentUri(uri, name) to
+                                ArchiveManager.defaultExtractDir(name)
+                        }
+                    }
 
                     val subEnterTransition = remember {
                         slideInHorizontally { it / 8 } + fadeIn(animationSpec = tween(420, easing = CubicBezierEasing(0.2f, 0.9f, 0.3f, 1f)))
@@ -98,18 +155,56 @@ class MainActivity : FragmentActivity() {
                     if (selectedVideoUri != null) {
                         PlayerScreen(
                             videoUri = selectedVideoUri!!,
+                            archiveSpec = selectedArchivePlayback,
                             isInPipMode = inPipState,
-                            onBack = { selectedVideoUri = null }
+                            onBack = {
+                                selectedVideoUri = null
+                                selectedArchivePlayback = null
+                            }
+                        )
+                    } else if (pendingArchiveState != null) {
+                        val (archiveSource, destDir) = pendingArchiveState!!
+                        ArchiveBrowserScreen(
+                            source = archiveSource,
+                            defaultDestinationDir = destDir,
+                            onPlayVideoFromArchive = { spec ->
+                                selectedArchivePlayback = spec
+                                selectedVideoUri = "archive://${spec.entryName}"
+                            },
+                            onExtractionFinished = {
+                                archiveRefreshTick++
+                            },
+                            onClose = {
+                                pendingArchiveState = null
+                            }
+                        )
+                    } else if (activeBrowserUrl != null) {
+                        FullBrowserScreen(
+                            initialUrl = activeBrowserUrl!!,
+                            onClose = { activeBrowserUrl = null }
                         )
                     } else {
                         Box(modifier = Modifier.fillMaxSize()) {
                             VideoLibraryScreen(
-                                onVideoSelected = { uri -> selectedVideoUri = uri },
+                                onVideoSelected = { uri ->
+                                    selectedArchivePlayback = null
+                                    selectedVideoUri = uri
+                                },
                                 onOpenCustomUrl = {
                                     urlInput = ""
                                     showCustomUrlDialog = true
                                 },
-                                onOpenSettings = { /* В v4 настройки открываются прямо в HTML */ }
+                                onOpenSettings = { /* В v4 настройки открываются прямо в HTML */ },
+                                onOpenArchive = { source, destDir ->
+                                    pendingArchiveState = source to destDir
+                                },
+                                onOpenArchivePicker = {
+                                    safArchivePicker.launch(arrayOf("*/*"))
+                                },
+                                onOpenBrowser = { url ->
+                                    activeBrowserUrl = url
+                                },
+                                browseRefreshTick = archiveRefreshTick
                             )
 
                             // Воспроизведение по ссылке с плавной анимацией появления
