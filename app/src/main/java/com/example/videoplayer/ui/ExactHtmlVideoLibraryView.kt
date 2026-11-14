@@ -640,10 +640,11 @@ fun ExactHtmlVideoLibraryView(
                                         }
                                     }
                                 }
-                                bitmap = Bitmap.createBitmap(qrSize, qrSize, Bitmap.Config.ARGB_8888)
-                                bitmap.setPixels(pixels, 0, qrSize, 0, 0, qrSize, qrSize)
+                                val createdBitmap = Bitmap.createBitmap(qrSize, qrSize, Bitmap.Config.ARGB_8888)
+                                bitmap = createdBitmap
+                                createdBitmap.setPixels(pixels, 0, qrSize, 0, 0, qrSize, qrSize)
                                 ByteArrayOutputStream().use { baos ->
-                                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, baos)
+                                    createdBitmap.compress(Bitmap.CompressFormat.PNG, 100, baos)
                                     val b64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
                                     "data:image/png;base64,$b64"
                                 }
