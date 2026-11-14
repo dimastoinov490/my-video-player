@@ -53,7 +53,14 @@ class GoogleCastManager(context: Context) {
                 .build()
 
             remoteClient.load(request).setResultCallback { result ->
-                onResult(result.status.isSuccess)
+                val succeeded = result.status.isSuccess
+                if (!succeeded) {
+                    Log.w(
+                        TAG,
+                        "Cast receiver rejected media: code=${result.status.statusCode}, message=${result.status.statusMessage}"
+                    )
+                }
+                onResult(succeeded)
             }
             CastStartResult.STARTED
         } catch (error: Exception) {
@@ -77,12 +84,26 @@ class GoogleCastManager(context: Context) {
 
     private fun contentTypeFor(url: String): String {
         val path = Uri.parse(url).path.orEmpty().lowercase()
-        return when {
-            path.endsWith(".webm") -> "video/webm"
-            path.endsWith(".m3u8") -> "application/x-mpegURL"
-            path.endsWith(".mpd") -> "application/dash+xml"
-            path.endsWith(".mov") -> "video/quicktime"
-            else -> "video/mp4"
+        val fileName = path.substringAfterLast('/')
+        val extension = if ('.' in fileName) fileName.substringAfterLast('.') else ""
+        return when (extension) {
+            "mp4", "m4v" -> "video/mp4"
+            "webm" -> "video/webm"
+            "m3u8" -> "application/x-mpegURL"
+            "mpd" -> "application/dash+xml"
+            "mov", "qt" -> "video/quicktime"
+            "mkv" -> "video/x-matroska"
+            "avi" -> "video/x-msvideo"
+            "mpeg", "mpg", "mpe" -> "video/mpeg"
+            "ts", "m2ts" -> "video/mp2t"
+            "3gp", "3gpp" -> "video/3gpp"
+            "ogv" -> "video/ogg"
+            "flv" -> "video/x-flv"
+            "wmv" -> "video/x-ms-wmv"
+            // Extensionless stream URLs commonly expose MP4-compatible media.
+            "" -> "video/mp4"
+            // Do not mislabel a known, different file type as MP4.
+            else -> "application/octet-stream"
         }
     }
 
