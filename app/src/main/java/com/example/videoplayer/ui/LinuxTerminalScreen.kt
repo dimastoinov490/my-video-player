@@ -65,10 +65,19 @@ fun LinuxTerminalScreen(
         }
     }
 
-    // Проверка и установка при первом открытии, затем запуск PRoot или fallback-сессии
+    // Не подменяем Linux-окружение системной оболочкой Android: это вводило бы пользователя в заблуждение.
     LaunchedEffect(Unit) {
         val prootReady = TermuxEngine.isProotAvailable(context)
-        if (prootReady && !LinuxInstaller.isInstalled(context)) {
+        if (!prootReady) {
+            outputLines.add("Linux PRoot runtime is not installed in this APK.")
+            outputLines.add("Нужны PRoot, loader, libtalloc и libandroid-shmem для ABI устройства.")
+            outputLines.add("Системная оболочка Android вместо Alpine не запускается.")
+            statusText = "Не найден комплект Linux runtime"
+            isLoading = false
+            return@LaunchedEffect
+        }
+
+        if (!LinuxInstaller.isInstalled(context)) {
             try {
                 LinuxInstaller.installAlpine(context) { progress ->
                     coroutineScope.launch(Dispatchers.Main) {
@@ -81,35 +90,22 @@ fun LinuxTerminalScreen(
         }
 
         statusText = "Запуск сессии..."
-        if (prootReady && LinuxInstaller.isInstalled(context)) {
+        if (LinuxInstaller.isInstalled(context)) {
             outputLines.add("Welcome to Alpine Linux (Termux-style PRoot)")
             outputLines.add("PRoot virtual root is enabled (-0); Android system root is not granted.")
         } else {
-            outputLines.add("Android System Shell (/system/bin/sh)")
-            if (!prootReady) {
-                outputLines.add("Примечание: libproot.so не найден в nativeLibraryDir; запущена встроенная оболочка Android.")
-            }
+            outputLines.add("Alpine rootfs не установлен. Установка не завершилась.")
+            isLoading = false
+            return@LaunchedEffect
         }
         outputLines.add("--------------------------------------------------")
         isLoading = false
 
         coroutineScope.launch(Dispatchers.IO) {
             try {
-                val useProot = prootReady && LinuxInstaller.isInstalled(context)
                 LinuxInstaller.ensureAiEngineScript(context)
-                if (useProot) {
-                    LinuxInstaller.ensureBootstrapScript(context)
-                }
-                val process = if (useProot) {
-                    TermuxEngine.createTermuxSession(context).start()
-                } else {
-                    ProcessBuilder("/system/bin/sh").apply {
-                        directory(context.filesDir)
-                        environment()["HOME"] = context.filesDir.absolutePath
-                        environment()["TERM"] = "xterm-256color"
-                        redirectErrorStream(true)
-                    }.start()
-                }
+                LinuxInstaller.ensureBootstrapScript(context)
+                val process = TermuxEngine.createTermuxSession(context).start()
                 val writer = PrintWriter(process.outputStream, true)
                 withContext(Dispatchers.Main) {
                     activeProcess = process
@@ -146,7 +142,7 @@ fun LinuxTerminalScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Linux Terminal (PRoot + su)", color = Color.White) },
+                title = { Text("Linux Terminal (PRoot)", color = Color.White) },
                 navigationIcon = {
                     IconButton(
                         onClick = onBack,
@@ -250,7 +246,7 @@ fun LinuxTerminalScreen(
                     modifier = Modifier
                         .weight(1f)
                         .testTag("terminal_command_input"),
-                    placeholder = { Text("команда (например: apk update, su)", color = Color.Gray) },
+                    placeholder = { Text("команда (например: apk update, python3 --version)", color = Color.Gray) },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = Color.White,
@@ -318,7 +314,7 @@ fun LinuxTerminalEntryCard(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "Консоль, пакеты APK и поддержка su",
+                    text = "Alpine Linux, пакеты apk и Python",
                     style = MaterialTheme.typography.bodySmall,
                     color = GrayText
                 )
