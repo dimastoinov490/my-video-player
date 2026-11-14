@@ -20,7 +20,14 @@ import java.util.zip.GZIPInputStream
 object LinuxInstaller {
 
     fun getRootFsDir(context: Context): File {
-        return File(context.filesDir, "rootfs")
+        val rootFs = File(context.filesDir, "rootfs")
+        val backupRoot = File(context.filesDir, "rootfs.previous")
+        // Recover the last working installation if the app was interrupted
+        // between moving the old rootfs aside and activating the new one.
+        if (!rootFs.exists() && File(backupRoot, "bin/sh").isFile && backupRoot.renameTo(rootFs)) {
+            return rootFs
+        }
+        return rootFs
     }
 
     fun isInstalled(context: Context): Boolean {
@@ -100,6 +107,7 @@ object LinuxInstaller {
     suspend fun installAlpine(context: Context, onProgress: (String) -> Unit) = withContext(Dispatchers.IO) {
         val rootFs = getRootFsDir(context)
         val stagingRoot = File(context.filesDir, "rootfs.installing")
+        val backupRoot = File(context.filesDir, "rootfs.previous")
         val arch = resolveAlpineArch()
         val alpineVersion = "3.24.0"
         val alpineUrl = "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/$arch/alpine-minirootfs-$alpineVersion-$arch.tar.gz"
@@ -140,12 +148,18 @@ object LinuxInstaller {
             }
 
             onProgress("Подготовка Linux-окружения...")
-            if (rootFs.exists() && !rootFs.deleteRecursively()) {
-                throw IOException("Не удалось заменить старый rootfs")
+            if (backupRoot.exists() && !backupRoot.deleteRecursively()) {
+                throw IOException("Не удалось очистить резервную копию rootfs")
+            }
+            val hadPreviousRootFs = rootFs.exists()
+            if (hadPreviousRootFs && !rootFs.renameTo(backupRoot)) {
+                throw IOException("Не удалось сохранить предыдущий rootfs")
             }
             if (!stagingRoot.renameTo(rootFs)) {
+                if (hadPreviousRootFs) backupRoot.renameTo(rootFs)
                 throw IOException("Не удалось активировать установленный Alpine rootfs")
             }
+            if (backupRoot.exists()) backupRoot.deleteRecursively()
 
             ensureBootstrapScript(context)
             ensureAiEngineScript(context)
