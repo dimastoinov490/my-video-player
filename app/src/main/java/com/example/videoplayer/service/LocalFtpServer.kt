@@ -6,7 +6,6 @@ import org.apache.ftpserver.FtpServer
 import org.apache.ftpserver.FtpServerFactory
 import org.apache.ftpserver.listener.ListenerFactory
 import org.apache.ftpserver.usermanager.impl.BaseUser
-import org.apache.ftpserver.usermanager.impl.ReadPermission
 import java.net.InetAddress
 import java.net.NetworkInterface
 
@@ -42,7 +41,6 @@ object LocalFtpServer {
             val user = BaseUser().apply {
                 name = "anonymous"
                 homeDirectory = shareDirectory.canonicalPath
-                authorities = listOf(ReadPermission())
             }
             serverFactory.userManager.save(user)
 
