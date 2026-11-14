@@ -83,7 +83,7 @@ fun LinuxTerminalScreen(
         statusText = "Запуск сессии..."
         if (prootReady && LinuxInstaller.isInstalled(context)) {
             outputLines.add("Welcome to Alpine Linux (Termux-style PRoot)")
-            outputLines.add("Type 'su' to gain root privileges if host is rooted.")
+            outputLines.add("PRoot virtual root is enabled (-0); Android system root is not granted.")
         } else {
             outputLines.add("Android System Shell (/system/bin/sh)")
             if (!prootReady) {
