@@ -18,6 +18,7 @@ import android.text.format.Formatter
 import android.util.Base64
 import android.util.Log
 import android.util.Size
+import android.webkit.MimeTypeMap
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.*
@@ -2579,16 +2580,7 @@ object LocalHttpShareServer {
                 val isVideo = ext in listOf("mp4", "mkv", "avi", "mov", "webm", "flv", "3gp", "ts")
                 val isAudio = ext in listOf("mp3", "m4a", "aac", "wav", "flac", "ogg", "opus")
                 if (isVideo || isAudio) {
-                    val mime = when {
-                        ext == "mp4" -> "video/mp4"
-                        ext == "mkv" -> "video/x-matroska"
-                        ext == "webm" -> "video/webm"
-                        ext == "mp3" -> "audio/mpeg"
-                        ext == "wav" -> "audio/wav"
-                        ext == "ogg" -> "audio/ogg"
-                        isVideo -> "video/*"
-                        else -> "audio/*"
-                    }
+                    val mime = mimeTypeForExtension(ext, isVideo)
                     result.add(
                         HttpMediaFile(
                             id = "file_" + file.absolutePath.hashCode().toString(),
@@ -2738,7 +2730,7 @@ object LocalHttpShareServer {
                             fileName = f.name,
                             sizeBytes = f.length(),
                             durationMs = 0L,
-                            mimeType = if (isVid) "video/mp4" else "application/octet-stream",
+                            mimeType = mimeTypeForExtension(ext, isVid),
                             isVideo = isVid,
                             contentUri = null,
                             directFile = f,
@@ -2750,6 +2742,33 @@ object LocalHttpShareServer {
         }
 
         return result
+    }
+
+    private fun mimeTypeForExtension(extension: String, isVideo: Boolean): String {
+        return when (extension.lowercase()) {
+            "mp4", "m4v" -> "video/mp4"
+            "mkv" -> "video/x-matroska"
+            "avi" -> "video/x-msvideo"
+            "mov", "qt" -> "video/quicktime"
+            "webm" -> "video/webm"
+            "flv" -> "video/x-flv"
+            "3gp", "3gpp" -> "video/3gpp"
+            "ts", "m2ts" -> "video/mp2t"
+            "mpg", "mpeg" -> "video/mpeg"
+            "mp3" -> "audio/mpeg"
+            "m4a" -> "audio/mp4"
+            "aac" -> "audio/aac"
+            "wav" -> "audio/wav"
+            "flac" -> "audio/flac"
+            "ogg", "opus" -> "audio/ogg"
+            else -> {
+                val detected = MimeTypeMap.getSingleton()
+                    .getMimeTypeFromExtension(extension.lowercase())
+                detected?.takeIf {
+                    if (isVideo) it.startsWith("video/") else it.startsWith("audio/")
+                } ?: "application/octet-stream"
+            }
+        }
     }
 
     private fun serveMediaContent(
