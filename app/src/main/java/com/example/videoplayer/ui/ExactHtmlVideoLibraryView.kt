@@ -340,7 +340,8 @@ fun ExactHtmlVideoLibraryView(
 
     fun syncAllData(webView: WebView) {
         sendVideosToWeb(webView, latestVideos, force = true)
-        if (audioPermissionGranted) sendAudiosToWeb(webView)
+        // Audio sync is owned by LaunchedEffect(audioPermissionGranted, isPageReady).
+        // Keeping it out of this initial batch avoids probing the same tracks twice.
         sendFoldersToWeb(webView, currentBrowsePath)
         sendPlaylistsToWeb(webView)
     }
