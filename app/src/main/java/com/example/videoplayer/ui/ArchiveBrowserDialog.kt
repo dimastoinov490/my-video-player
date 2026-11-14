@@ -15,6 +15,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,6 +58,7 @@ fun ArchiveBrowserScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val lifecycleOwner = LocalLifecycleOwner.current
 
     var currentPassword by remember(source) { mutableStateOf<String?>(null) }
     var inspectResult by remember(source) { mutableStateOf<ArchiveInspectResult?>(null) }
@@ -71,6 +75,18 @@ fun ArchiveBrowserScreen(
     var extractionJob by remember { mutableStateOf<Job?>(null) }
     var extractionState by remember { mutableStateOf<ExtractionProgress?>(null) }
     var hasAllFiles by remember { mutableStateOf(ArchiveManager.hasAllFilesAccess()) }
+
+    // Settings is opened outside this composable. Re-check the special permission when
+    // the activity returns to the foreground, not immediately after startActivity().
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasAllFiles = ArchiveManager.hasAllFilesAccess()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     fun loadArchive(passwordAttempt: String?) {
         isLoading = true
@@ -246,7 +262,6 @@ fun ArchiveBrowserScreen(
                         )
                         TextButton(onClick = {
                             context.startActivity(ArchiveManager.buildAllFilesAccessIntent(context))
-                            hasAllFiles = ArchiveManager.hasAllFilesAccess()
                         }) {
                             Text("Разрешить", color = NeonOrange, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
