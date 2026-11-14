@@ -52,7 +52,10 @@ find_one() {
 PROOT_BIN="$(find_one '*/bin/proot')"
 PROOT_LOADER="$(find_one '*/libexec/proot/loader')"
 TALLOC_LIB="$(find_one '*/libtalloc.so.*')"
-SHMEM_LIB="$(find_one '*/libandroid-shmem.so')"
+SHMEM_ENTRY="$(find "$EXTRACT_DIR" -name 'libandroid-shmem.so*' -print -quit)"
+[[ -n "$SHMEM_ENTRY" ]] || { echo "Expected libandroid-shmem runtime file not found" >&2; exit 1; }
+SHMEM_LIB="$(readlink -f "$SHMEM_ENTRY")"
+[[ -f "$SHMEM_LIB" ]] || { echo "libandroid-shmem target is missing" >&2; exit 1; }
 install -m 755 "$PROOT_BIN" "$OUTPUT_DIR/libproot.so"
 install -m 755 "$PROOT_LOADER" "$OUTPUT_DIR/libproot_loader.so"
 install -m 644 "$SHMEM_LIB" "$OUTPUT_DIR/libandroid-shmem.so"
