@@ -467,13 +467,17 @@ object LinuxInstaller {
 
     private val BOOTSTRAP_SCRIPT = """
         #!/bin/sh
+        set -eu
         export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
         if [ ! -f /root/.bootstrap_done ]; then
             echo "[*] Первый запуск: установка python3, ffmpeg и yt-dlp..."
             apk update
             apk add --no-cache python3 py3-pip curl ca-certificates ffmpeg
-            curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
-            chmod +x /usr/local/bin/yt-dlp
+            curl --fail --location --retry 3 --retry-delay 2 --connect-timeout 15 --max-time 600 \
+                https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
+                -o /usr/local/bin/yt-dlp
+            test -s /usr/local/bin/yt-dlp
+            chmod 755 /usr/local/bin/yt-dlp
             touch /root/.bootstrap_done
             echo "[*] Готово! Теперь можно использовать yt-dlp и python3."
         fi
