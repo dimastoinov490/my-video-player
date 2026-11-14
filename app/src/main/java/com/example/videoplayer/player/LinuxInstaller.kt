@@ -228,6 +228,7 @@ object LinuxInstaller {
     private fun unTar(inputStream: InputStream, outputDir: File) {
         val buffered = BufferedInputStream(inputStream)
         val rootCanonical = outputDir.canonicalFile
+        val rootPathWithSep = rootCanonical.path.let { if (it.endsWith(File.separator)) it else it + File.separator }
         val header = ByteArray(512)
         val copyBuffer = ByteArray(16 * 1024)
         var nextLongName: String? = null
@@ -286,7 +287,6 @@ object LinuxInstaller {
 
             val destFile = File(rootCanonical, entryName)
             val destCanonical = destFile.canonicalFile
-            val rootPathWithSep = rootCanonical.path.let { if (it.endsWith(File.separator)) it else it + File.separator }
             if (destCanonical.path != rootCanonical.path && !destCanonical.path.startsWith(rootPathWithSep)) {
                 skipDataBlock(buffered, entrySize)
                 continue
