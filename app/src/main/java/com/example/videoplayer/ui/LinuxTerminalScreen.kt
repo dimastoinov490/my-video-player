@@ -160,7 +160,7 @@ fun LinuxTerminalScreen(
                 // Also covers cancellation between process.start() and publishing it to Compose state.
                 sessionProcess?.let { process ->
                     try {
-                        if (process.isAlive) process.destroy()
+                        process.destroy()
                     } catch (_: Exception) {
                     }
                 }
