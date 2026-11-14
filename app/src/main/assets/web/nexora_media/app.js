@@ -2438,22 +2438,49 @@
   }
 
   /* ---------- сцена 1600x900 (16:9) + портретный поворот на 90° + свайп-прокрутка ---------- */
-  let rotated = false, curScale = 1, suppressClick = 0;
+  let rotated = false, curScale = 1, suppressClick = 0, fitFrame = 0;
+
+  // Use the actual WebView layout viewport, not innerWidth/innerHeight.
+  // The latter can be stale for a frame during Android orientation changes.
   function fit() {
-    const W = innerWidth, H = innerHeight, rot = H > W, dpr = devicePixelRatio || 1;
-    const vw = rot ? H : W, vh = rot ? W : H;
+    const root = document.documentElement;
+    const W = Math.max(1, root.clientWidth || window.innerWidth || 1);
+    const H = Math.max(1, root.clientHeight || window.innerHeight || 1);
+    const rot = H > W;
+    const dpr = window.devicePixelRatio || 1;
+    const vw = rot ? H : W;
+    const vh = rot ? W : H;
     const s = Math.min(vw / 1600, vh / 900);
+
     rotated = rot;
     curScale = s;
+
+    // Keep the fixed 16:9 scene proportional and center its rotated bounds.
+    // Positive 90deg maps the 1600x900 scene to a 900x1600 portrait canvas.
     const snap = (v) => Math.round(v * dpr) / dpr;
-    const r = document.documentElement.style;
-    r.setProperty('--s', s);
-    r.setProperty('--r', rot ? '90deg' : '0deg');
-    r.setProperty('--tx', snap(rot ? (W + 900 * s) / 2 : (W - 1600 * s) / 2) + 'px');
-    r.setProperty('--ty', snap(rot ? (H - 1600 * s) / 2 : (H - 900 * s) / 2) + 'px');
+    const style = root.style;
+    style.setProperty('--s', String(s));
+    style.setProperty('--r', rot ? '90deg' : '0deg');
+    style.setProperty('--tx', snap(rot ? (W + 900 * s) / 2 : (W - 1600 * s) / 2) + 'px');
+    style.setProperty('--ty', snap(rot ? (H - 1600 * s) / 2 : (H - 900 * s) / 2) + 'px');
   }
-  addEventListener('resize', fit);
-  addEventListener('orientationchange', () => setTimeout(fit, 120));
+
+  function scheduleFit() {
+    if (fitFrame) cancelAnimationFrame(fitFrame);
+    fitFrame = requestAnimationFrame(() => {
+      fitFrame = 0;
+      fit();
+    });
+  }
+
+  window.addEventListener('resize', scheduleFit, { passive: true });
+  window.addEventListener('orientationchange', () => {
+    // Android WebView may report the new orientation before its layout size
+    // has settled. Refit after the viewport has completed its transition.
+    scheduleFit();
+    setTimeout(scheduleFit, 180);
+    setTimeout(scheduleFit, 420);
+  }, { passive: true });
   fit();
 
   /* плавный свайп пальцем в повёрнутом на 90° макете */
