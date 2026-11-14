@@ -262,6 +262,7 @@ object ArchiveManager {
                     return@launch
                 }
                 val destCanonical = destinationDir.canonicalPath
+                val destCanonicalPrefix = destCanonical.trimEnd(File.separatorChar) + File.separator
                 var lastEmitTimeMs = 0L
                 var lastPercent = -1
 
@@ -343,7 +344,11 @@ object ArchiveManager {
 
                             currentEntryPath = relPath
                             val targetFile = File(destinationDir, relPath)
-                            if (!targetFile.canonicalPath.startsWith(destCanonical)) {
+                            val targetCanonical = targetFile.canonicalPath
+                            // Require a path-separator boundary: plain startsWith(destCanonical)
+                            // incorrectly accepts sibling paths such as /safe-outside when the
+                            // destination is /safe. canonicalPath also resolves existing symlinks.
+                            if (targetCanonical == destCanonical || !targetCanonical.startsWith(destCanonicalPrefix)) {
                                 throw SevenZipException("Небезопасный путь в архиве: $rawPath")
                             }
 
