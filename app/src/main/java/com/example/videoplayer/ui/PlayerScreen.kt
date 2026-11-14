@@ -278,6 +278,7 @@ fun PlayerScreen(
 
     var nativeVideoView by remember { mutableStateOf<VideoView?>(null) }
     var nativeMediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
+    var hasStartedVlcPlayback by remember(videoUri) { mutableStateOf(false) }
 
     BackHandler {
         onBack()
@@ -594,7 +595,12 @@ fun PlayerScreen(
                                 override fun surfaceCreated(holder: SurfaceHolder) {
                                     try {
                                         playerManager.attachSurface(this@apply)
-                                        playerManager.playUrl(videoUri)
+                                        // SurfaceView can be recreated on rotation or window changes.
+                                        // Reattach the existing VLC output without resetting the current media.
+                                        if (!hasStartedVlcPlayback) {
+                                            hasStartedVlcPlayback = true
+                                            playerManager.playUrl(videoUri)
+                                        }
                                     } catch (_: Throwable) {
                                         useNativeFallback = true
                                     }
