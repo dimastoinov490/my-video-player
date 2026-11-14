@@ -5,6 +5,8 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.media.MediaScannerConnection
 import android.media.MediaMetadataRetriever
+import android.media.MediaExtractor
+import android.media.MediaFormat
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -16,6 +18,13 @@ import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
+
+data class AudioTechnicalInfo(
+    val codec: String?,
+    val sampleRateHz: Int?,
+    val channelCount: Int?,
+    val bitrateBps: Int?
+)
 
 object MediaStoreHelper {
     private const val TAG = "MediaStoreHelper"
@@ -238,6 +247,41 @@ object MediaStoreHelper {
             }
         } catch (_: Throwable) {
             null
+        }
+    }
+
+    /**
+     * Reads the encoded audio track format exposed by Android's extractor.
+     * This is source metadata, not a guarantee that the device output path is bit-perfect.
+     */
+    fun getAudioTechnicalInfo(context: Context, uri: Uri): AudioTechnicalInfo? {
+        val extractor = MediaExtractor()
+        return try {
+            extractor.setDataSource(context, uri, null)
+            var selected: MediaFormat? = null
+            for (index in 0 until extractor.trackCount) {
+                val format = extractor.getTrackFormat(index)
+                val mime = runCatching { format.getString(MediaFormat.KEY_MIME) }.getOrNull()
+                if (mime?.startsWith("audio/") == true) {
+                    selected = format
+                    break
+                }
+            }
+            val format = selected ?: return null
+            fun intOrNull(key: String): Int? =
+                if (format.containsKey(key)) runCatching { format.getInteger(key) }.getOrNull() else null
+            val mime = runCatching { format.getString(MediaFormat.KEY_MIME) }.getOrNull()
+            AudioTechnicalInfo(
+                codec = mime?.removePrefix("audio/")?.uppercase(),
+                sampleRateHz = intOrNull(MediaFormat.KEY_SAMPLE_RATE),
+                channelCount = intOrNull(MediaFormat.KEY_CHANNEL_COUNT),
+                bitrateBps = intOrNull(MediaFormat.KEY_BIT_RATE)
+            )
+        } catch (e: Exception) {
+            Log.d(TAG, "Unable to read audio track format for $uri", e)
+            null
+        } finally {
+            runCatching { extractor.release() }
         }
     }
 
