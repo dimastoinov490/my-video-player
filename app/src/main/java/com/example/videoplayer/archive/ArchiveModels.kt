@@ -96,7 +96,7 @@ object ArchiveFileUtils {
     fun isArchiveFileName(name: String): Boolean {
         val lower = name.lowercase().trim()
         if (lower.endsWith(".tar.gz") || lower.endsWith(".tar.bz2") || lower.endsWith(".tar.xz")) return true
-        if (PART_RAR_REGEX.containsMatchIn(lower) || SPLIT_NUM_REGEX.containsMatchIn(lower)) return true
+        if (PART_RAR_REGEX.containsMatchIn(lower) || SPLIT_NUM_REGEX.containsMatchIn(lower) || OLD_RAR_VOL_REGEX.containsMatchIn(lower) || ZIP_VOL_REGEX.containsMatchIn(lower)) return true
         val ext = lower.substringAfterLast('.', "")
         return ext in ARCHIVE_EXTS
     }
