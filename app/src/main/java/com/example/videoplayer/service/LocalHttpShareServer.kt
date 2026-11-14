@@ -230,6 +230,7 @@ object LocalHttpShareServer {
         stop()
 
         loadDevicesIfNeeded(context)
+        com.example.videoplayer.player.LinuxInstaller.ensureWebFilesSeeded(context)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
             if (!requestedManageStorageOnce) {
@@ -3988,11 +3989,21 @@ object LocalHttpShareServer {
         }
 
         val rawHtml = try {
-            context.assets.open(indexAssetPath).bufferedReader(Charsets.UTF_8).use { it.readText() }
+            val overrideFile = File(context.filesDir, indexAssetPath)
+            if (overrideFile.isFile) {
+                overrideFile.readText(Charsets.UTF_8)
+            } else {
+                context.assets.open(indexAssetPath).bufferedReader(Charsets.UTF_8).use { it.readText() }
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed reading $indexAssetPath from assets", e)
+            Log.e(TAG, "Failed reading $indexAssetPath", e)
             try {
-                context.assets.open("web/index.html").bufferedReader(Charsets.UTF_8).use { it.readText() }
+                val fallbackOverride = File(context.filesDir, "web/index.html")
+                if (fallbackOverride.isFile) {
+                    fallbackOverride.readText(Charsets.UTF_8)
+                } else {
+                    context.assets.open("web/index.html").bufferedReader(Charsets.UTF_8).use { it.readText() }
+                }
             } catch (_: Exception) {
                 null
             }
@@ -4046,7 +4057,12 @@ object LocalHttpShareServer {
 
         val assetPath = "web/nexora_media/$relPath"
         val bytes = try {
-            context.assets.open(assetPath).use { it.readBytes() }
+            val overrideFile = File(context.filesDir, assetPath)
+            if (overrideFile.isFile) {
+                overrideFile.readBytes()
+            } else {
+                context.assets.open(assetPath).use { it.readBytes() }
+            }
         } catch (_: Exception) {
             return false
         }

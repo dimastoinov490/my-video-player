@@ -10,9 +10,17 @@
 :root{
   --bg:#020306;--line:rgba(255,255,255,.13);--orange:#ff7a00;--orange-hot:#fe7100;
   --text:#eceef2;--muted:#8a90a0;--dim:#6c7280;--red:#f48a92;
+  --app-width:100vw;--app-height:100vh;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:Roboto,"Segoe UI",system-ui,sans-serif;color:var(--text)}
+html{width:100%;height:100%;background:#000;overflow:hidden}
+body{
+  width:var(--app-width);height:var(--app-height);overflow-x:hidden;overflow-y:hidden;margin:0;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  box-sizing:border-box;background:#000;font-family:Roboto,"Segoe UI",system-ui,sans-serif;color:var(--text)
+}
+[data-orientation="portrait"] .main-grid{display:flex;flex-direction:column}
+[data-orientation="landscape"] .main-grid{display:flex;flex-direction:row}
 .app{container-type:size;width:100%;height:100%;max-width:520px;margin:0 auto;background:var(--bg)}
 .screen{--u:.09765625cqw;position:relative;width:100%;height:100%;overflow:hidden;
   background:radial-gradient(90% 25% at 25% 0%,#080a0d 0%,var(--bg) 100%)}
@@ -1866,6 +1874,31 @@ function openMoreItem(id){
   if (id === 'diagnostics') return openSub('diagnostics');
   if (hasB('onMoreItemClick')) callB('onMoreItemClick', id);     // url, browser
 }
+
+/* ---------- Dynamic Layout Metrics & Orientation ---------- */
+const updateLayoutMetrics = () => {
+  const root = document.documentElement;
+  root.style.setProperty('--app-width', window.innerWidth + 'px');
+  root.style.setProperty('--app-height', window.innerHeight + 'px');
+
+  let isLandscape = window.innerWidth > window.innerHeight;
+  if (typeof hasB === 'function' && hasB('getScreenMetrics')) {
+    try {
+      const m = JSON.parse(callB('getScreenMetrics') || '{}');
+      if (m.diagonalInches) root.style.setProperty('--app-diagonal', String(m.diagonalInches));
+      if (m.densityDpi) root.style.setProperty('--app-dpi', String(m.densityDpi));
+      if (typeof m.isLandscape === 'boolean' && window.innerWidth === window.innerHeight) {
+        isLandscape = m.isLandscape;
+      }
+    } catch(e) {}
+  }
+  root.setAttribute('data-orientation', isLandscape ? 'landscape' : 'portrait');
+  if (typeof scheduleNavSync === 'function') scheduleNavSync();
+};
+window.addEventListener('resize', updateLayoutMetrics);
+window.addEventListener('orientationchange', updateLayoutMetrics);
+window.addEventListener('DOMContentLoaded', updateLayoutMetrics);
+updateLayoutMetrics();
 
 /* Initial render */
 renderVideos();

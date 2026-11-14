@@ -44,6 +44,7 @@ import com.example.videoplayer.player.CpuMonitor
 import com.example.videoplayer.player.DeviceInfoHelper
 import com.example.videoplayer.player.DiagnosticManager
 import com.example.videoplayer.player.MemoryMonitor
+import com.example.videoplayer.player.ScreenMetricsHelper
 import com.example.videoplayer.player.VlcEngineConfigurator
 import com.example.videoplayer.service.HttpBroadcastFolder
 import com.example.videoplayer.service.HttpServerConfig
@@ -1212,6 +1213,18 @@ fun ExactHtmlVideoLibraryView(
                                 arr.toString()
                             } catch (e: Exception) {
                                 "[]"
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun getScreenMetrics(): String {
+                            return try {
+                                val params = ScreenMetricsHelper.getScreenParams(context)
+                                JSONObject().apply {
+                                    params.forEach { (k, v) -> put(k, v) }
+                                }.toString()
+                            } catch (e: Exception) {
+                                "{}"
                             }
                         }
 

@@ -96,6 +96,7 @@ fun LinuxTerminalScreen(
         coroutineScope.launch(Dispatchers.IO) {
             try {
                 val useProot = prootReady && LinuxInstaller.isInstalled(context)
+                LinuxInstaller.ensureAiEngineScript(context)
                 if (useProot) {
                     LinuxInstaller.ensureBootstrapScript(context)
                 }
@@ -171,6 +172,37 @@ fun LinuxTerminalScreen(
                 .background(Color(0xFF1E1E1E))
                 .padding(8.dp)
         ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ModelImportButton(
+                    context = context,
+                    onImportComplete = { linuxModelPath ->
+                        outputLines.add("[*] Модель импортирована в PRoot: $linuxModelPath")
+                        outputLines.add("[*] Конфиг обновлен: /app_data/config.json")
+                        outputLines.add("[*] Проверка: python3 /app_data/ai_engine.py")
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+                LightAiModelsCatalogButton(
+                    context = context,
+                    onModelReady = { linuxModelPath ->
+                        outputLines.add("[*] Подключена лёгкая модель: $linuxModelPath")
+                        outputLines.add("[*] Конфиг обновлен: /app_data/config.json")
+                        outputLines.add("[*] Запуск ИИ-сервера: python3 /app_data/ai_server.py")
+                    },
+                    onAiToggleChanged = { enabled ->
+                        outputLines.add(
+                            if (enabled) "[*] ИИ-ассистент вёрстки включён в config.json"
+                            else "[*] ИИ-ассистент вёрстки выключен в config.json"
+                        )
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+            }
             if (isLoading) {
                 Box(
                     modifier = Modifier

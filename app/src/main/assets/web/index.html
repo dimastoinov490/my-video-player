@@ -2172,5 +2172,44 @@ if(window.visualViewport) window.visualViewport.addEventListener('resize',fit,{p
 fit();
 go(location.hash.slice(1)||'home'); moveGlass(cur,true); lzObserve(document.body);
 </script>
+
+<!-- Плавающий блок управления ИИ в веб-интерфейсе -->
+<div id="ai-fixer-panel" style="position: fixed; bottom: 10px; right: 10px; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 8px; z-index: 9999; color: white;">
+    <input type="text" id="ai-prompt" placeholder="Опиши баг верстки..." style="width: 200px; padding: 5px;">
+    <button onclick="sendAIFix()" style="padding: 5px 10px; background: #6200ee; color: white; border: none; border-radius: 4px;">Исправить</button>
+    <div id="ai-status" style="font-size: 11px; margin-top: 4px; color: #aaa;"></div>
+</div>
+
+<script>
+async function sendAIFix() {
+    const prompt = document.getElementById('ai-prompt').value;
+    const statusDiv = document.getElementById('ai-status');
+    if (!prompt) return;
+
+    statusDiv.innerText = "ИИ думает и правит код...";
+
+    try {
+        // Отправляем задачу на локальный Python-сервер в телефоне
+        const response = await fetch('http://127.0.0.1:8080/api/fix-ui', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                file: 'index.html',
+                prompt: prompt
+            })
+        });
+
+        const result = await response.json();
+        if (response.ok && result.status === "success") {
+            statusDiv.innerText = "Готово! Перезагрузка...";
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            statusDiv.innerText = "Ошибка: " + (result.error || "Сервер недоступен");
+        }
+    } catch (e) {
+        statusDiv.innerText = "Ошибка соединения с ИИ сервером";
+    }
+}
+</script>
 </body>
 </html>

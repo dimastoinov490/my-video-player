@@ -40,6 +40,62 @@ object LinuxInstaller {
         return scriptFile
     }
 
+    fun ensureAiEngineScript(context: Context): File {
+        val rootDir = File(getRootFsDir(context), "root")
+        if (!rootDir.exists()) rootDir.mkdirs()
+
+        val webDir = File(context.filesDir, "web")
+        if (!webDir.exists()) webDir.mkdirs()
+
+        val engineContent = try {
+            context.assets.open("ai_engine.py").bufferedReader().use { it.readText() }
+        } catch (_: Exception) {
+            AI_ENGINE_FALLBACK
+        }
+        val appDataEngine = File(context.filesDir, "ai_engine.py")
+        appDataEngine.writeText(engineContent)
+        File(rootDir, "ai_engine.py").writeText(engineContent)
+
+        val serverContent = try {
+            context.assets.open("ai_server.py").bufferedReader().use { it.readText() }
+        } catch (_: Exception) {
+            AI_SERVER_FALLBACK
+        }
+        File(context.filesDir, "ai_server.py").writeText(serverContent)
+        File(rootDir, "ai_server.py").writeText(serverContent)
+
+        ensureWebFilesSeeded(context)
+
+        return appDataEngine
+    }
+
+    fun ensureWebFilesSeeded(context: Context) {
+        val webDir = File(context.filesDir, "web")
+        if (!webDir.exists()) webDir.mkdirs()
+
+        val webAssets = listOf(
+            "web/index.html",
+            "web/nexora_media/index.html",
+            "web/nexora_media/style.css",
+            "web/nexora_media/stage.css",
+            "web/nexora_media/app.js"
+        )
+        for (assetPath in webAssets) {
+            val target = File(context.filesDir, assetPath)
+            if (!target.exists()) {
+                try {
+                    target.parentFile?.mkdirs()
+                    context.assets.open(assetPath).use { input ->
+                        FileOutputStream(target).use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                } catch (_: Exception) {
+                }
+            }
+        }
+    }
+
     suspend fun installAlpine(context: Context, onProgress: (String) -> Unit) = withContext(Dispatchers.IO) {
         val rootFs = getRootFsDir(context)
         if (!rootFs.exists()) rootFs.mkdirs()
@@ -85,8 +141,9 @@ object LinuxInstaller {
             if (!etcDir.exists()) etcDir.mkdirs()
             File(etcDir, "resolv.conf").writeText("nameserver 8.8.8.8\nnameserver 1.1.1.1\n")
 
-            // Сохраняем скрипт первичной настройки Python3 и yt-dlp
+            // Сохраняем скрипт первичной настройки Python3 и yt-dlp, а также AI Engine скрипт
             ensureBootstrapScript(context)
+            ensureAiEngineScript(context)
 
             onProgress("Linux-окружение успешно установлено!")
         } finally {
@@ -343,5 +400,119 @@ object LinuxInstaller {
             touch /root/.bootstrap_done
             echo "[*] Готово! Теперь можно использовать yt-dlp и python3."
         fi
+    """.trimIndent() + "\n"
+
+    private val AI_ENGINE_FALLBACK = """
+        import json
+        import os
+        from llama_cpp import Llama
+
+        config_path = "/app_data/config.json"
+        context_size = 2048
+        n_threads = 4
+        if os.path.exists(config_path):
+            with open(config_path, "r") as f:
+                config = json.load(f)
+                model_path = config.get("active_model_path") or "/app_data/models/default.gguf"
+                context_size = int(config.get("context_size", 2048))
+                n_threads = int(config.get("n_threads", 4))
+        else:
+            model_path = "/app_data/models/default.gguf"
+
+        llm = Llama(
+            model_path=model_path,
+            n_ctx=context_size,
+            n_threads=n_threads,
+            verbose=False
+        )
+        print(f"[AI Engine] Успешно подключена модель из пути: {model_path}")
+    """.trimIndent() + "\n"
+
+    private val AI_SERVER_FALLBACK = """
+        import http.server
+        import json
+        import os
+        from llama_cpp import Llama
+
+        PORT = 8080
+        CONFIG_PATH = "/app_data/config.json"
+        WEB_ROOT = os.path.realpath("/app_data/web")
+        _llm_instance = None
+        _loaded_model_path = None
+
+        def get_ai_model():
+            global _llm_instance, _loaded_model_path
+            if not os.path.exists(CONFIG_PATH):
+                return None
+            with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+                config = json.load(f)
+                if not config.get("ai_assistant_enabled", False):
+                    return None
+                model_path = config.get("active_model_path", "/app_data/models/qwen1.5b.gguf")
+                context_size = int(config.get("context_size", 2048))
+                n_threads = int(config.get("n_threads", 4))
+            if _llm_instance is not None and _loaded_model_path == model_path:
+                return _llm_instance
+            if not model_path or not os.path.exists(model_path):
+                return None
+            _llm_instance = Llama(model_path=model_path, n_ctx=context_size, n_threads=n_threads, verbose=False)
+            _loaded_model_path = model_path
+            return _llm_instance
+
+        class AIHandler(http.server.BaseHTTPRequestHandler):
+            def _send_cors_headers(self):
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+                self.send_header("Access-Control-Allow-Headers", "Content-Type")
+
+            def _send_json(self, status_code, payload):
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                self.send_response(status_code)
+                self._send_cors_headers()
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def do_OPTIONS(self):
+                self.send_response(204)
+                self._send_cors_headers()
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+
+            def do_POST(self):
+                if self.path != "/api/fix-ui":
+                    self._send_json(404, {"error": "Endpoint not found"})
+                    return
+                content_length = int(self.headers.get("Content-Length", "0"))
+                post_data = json.loads(self.rfile.read(content_length).decode("utf-8"))
+                file_rel_path = str(post_data.get("file", "index.html")).lstrip("/\\")
+                user_instruction = str(post_data.get("prompt", ""))
+                full_file_path = os.path.realpath(os.path.join(WEB_ROOT, file_rel_path))
+                if full_file_path != WEB_ROOT and not full_file_path.startswith(WEB_ROOT + os.sep):
+                    self._send_json(403, {"error": "Access outside /app_data/web is forbidden"})
+                    return
+                if not os.path.exists(full_file_path):
+                    self._send_json(404, {"error": "File not found"})
+                    return
+                llm = get_ai_model()
+                if not llm:
+                    self._send_json(403, {"error": "AI Assistant is disabled in settings or model missing"})
+                    return
+                with open(full_file_path, "r", encoding="utf-8") as f:
+                    source_code = f.read()
+                prompt = f"System: Ты эксперт по веб-верстке. Исправь код по инструкции пользователя. Верни ТОЛЬКО готовый исправленный код файла.\n\nИнструкция: {user_instruction}\n\nИсходный код:\n{source_code}\n\nИсправленный код:"
+                response = llm(prompt, max_tokens=1500, temperature=0.1)
+                fixed_code = response["choices"][0]["text"].strip()
+                if fixed_code:
+                    with open(full_file_path, "w", encoding="utf-8") as f:
+                        f.write(fixed_code)
+                self._send_json(200, {"status": "success", "message": "File updated"})
+
+        if __name__ == "__main__":
+            os.makedirs(WEB_ROOT, exist_ok=True)
+            server = http.server.HTTPServer(("127.0.0.1", PORT), AIHandler)
+            print(f"[AI Server] Запущен на порту {PORT}")
+            server.serve_forever()
     """.trimIndent() + "\n"
 }
