@@ -85,7 +85,6 @@ import java.util.concurrent.atomic.AtomicReference
 fun ExactHtmlVideoLibraryView(
     videos: List<VideoItem>,
     onVideoSelected: (String) -> Unit,
-    onAudioSelected: (String) -> Unit = {},
     onNavTab: (tabName: String, index: Int) -> Unit,
     onOpenSearch: () -> Unit,
     onOpenHistory: () -> Unit,
@@ -122,7 +121,6 @@ fun ExactHtmlVideoLibraryView(
     }
 
     val latestAudioController by rememberUpdatedState(audioController)
-    val latestAudioSelected by rememberUpdatedState(onAudioSelected)
     val latestRefresh by rememberUpdatedState(onRefreshVideos)
     val latestVideos by rememberUpdatedState(videos)
     val latestOpenArchive by rememberUpdatedState(onOpenArchive)
@@ -518,7 +516,6 @@ fun ExactHtmlVideoLibraryView(
                                 )
                                 controller.prepare()
                                 controller.play()
-                                latestAudioSelected(uri)
                             }
                         }
 
