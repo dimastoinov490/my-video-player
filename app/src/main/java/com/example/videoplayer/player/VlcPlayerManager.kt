@@ -203,10 +203,10 @@ class VlcPlayerManager(private val context: Context) {
                 } else {
                     Media(vlc, uri)
                 }
-            } else if (urlOrUri.startsWith("http://") || urlOrUri.startsWith("https://") || urlOrUri.startsWith("rtsp://") || urlOrUri.startsWith("ftp://") || urlOrUri.startsWith("file://")) {
-                Media(vlc, Uri.parse(urlOrUri))
+            } else if (targetUrl.startsWith("http://") || targetUrl.startsWith("https://") || targetUrl.startsWith("rtsp://") || targetUrl.startsWith("ftp://") || targetUrl.startsWith("file://")) {
+                Media(vlc, Uri.parse(targetUrl))
             } else {
-                Media(vlc, urlOrUri)
+                Media(vlc, targetUrl)
             }
 
             // Let VLC select the available hardware/software decoder.
