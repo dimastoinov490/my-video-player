@@ -649,16 +649,16 @@ object ArchiveManager {
         val name = selectedFile.name
         val parent = selectedFile.parentFile ?: File(".")
         val candidates = when {
-            Regex("""^(.*)\\.r\\d{2}$""", RegexOption.IGNORE_CASE).matches(name) -> {
-                val base = name.replace(Regex("""\\.r\\d{2}$""", RegexOption.IGNORE_CASE), "")
+            Regex("""^(.*)\.r\d{2}$""", RegexOption.IGNORE_CASE).matches(name) -> {
+                val base = name.replace(Regex("""\.r\d{2}$""", RegexOption.IGNORE_CASE), "")
                 listOf(File(parent, "$base.rar"))
             }
-            Regex("""^(.*)\\.z\\d{2}$""", RegexOption.IGNORE_CASE).matches(name) -> {
-                val base = name.replace(Regex("""\\.z\\d{2}$""", RegexOption.IGNORE_CASE), "")
+            Regex("""^(.*)\.z\d{2}$""", RegexOption.IGNORE_CASE).matches(name) -> {
+                val base = name.replace(Regex("""\.z\d{2}$""", RegexOption.IGNORE_CASE), "")
                 listOf(File(parent, "$base.zip"))
             }
-            Regex("""^(.*)\\.part\\d+\\.rar$""", RegexOption.IGNORE_CASE).matches(name) -> {
-                val match = Regex("""^(.*)\\.part(\\d+)\\.rar$""", RegexOption.IGNORE_CASE).matchEntire(name)!!
+            Regex("""^(.*)\.part\d+\.rar$""", RegexOption.IGNORE_CASE).matches(name) -> {
+                val match = Regex("""^(.*)\.part(\d+)\.rar$""", RegexOption.IGNORE_CASE).matchEntire(name)!!
                 val base = match.groupValues[1]
                 val width = match.groupValues[2].length
                 listOf(
@@ -666,8 +666,8 @@ object ArchiveManager {
                     File(parent, "$base.part1.rar")
                 ).distinct()
             }
-            Regex("""^(.*)\\.(\\d{3})$""").matches(name) -> {
-                val match = Regex("""^(.*)\\.(\\d{3})$""").matchEntire(name)!!
+            Regex("""^(.*)\.(\d{3})$""").matches(name) -> {
+                val match = Regex("""^(.*)\.(\d{3})$""").matchEntire(name)!!
                 listOf(File(parent, "${match.groupValues[1]}.001"))
             }
             else -> emptyList()
