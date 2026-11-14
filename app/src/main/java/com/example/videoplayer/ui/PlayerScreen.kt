@@ -208,7 +208,7 @@ fun PlayerScreen(
 ) {
     val context = LocalContext.current
     val config = ThemeConfigManager.currentConfig
-    val resolvedTitle = remember(videoUri) { resolveVideoTitle(context, videoUri) }
+    var resolvedTitle by remember(videoUri) { mutableStateOf("Видео") }
     val progressPrefs = remember { context.getSharedPreferences("playback_progress", Context.MODE_PRIVATE) }
     val progressKey = remember(videoUri) { playbackProgressKey(videoUri) }
     var savedResumePositionMs by remember(videoUri) { mutableLongStateOf(progressPrefs.getLong(progressKey, 0L)) }
@@ -240,6 +240,14 @@ fun PlayerScreen(
     var scaleMode by remember { mutableStateOf(VideoScaleMode.FIT) }
     var repeatMode by remember { mutableStateOf(VideoRepeatMode.OFF) }
     var infoFeedbackText by remember { mutableStateOf<String?>(null) }
+
+    // ContentResolver queries and the fallback media scan can block; resolve the
+    // title off the main thread so opening a video never stalls the player UI.
+    LaunchedEffect(videoUri) {
+        resolvedTitle = withContext(Dispatchers.IO) {
+            resolveVideoTitle(context, videoUri)
+        }
+    }
 
     val activity = context as? Activity
     val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
