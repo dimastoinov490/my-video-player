@@ -207,9 +207,17 @@ fun ExactHtmlVideoLibraryView(
 
     fun sendAudiosToWeb(webView: WebView) {
         coroutineScope.launch {
-            val audios = withContext(Dispatchers.IO) {
-                MediaStoreHelper.getAudios(context)
+            val audioData = withContext(Dispatchers.IO) {
+                val items = MediaStoreHelper.getAudios(context)
+                // Technical probing is bounded so a large library does not trigger hundreds
+                // of extractor instances during initial WebView synchronization.
+                val technical = items.take(100).associate { item ->
+                    item.uri.toString() to MediaStoreHelper.getAudioTechnicalInfo(context, item.uri)
+                }
+                items to technical
             }
+            val audios = audioData.first
+            val technicalByUri = audioData.second
             val jsonArray = JSONArray()
             for (a in audios) {
                 val obj = JSONObject()
@@ -221,6 +229,18 @@ fun ExactHtmlVideoLibraryView(
                 val durStr = String.format(Locale.US, "%02d:%02d", m, s)
                 val sizeMb = String.format(Locale.US, "%.1f MB", a.size / (1024.0 * 1024.0))
                 obj.put("meta", "$durStr • $sizeMb")
+                val technical = technicalByUri[a.uri.toString()]
+                val technicalParts = buildList {
+                    technical?.sampleRateHz?.takeIf { it > 0 }?.let {
+                        add(String.format(Locale.US, "%.1f kHz", it / 1000.0))
+                    }
+                    technical?.channelCount?.takeIf { it > 0 }?.let { add("$it ch") }
+                    technical?.bitrateBps?.takeIf { it > 0 }?.let {
+                        add(String.format(Locale.US, "%.0f kbps", it / 1000.0))
+                    }
+                    technical?.codec?.takeIf { it.isNotBlank() }?.let { add(it) }
+                }
+                obj.put("technical", technicalParts.joinToString(" • "))
                 obj.put("uri", a.uri.toString())
                 jsonArray.put(obj)
             }
