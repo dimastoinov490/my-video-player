@@ -44,6 +44,11 @@ fun LinuxTerminalScreen(
     val listState = rememberLazyListState()
 
     val outputLines = remember { mutableStateListOf<String>() }
+    fun appendOutputLine(line: String) {
+        // Keep terminal history bounded so long-running sessions cannot grow UI memory indefinitely.
+        if (outputLines.size >= 1000) outputLines.removeAt(0)
+        appendOutputLine(line)
+    }
     var inputText by remember { mutableStateOf("") }
     var processWriter by remember { mutableStateOf<PrintWriter?>(null) }
     var activeProcess by remember { mutableStateOf<Process?>(null) }
@@ -69,9 +74,9 @@ fun LinuxTerminalScreen(
     LaunchedEffect(Unit) {
         val prootReady = TermuxEngine.isProotAvailable(context)
         if (!prootReady) {
-            outputLines.add("Linux PRoot runtime is not installed in this APK.")
-            outputLines.add("Нужны PRoot, loader, libtalloc и libandroid-shmem для ABI устройства.")
-            outputLines.add("Системная оболочка Android вместо Alpine не запускается.")
+            appendOutputLine("Linux PRoot runtime is not installed in this APK.")
+            appendOutputLine("Нужны PRoot, loader, libtalloc и libandroid-shmem для ABI устройства.")
+            appendOutputLine("Системная оболочка Android вместо Alpine не запускается.")
             statusText = "Не найден комплект Linux runtime"
             isLoading = false
             return@LaunchedEffect
@@ -85,20 +90,20 @@ fun LinuxTerminalScreen(
                     }
                 }
             } catch (e: Exception) {
-                outputLines.add("Ошибка установки Alpine rootfs: ${e.localizedMessage ?: "нет сети"}")
+                appendOutputLine("Ошибка установки Alpine rootfs: ${e.localizedMessage ?: "нет сети"}")
             }
         }
 
         statusText = "Запуск сессии..."
         if (LinuxInstaller.isInstalled(context)) {
-            outputLines.add("Welcome to Alpine Linux (Termux-style PRoot)")
-            outputLines.add("PRoot virtual root is enabled (-0); Android system root is not granted.")
+            appendOutputLine("Welcome to Alpine Linux (Termux-style PRoot)")
+            appendOutputLine("PRoot virtual root is enabled (-0); Android system root is not granted.")
         } else {
-            outputLines.add("Alpine rootfs не установлен. Установка не завершилась.")
+            appendOutputLine("Alpine rootfs не установлен. Установка не завершилась.")
             isLoading = false
             return@LaunchedEffect
         }
-        outputLines.add("--------------------------------------------------")
+        appendOutputLine("--------------------------------------------------")
 
         coroutineScope.launch(Dispatchers.IO) {
             try {
@@ -124,7 +129,7 @@ fun LinuxTerminalScreen(
                 while (line != null) {
                     val currentLine = line
                     withContext(Dispatchers.Main) {
-                        outputLines.add(currentLine)
+                        appendOutputLine(currentLine)
                         if (outputLines.isNotEmpty()) {
                             listState.animateScrollToItem(outputLines.size - 1)
                         }
@@ -133,7 +138,7 @@ fun LinuxTerminalScreen(
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    outputLines.add("Ошибка терминала: ${e.localizedMessage}")
+                    appendOutputLine("Ошибка терминала: ${e.localizedMessage}")
                     isLoading = false
                 }
             }
@@ -178,21 +183,21 @@ fun LinuxTerminalScreen(
                 ModelImportButton(
                     context = context,
                     onImportComplete = { linuxModelPath ->
-                        outputLines.add("[*] Модель импортирована в PRoot: $linuxModelPath")
-                        outputLines.add("[*] Конфиг обновлен: /app_data/config.json")
-                        outputLines.add("[*] Проверка: python3 /app_data/ai_engine.py")
+                        appendOutputLine("[*] Модель импортирована в PRoot: $linuxModelPath")
+                        appendOutputLine("[*] Конфиг обновлен: /app_data/config.json")
+                        appendOutputLine("[*] Проверка: python3 /app_data/ai_engine.py")
                     },
                     modifier = Modifier.weight(1f)
                 )
                 LightAiModelsCatalogButton(
                     context = context,
                     onModelReady = { linuxModelPath ->
-                        outputLines.add("[*] Подключена лёгкая модель: $linuxModelPath")
-                        outputLines.add("[*] Конфиг обновлен: /app_data/config.json")
-                        outputLines.add("[*] Запуск ИИ-сервера: python3 /app_data/ai_server.py")
+                        appendOutputLine("[*] Подключена лёгкая модель: $linuxModelPath")
+                        appendOutputLine("[*] Конфиг обновлен: /app_data/config.json")
+                        appendOutputLine("[*] Запуск ИИ-сервера: python3 /app_data/ai_server.py")
                     },
                     onAiToggleChanged = { enabled ->
-                        outputLines.add(
+                        appendOutputLine(
                             if (enabled) "[*] ИИ-ассистент вёрстки включён в config.json"
                             else "[*] ИИ-ассистент вёрстки выключен в config.json"
                         )
@@ -262,7 +267,7 @@ fun LinuxTerminalScreen(
                         val cmd = inputText
                         val writer = processWriter
                         if (cmd.isNotBlank() && writer != null) {
-                            outputLines.add("# $cmd")
+                            appendOutputLine("# $cmd")
                             inputText = ""
                             coroutineScope.launch(Dispatchers.IO) {
                                 writer.println(cmd)
