@@ -99,7 +99,6 @@ fun LinuxTerminalScreen(
             return@LaunchedEffect
         }
         outputLines.add("--------------------------------------------------")
-        isLoading = false
 
         coroutineScope.launch(Dispatchers.IO) {
             try {
@@ -110,6 +109,7 @@ fun LinuxTerminalScreen(
                 withContext(Dispatchers.Main) {
                     activeProcess = process
                     processWriter = writer
+                    isLoading = false
                 }
                 if (!LinuxInstaller.isBootstrapDone(context)) {
                     coroutineScope.launch(Dispatchers.IO) {
@@ -134,6 +134,7 @@ fun LinuxTerminalScreen(
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
                     outputLines.add("Ошибка терминала: ${e.localizedMessage}")
+                    isLoading = false
                 }
             }
         }
