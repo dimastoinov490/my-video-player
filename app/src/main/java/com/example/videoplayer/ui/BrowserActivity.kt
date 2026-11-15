@@ -3,6 +3,7 @@ package com.example.videoplayer.ui
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.ActivityManager
+import android.app.AlertDialog
 import android.app.DownloadManager
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -41,8 +42,17 @@ import com.example.videoplayer.R
 import com.example.videoplayer.service.CertificateManager
 import java.net.URLEncoder
 import java.security.MessageDigest
+import org.json.JSONArray
+import org.json.JSONObject
 
 class BrowserActivity : FragmentActivity() {
+
+    private data class BrowserTab(val id: Int, val view: WebView, var url: String, var title: String)
+    private val browserTabs = mutableListOf<BrowserTab>()
+    private var nextTabId = 1
+    private var mobileUserAgent: String? = null
+    private lateinit var webViewHost: FrameLayout
+    private val browserPrefs by lazy { getSharedPreferences("nexora_browser", MODE_PRIVATE) }
 
     private lateinit var rootContainer: FrameLayout
     private lateinit var mainContent: LinearLayout
@@ -75,17 +85,21 @@ class BrowserActivity : FragmentActivity() {
         }
     }
 
-    private val audioPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        val req = pendingPermissionRequest
+    private val webMediaPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { grants ->
+        val request = pendingPermissionRequest
         pendingPermissionRequest = null
-        if (req != null) {
-            if (isGranted) {
-                req.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
-            } else {
-                req.deny()
+        if (request != null) {
+            val grantedResources = request.resources.filter { resource ->
+                when (resource) {
+                    PermissionRequest.RESOURCE_AUDIO_CAPTURE -> grants[Manifest.permission.RECORD_AUDIO] == true
+                    PermissionRequest.RESOURCE_VIDEO_CAPTURE -> grants[Manifest.permission.CAMERA] == true
+                    else -> false
+                }
             }
+            if (grantedResources.isNotEmpty()) request.grant(grantedResources.toTypedArray())
+            else request.deny()
         }
     }
 
@@ -151,8 +165,9 @@ class BrowserActivity : FragmentActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#1F1A17"))
+                setColor(Color.parseColor("#211A16"))
                 cornerRadius = 24 * density
+                setStroke((1 * density).toInt(), Color.parseColor("#493426"))
             }
             val padH = (14 * density).toInt()
             setPadding(padH, 0, padH, 0)
@@ -237,17 +252,14 @@ class BrowserActivity : FragmentActivity() {
         }
         mainContent.addView(progressBar)
 
-        // WebView
-        webView = WebView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                0,
-                1f
-            )
+        webViewHost = FrameLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
             setBackgroundColor(Color.parseColor("#120A05"))
         }
-        setupWebView()
-        mainContent.addView(webView)
+        webView = createBrowserWebView()
+        browserTabs.add(BrowserTab(nextTabId++, webView, "", "Новая вкладка"))
+        webViewHost.addView(webView)
+        mainContent.addView(webViewHost)
 
         rootContainer.addView(mainContent)
 
@@ -277,12 +289,18 @@ class BrowserActivity : FragmentActivity() {
                     updateUrlDisplay(currentUrl)
                 } else if (webView.canGoBack()) {
                     webView.goBack()
+                } else if (browserTabs.size > 1) {
+                    closeCurrentTab()
+                } else {
+                    finish()
                 }
             }
         })
 
         // Initial URL loading
-        val initialUrl = intent.getStringExtra("url") ?: "https://www.google.com"
+        val initialUrl = intent.getStringExtra("url")
+            ?: browserPrefs.getString("home_page", "https://www.google.com")
+            ?: "https://www.google.com"
         loadAddress(initialUrl)
     }
 
@@ -334,11 +352,11 @@ class BrowserActivity : FragmentActivity() {
                 "https://$trimmed"
             }
             else -> {
-                "https://www.google.com/search?q=" + try {
+                val searchBase = browserPrefs.getString("search_engine", "https://www.google.com/search?q=")
+                    ?: "https://www.google.com/search?q="
+                searchBase + try {
                     URLEncoder.encode(trimmed, "UTF-8")
-                } catch (_: Exception) {
-                    trimmed
-                }
+                } catch (_: Exception) { trimmed }
             }
         }
         webView.loadUrl(urlToLoad)
@@ -433,15 +451,28 @@ class BrowserActivity : FragmentActivity() {
     }
 
     @SuppressLint("SetJavaScriptEnabled")
-    private fun setupWebView() {
-        configureFullChromiumSettings(webView)
-        webView.settings.userAgentString = webView.settings.userAgentString.replace("; wv", "")
+    private fun createBrowserWebView(): WebView {
+        val view = WebView(this).apply {
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+            setBackgroundColor(Color.parseColor("#120A05"))
+        }
+        setupWebView(view)
+        return view
+    }
 
-        setupDownloadListener(this, webView)
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun setupWebView(target: WebView) {
+        configureFullChromiumSettings(target)
+        target.settings.userAgentString = target.settings.userAgentString.replace("; wv", "")
+        if (mobileUserAgent == null) mobileUserAgent = target.settings.userAgentString
+        applyBrowserPreferences(target)
+        setupDownloadListener(this, target)
 
-        webView.webViewClient = object : WebViewClient() {
+        target.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 super.onPageStarted(view, url, favicon)
+                if (target !== webView) return
+                url?.let { address -> browserTabs.firstOrNull { it.view === target }?.url = address }
                 isLoading = true
                 progressBar.visibility = View.VISIBLE
                 progressBar.progress = 5
@@ -453,11 +484,18 @@ class BrowserActivity : FragmentActivity() {
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
+                if (url != null) {
+                    val tab = browserTabs.firstOrNull { it.view === target }
+                    if (tab != null) {
+                        tab.url = url
+                        tab.title = view?.title?.takeIf { it.isNotBlank() } ?: tab.title
+                        addHistoryEntry(url, tab.title)
+                    }
+                }
+                if (target !== webView) return
                 isLoading = false
                 progressBar.visibility = View.GONE
-                if (url != null) {
-                    updateUrlDisplay(url)
-                }
+                if (url != null) updateUrlDisplay(url)
                 updateActionButtons()
             }
 
@@ -485,9 +523,10 @@ class BrowserActivity : FragmentActivity() {
             }
         }
 
-        webView.webChromeClient = object : WebChromeClient() {
+        target.webChromeClient = object : WebChromeClient() {
             override fun onProgressChanged(view: WebView?, newProgress: Int) {
                 super.onProgressChanged(view, newProgress)
+                if (target !== webView) return
                 progressBar.progress = newProgress
                 if (newProgress >= 100) {
                     progressBar.visibility = View.GONE
@@ -501,13 +540,28 @@ class BrowserActivity : FragmentActivity() {
             override fun onReceivedTitle(view: WebView?, title: String?) {
                 super.onReceivedTitle(view, title)
                 if (!title.isNullOrBlank()) {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    browserTabs.firstOrNull { it.view === target }?.title = title
+                    if (target === webView && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                         setTaskDescription(ActivityManager.TaskDescription(title))
                     }
                 }
             }
 
+            override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message?): Boolean {
+                if (!isUserGesture || !browserPrefs.getBoolean("popups", false)) return false
+                val message = resultMsg ?: return false
+                val popupWebView = createBrowserWebView()
+                val tab = BrowserTab(nextTabId++, popupWebView, "", "Новая вкладка")
+                browserTabs.add(tab)
+                switchToTab(tab)
+                val transport = message.obj as? WebView.WebViewTransport ?: return false
+                transport.webView = popupWebView
+                message.sendToTarget()
+                return true
+            }
+
             override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
+                if (target !== webView) return
                 if (customView != null) {
                     onHideCustomView()
                     return
@@ -534,7 +588,7 @@ class BrowserActivity : FragmentActivity() {
             }
 
             override fun onHideCustomView() {
-                hideCustomView()
+                if (target === webView) hideCustomView()
             }
 
             override fun onShowFileChooser(
@@ -559,11 +613,17 @@ class BrowserActivity : FragmentActivity() {
 
             override fun onPermissionRequest(request: PermissionRequest?) {
                 if (request == null) return
-                if (request.resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
-                    pendingPermissionRequest = request
-                    audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                } else {
+                val requested = request.resources
+                val permissions = buildList {
+                    if (PermissionRequest.RESOURCE_AUDIO_CAPTURE in requested) add(Manifest.permission.RECORD_AUDIO)
+                    if (PermissionRequest.RESOURCE_VIDEO_CAPTURE in requested) add(Manifest.permission.CAMERA)
+                }
+                if (permissions.isEmpty()) {
                     request.deny()
+                } else {
+                    pendingPermissionRequest?.deny()
+                    pendingPermissionRequest = request
+                    webMediaPermissionLauncher.launch(permissions.toTypedArray())
                 }
             }
         }
@@ -598,18 +658,27 @@ class BrowserActivity : FragmentActivity() {
             )
         }
 
+        val menuScroll = ScrollView(this).apply { addView(popupView) }
         val popupWindow = PopupWindow(
-            popupView,
+            menuScroll,
             (240 * density).toInt(),
-            ViewGroup.LayoutParams.WRAP_CONTENT,
+            (resources.displayMetrics.heightPixels * 0.72f).toInt(),
             true
         ).apply {
             elevation = 16 * density
             setBackgroundDrawable(null)
         }
 
-        val canForward = webView.canGoForward()
-        addMenuItem(popupView, "Вперёд", enabled = canForward) {
+        addMenuItem(popupView, "Новая вкладка") { popupWindow.dismiss(); createNewTab() }
+        addMenuItem(popupView, "Вкладки (${browserTabs.size})") { popupWindow.dismiss(); showTabsDialog() }
+        addMenuItem(popupView, "История") { popupWindow.dismiss(); showHistoryDialog() }
+        addMenuItem(popupView, "Загрузки") { popupWindow.dismiss(); openDownloads() }
+        addMenuItem(popupView, "Закладки") { popupWindow.dismiss(); showBookmarksDialog() }
+        addMenuItem(popupView, "Добавить закладку") { popupWindow.dismiss(); addCurrentBookmark() }
+        addMenuItem(popupView, "Настройки") { popupWindow.dismiss(); showBrowserSettings() }
+        addMenuItem(popupView, "Поисковая система") { popupWindow.dismiss(); showSearchEngineDialog() }
+        addMenuItem(popupView, "Главная страница") { popupWindow.dismiss(); showHomePageDialog() }
+        addMenuItem(popupView, "Вперёд", enabled = webView.canGoForward()) {
             popupWindow.dismiss()
             if (webView.canGoForward()) webView.goForward()
         }
@@ -651,12 +720,179 @@ class BrowserActivity : FragmentActivity() {
                 }
             }
         }
-        addMenuItem(popupView, "Выйти") {
-            popupWindow.dismiss()
-            finish()
-        }
+        addMenuItem(popupView, "Закрыть вкладку") { popupWindow.dismiss(); closeCurrentTab() }
+        addMenuItem(popupView, "Выйти") { popupWindow.dismiss(); finish() }
 
         popupWindow.showAsDropDown(anchor, (-180 * density).toInt(), 0)
+    }
+
+    private fun createNewTab(initialUrl: String = "") {
+        val view = createBrowserWebView()
+        val tab = BrowserTab(nextTabId++, view, "", "Новая вкладка")
+        browserTabs.add(tab)
+        switchToTab(tab)
+        if (initialUrl.isNotBlank()) loadAddress(initialUrl) else {
+            etUrl.setText("")
+            etUrl.requestFocus()
+            ivStatus.setImageResource(R.drawable.ic_browser_search)
+            (getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)?.showSoftInput(etUrl, InputMethodManager.SHOW_IMPLICIT)
+        }
+    }
+
+    private fun switchToTab(tab: BrowserTab) {
+        if (customView != null) hideCustomView()
+        webViewHost.removeAllViews()
+        webView = tab.view
+        webViewHost.addView(webView)
+        currentUrl = tab.url
+        isLoading = false
+        updateUrlDisplay(tab.url)
+        updateActionButtons()
+    }
+
+    private fun closeCurrentTab() {
+        val index = browserTabs.indexOfFirst { it.view === webView }
+        if (index < 0) return
+        val removed = browserTabs.removeAt(index)
+        try { removed.view.stopLoading(); removed.view.destroy() } catch (_: Exception) {}
+        if (browserTabs.isEmpty()) createNewTab(browserPrefs.getString("home_page", "https://www.google.com") ?: "https://www.google.com")
+        else switchToTab(browserTabs[(index - 1).coerceAtLeast(0)])
+    }
+
+    private fun showTabsDialog() {
+        if (browserTabs.isEmpty()) return
+        val labels = browserTabs.mapIndexed { index, tab -> (index + 1).toString() + ". " + tab.title.ifBlank { "Новая вкладка" } + "\n" + tab.url.ifBlank { "Пустая вкладка" } }.toTypedArray()
+        AlertDialog.Builder(this).setTitle("Вкладки — " + browserTabs.size)
+            .setItems(labels) { _, which -> switchToTab(browserTabs[which]) }
+            .setPositiveButton("Новая вкладка") { _, _ -> createNewTab() }
+            .setNegativeButton("Закрыть", null).show()
+    }
+
+    private fun addHistoryEntry(url: String, title: String) {
+        if (!url.startsWith("http://") && !url.startsWith("https://")) return
+        val history = try { JSONArray(browserPrefs.getString("history", "[]")) } catch (_: Exception) { JSONArray() }
+        val updated = JSONArray()
+        updated.put(JSONObject().put("url", url).put("title", title).put("time", System.currentTimeMillis()))
+        for (i in 0 until history.length()) {
+            val item = history.optJSONObject(i) ?: continue
+            if (item.optString("url") != url && updated.length() < 100) updated.put(item)
+        }
+        browserPrefs.edit().putString("history", updated.toString()).apply()
+    }
+
+    private fun showHistoryDialog() {
+        val history = try { JSONArray(browserPrefs.getString("history", "[]")) } catch (_: Exception) { JSONArray() }
+        val urls = mutableListOf<String>()
+        val labels = mutableListOf<String>()
+        for (i in 0 until history.length()) {
+            val item = history.optJSONObject(i) ?: continue
+            val url = item.optString("url")
+            if (url.isBlank()) continue
+            urls.add(url)
+            labels.add(item.optString("title").ifBlank { url } + "\n" + url)
+        }
+        AlertDialog.Builder(this).setTitle("История")
+            .setItems(labels.toTypedArray()) { _, which -> loadAddress(urls[which]) }
+            .setNeutralButton("Очистить") { _, _ -> browserPrefs.edit().remove("history").apply(); Toast.makeText(this, "История очищена", Toast.LENGTH_SHORT).show() }
+            .setNegativeButton("Закрыть", null).show()
+    }
+
+    private fun addCurrentBookmark() {
+        val url = webView.url ?: currentUrl
+        if (url.isBlank()) return
+        val bookmarks = browserPrefs.getStringSet("bookmarks", emptySet())?.toMutableSet() ?: mutableSetOf()
+        bookmarks.add(url)
+        browserPrefs.edit().putStringSet("bookmarks", bookmarks).apply()
+        Toast.makeText(this, "Страница добавлена в закладки", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun showBookmarksDialog() {
+        val bookmarks = browserPrefs.getStringSet("bookmarks", emptySet())?.toList().orEmpty()
+        AlertDialog.Builder(this).setTitle("Закладки")
+            .setItems(bookmarks.toTypedArray()) { _, which -> loadAddress(bookmarks[which]) }
+            .setNeutralButton("Очистить") { _, _ -> browserPrefs.edit().remove("bookmarks").apply() }
+            .setNegativeButton("Закрыть", null).show()
+    }
+
+    private fun openDownloads() {
+        try { startActivity(Intent(DownloadManager.ACTION_VIEW_DOWNLOADS)) }
+        catch (_: Exception) { Toast.makeText(this, "Не удалось открыть загрузки Android", Toast.LENGTH_SHORT).show() }
+    }
+
+    private fun applyBrowserPreferences(target: WebView) {
+        target.settings.javaScriptEnabled = browserPrefs.getBoolean("javascript", true)
+        target.settings.domStorageEnabled = true
+        target.settings.loadsImagesAutomatically = browserPrefs.getBoolean("images", true)
+        target.settings.blockNetworkImage = !browserPrefs.getBoolean("images", true)
+        target.settings.javaScriptCanOpenWindowsAutomatically = browserPrefs.getBoolean("popups", false)
+        CookieManager.getInstance().setAcceptCookie(browserPrefs.getBoolean("cookies", true))
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) CookieManager.getInstance().setAcceptThirdPartyCookies(target, browserPrefs.getBoolean("third_party_cookies", true))
+        target.settings.userAgentString = if (browserPrefs.getBoolean("desktop_site", false)) {
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        } else {
+            mobileUserAgent ?: target.settings.userAgentString
+        }
+    }
+
+    private fun showSearchEngineDialog() {
+        val engines = arrayOf("Google", "Bing", "DuckDuckGo", "Brave Search")
+        val urls = arrayOf(
+            "https://www.google.com/search?q=",
+            "https://www.bing.com/search?q=",
+            "https://duckduckgo.com/?q=",
+            "https://search.brave.com/search?q="
+        )
+        val current = browserPrefs.getString("search_engine", urls[0]) ?: urls[0]
+        val selected = urls.indexOf(current).coerceAtLeast(0)
+        AlertDialog.Builder(this).setTitle("Поисковая система")
+            .setSingleChoiceItems(engines, selected) { dialog, which ->
+                browserPrefs.edit().putString("search_engine", urls[which]).apply()
+                dialog.dismiss()
+            }.setNegativeButton("Отмена", null).show()
+    }
+
+    private fun showHomePageDialog() {
+        val input = EditText(this).apply {
+            setSingleLine(true)
+            setText(browserPrefs.getString("home_page", "https://www.google.com"))
+            hint = "https://example.com"
+        }
+        AlertDialog.Builder(this).setTitle("Главная страница").setView(input)
+            .setPositiveButton("Сохранить") { _, _ ->
+                val value = input.text.toString().trim()
+                if (value.startsWith("https://") || value.startsWith("http://")) {
+                    browserPrefs.edit().putString("home_page", value).apply()
+                    Toast.makeText(this, "Главная страница сохранена", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, "Укажите полный адрес с http:// или https://", Toast.LENGTH_SHORT).show()
+                }
+            }.setNegativeButton("Отмена", null).show()
+    }
+
+    private fun showBrowserSettings() {
+        val keys = arrayOf("javascript", "cookies", "third_party_cookies", "images", "popups", "desktop_site")
+        val labels = arrayOf("JavaScript", "Файлы cookie", "Сторонние cookie", "Изображения", "Всплывающие окна", "Версия для ПК")
+        val checked = BooleanArray(keys.size) { index -> browserPrefs.getBoolean(keys[index], index != 4 && index != 5) }
+        AlertDialog.Builder(this).setTitle("Настройки браузера")
+            .setMultiChoiceItems(labels, checked) { _, which, value -> checked[which] = value }
+            .setPositiveButton("Сохранить") { _, _ ->
+                val editor = browserPrefs.edit()
+                keys.forEachIndexed { index, key -> editor.putBoolean(key, checked[index]) }
+                editor.apply()
+                browserTabs.forEach { tab -> applyBrowserPreferences(tab.view) }
+                webView.reload()
+            }
+            .setNeutralButton("Очистить данные") { _, _ ->
+                AlertDialog.Builder(this).setTitle("Очистить данные браузера?")
+                    .setMessage("Будут очищены кэш, история, cookie и закладки.")
+                    .setPositiveButton("Очистить") { _, _ ->
+                        browserTabs.forEach { it.view.clearCache(true); it.view.clearHistory() }
+                        CookieManager.getInstance().removeAllCookies(null)
+                        CookieManager.getInstance().flush()
+                        browserPrefs.edit().remove("history").remove("bookmarks").apply()
+                        Toast.makeText(this, "Данные браузера очищены", Toast.LENGTH_SHORT).show()
+                    }.setNegativeButton("Отмена", null).show()
+            }.setNegativeButton("Отмена", null).show()
     }
 
     private fun addMenuItem(
@@ -700,10 +936,10 @@ class BrowserActivity : FragmentActivity() {
     }
 
     override fun onDestroy() {
-        try {
-            webView.stopLoading()
-            webView.destroy()
-        } catch (_: Exception) {}
+        browserTabs.forEach { tab ->
+            try { tab.view.stopLoading(); tab.view.destroy() } catch (_: Exception) {}
+        }
+        browserTabs.clear()
         super.onDestroy()
     }
 }
@@ -716,8 +952,9 @@ fun configureFullChromiumSettings(webView: WebView) {
         javaScriptEnabled = true
         domStorageEnabled = true
         databaseEnabled = true
-        // Do not allow scripts to spawn unsolicited windows.
+        // Pop-up windows are disabled until the user enables them in browser settings.
         javaScriptCanOpenWindowsAutomatically = false
+        setSupportMultipleWindows(true)
 
         // Отрендерить страницы как на ПК/телефоне с полным масштабом
         loadWithOverviewMode = true
