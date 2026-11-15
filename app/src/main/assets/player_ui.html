@@ -919,6 +919,7 @@ function openZArchiverMenu(item) {
     </div>
     <div class="zmenu">
       ${item.isArchive ? `<button class="zact" type="button" data-zact="open-archive">${ic('archive')}<span>Открыть архив / Распаковать</span></button>` : ''}
+      <button class="zact" type="button" data-zact="create-zip">${ic('archive')}<span>Создать ZIP-архив</span></button>
       <button class="zact" type="button" data-zact="copy">${ic('copy')}<span>Копировать</span></button>
       <button class="zact" type="button" data-zact="move">${ic('move-r')}<span>Переместить</span></button>
       <button class="zact" type="button" data-zact="rename">${ic('edit')}<span>Переименовать</span></button>
@@ -937,6 +938,12 @@ function openZArchiverMenu(item) {
           window.AndroidBridge.openArchive(item.path);
         } else if (PREVIEW) {
           toast('Открытие архива: ' + item.name);
+        }
+      } else if (act === 'create-zip') {
+        if (window.AndroidBridge && window.AndroidBridge.createZipArchive) {
+          window.AndroidBridge.createZipArchive(item.path);
+        } else if (PREVIEW) {
+          toast('Создание ZIP: ' + item.name);
         }
       } else if (act === 'copy') {
         browseClipboard = { mode: 'copy', path: item.path, name: item.name, isDir: item.isDir };
