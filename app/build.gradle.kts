@@ -122,6 +122,10 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
 
+    // Dedicated audio playback engine and Android media-session integration.
+    implementation("androidx.media3:media3-exoplayer:1.11.1")
+    implementation("androidx.media3:media3-session:1.11.1")
+
     implementation("org.videolan.android:libvlc-all:3.7.7")
     implementation("com.google.android.gms:play-services-cast-framework:21.5.0")
     implementation("org.apache.ftpserver:ftpserver-core:1.2.0")
