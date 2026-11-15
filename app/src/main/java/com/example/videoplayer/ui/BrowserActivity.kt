@@ -85,17 +85,21 @@ class BrowserActivity : FragmentActivity() {
         }
     }
 
-    private val audioPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        val req = pendingPermissionRequest
+    private val webMediaPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { grants ->
+        val request = pendingPermissionRequest
         pendingPermissionRequest = null
-        if (req != null) {
-            if (isGranted) {
-                req.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
-            } else {
-                req.deny()
+        if (request != null) {
+            val grantedResources = request.resources.filter { resource ->
+                when (resource) {
+                    PermissionRequest.RESOURCE_AUDIO_CAPTURE -> grants[Manifest.permission.RECORD_AUDIO] == true
+                    PermissionRequest.RESOURCE_VIDEO_CAPTURE -> grants[Manifest.permission.CAMERA] == true
+                    else -> false
+                }
             }
+            if (grantedResources.isNotEmpty()) request.grant(grantedResources.toTypedArray())
+            else request.deny()
         }
     }
 
@@ -609,11 +613,17 @@ class BrowserActivity : FragmentActivity() {
 
             override fun onPermissionRequest(request: PermissionRequest?) {
                 if (request == null) return
-                if (request.resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
-                    pendingPermissionRequest = request
-                    audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                } else {
+                val requested = request.resources
+                val permissions = buildList {
+                    if (PermissionRequest.RESOURCE_AUDIO_CAPTURE in requested) add(Manifest.permission.RECORD_AUDIO)
+                    if (PermissionRequest.RESOURCE_VIDEO_CAPTURE in requested) add(Manifest.permission.CAMERA)
+                }
+                if (permissions.isEmpty()) {
                     request.deny()
+                } else {
+                    pendingPermissionRequest?.deny()
+                    pendingPermissionRequest = request
+                    webMediaPermissionLauncher.launch(permissions.toTypedArray())
                 }
             }
         }
