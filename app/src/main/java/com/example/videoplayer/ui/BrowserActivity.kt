@@ -160,8 +160,9 @@ class BrowserActivity : FragmentActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#1F1A17"))
+                setColor(Color.parseColor("#211A16"))
                 cornerRadius = 24 * density
+                setStroke((1 * density).toInt(), Color.parseColor("#493426"))
             }
             val padH = (14 * density).toInt()
             setPadding(padH, 0, padH, 0)
@@ -283,6 +284,10 @@ class BrowserActivity : FragmentActivity() {
                     updateUrlDisplay(currentUrl)
                 } else if (webView.canGoBack()) {
                     webView.goBack()
+                } else if (browserTabs.size > 1) {
+                    closeCurrentTab()
+                } else {
+                    finish()
                 }
             }
         })
@@ -541,9 +546,10 @@ class BrowserActivity : FragmentActivity() {
                 val tab = BrowserTab(nextTabId++, popupWebView, "", "Новая вкладка")
                 browserTabs.add(tab)
                 switchToTab(tab)
-                val transport = resultMsg?.obj as? WebView.WebViewTransport ?: return false
+                val message = resultMsg ?: return false
+                val transport = message.obj as? WebView.WebViewTransport ?: return false
                 transport.webView = popupWebView
-                resultMsg.sendToTarget()
+                message.sendToTarget()
                 return true
             }
 
