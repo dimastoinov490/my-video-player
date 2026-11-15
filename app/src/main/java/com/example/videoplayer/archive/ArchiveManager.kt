@@ -353,15 +353,35 @@ object ArchiveManager {
                             }
 
                             if (isDir) {
-                                targetFile.mkdirs()
+                                if (targetFile.exists()) {
+                                    if (!targetFile.isDirectory) {
+                                        throw SevenZipException("Невозможно создать папку: по этому пути уже существует файл (" + targetFile.name + ")")
+                                    }
+                                } else if (!targetFile.mkdirs() && !targetFile.isDirectory) {
+                                    throw SevenZipException("Не удалось создать папку: " + targetFile.absolutePath)
+                                }
                                 return null
                             }
 
-                            targetFile.parentFile?.mkdirs()
-                            val bos = BufferedOutputStream(FileOutputStream(targetFile), 64 * 1024)
-                            currentOutStream = bos
-                            currentOutFile = targetFile
+                            // Reserve the destination atomically before opening it. FileOutputStream
+                            // without this guard truncates existing files and can cause data loss.
+                            val parent = targetFile.parentFile
+                            if (parent != null && !parent.exists() && !parent.mkdirs() && !parent.isDirectory) {
+                                throw SevenZipException("Не удалось создать папку: " + parent.absolutePath)
+                            }
+                            if (parent != null && !parent.isDirectory) {
+                                throw SevenZipException("Путь для распаковки не является папкой: " + parent.absolutePath)
+                            }
+                            if (!targetFile.createNewFile()) {
+                                throw SevenZipException("Файл уже существует, он не был изменён: " + targetFile.absolutePath)
+                            }
+
+                            // Track only files created by this extraction. Error/cancel cleanup
+                            // must never remove a pre-existing destination file.
                             createdFiles.add(targetFile)
+                            currentOutFile = targetFile
+                            val bos = BufferedOutputStream(FileOutputStream(targetFile, false), 64 * 1024)
+                            currentOutStream = bos
 
                             return ISequentialOutStream { data ->
                                 ensureActive()
@@ -421,6 +441,7 @@ object ArchiveManager {
                             )
                         )
                     } else if (opErrorMessage != null) {
+                        createdFiles.forEach { runCatching { if (it.exists()) it.delete() } }
                         trySend(ExtractionProgress.Error(opErrorMessage!!))
                     } else {
                         if (createdFiles.isNotEmpty()) {
@@ -476,10 +497,20 @@ object ArchiveManager {
         onBytesWritten: (Long) -> Unit
     ) {
         ensureInitialized()
-        outputFile.parentFile?.mkdirs()
+        val parent = outputFile.parentFile
+        if (parent != null && !parent.exists() && !parent.mkdirs() && !parent.isDirectory) {
+            throw IOException("Не удалось создать папку временного видео: ${parent.absolutePath}")
+        }
+        if (parent != null && !parent.isDirectory) {
+            throw IOException("Путь временного видео не является папкой: ${parent.absolutePath}")
+        }
+        if (!outputFile.createNewFile()) {
+            throw IOException("Временный файл видео уже существует: ${outputFile.absolutePath}")
+        }
 
-        openSession(context, source, password).use { session ->
-            val archive = session.archive
+        try {
+            openSession(context, source, password).use { session ->
+                val archive = session.archive
             var writtenTotal = 0L
             var fos: BufferedOutputStream? = null
             var opResult: ExtractOperationResult = ExtractOperationResult.OK
@@ -547,6 +578,10 @@ object ArchiveManager {
             if (opResult != ExtractOperationResult.OK) {
                 throw IOException("Не удалось извлечь видео из архива ($opResult)")
             }
+            }
+        } catch (t: Throwable) {
+            runCatching { outputFile.delete() }
+            throw t
         }
     }
 
@@ -624,17 +659,31 @@ object ArchiveManager {
             return stream
         }
 
-        // Если SAF-провайдер отдал pipe (не поддерживает seek), сохраняем во временный кэш
-        val cacheDir = File(context.cacheDir, "archive_saf_cache").apply { mkdirs() }
+        // Если SAF-провайдер отдал pipe (не поддерживает seek), сохраняем во временный кэш.
+        // Не оставляем частичный файл, если копирование или открытие RandomAccessFile завершилось ошибкой.
+        val cacheDir = File(context.cacheDir, "archive_saf_cache")
+        if (!cacheDir.exists() && !cacheDir.mkdirs() && !cacheDir.isDirectory) {
+            throw IOException("Не удалось создать временный кэш архива: ${cacheDir.absolutePath}")
+        }
+        if (!cacheDir.isDirectory) {
+            throw IOException("Путь временного кэша архива не является папкой: ${cacheDir.absolutePath}")
+        }
         val tempFile = File.createTempFile("saf_", "_${displayName.replace('/', '_')}", cacheDir)
-        fis.use { input ->
-            pfd.use {
-                FileOutputStream(tempFile).use { out ->
-                    input.copyTo(out, 64 * 1024)
+        val raf = try {
+            fis.use { input ->
+                pfd.use {
+                    FileOutputStream(tempFile).use { out ->
+                        input.copyTo(out, 64 * 1024)
+                    }
                 }
             }
+            RandomAccessFile(tempFile, "r")
+        } catch (t: Throwable) {
+            runCatching { fis.close() }
+            runCatching { pfd.close() }
+            runCatching { tempFile.delete() }
+            throw t
         }
-        val raf = RandomAccessFile(tempFile, "r")
         val rafCloseable = Closeable {
             runCatching { raf.close() }
             runCatching { tempFile.delete() }

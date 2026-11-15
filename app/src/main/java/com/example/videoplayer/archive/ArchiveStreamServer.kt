@@ -116,28 +116,50 @@ object ArchiveStreamServer {
     }
 
     fun cleanupStaleCache(context: Context) {
+        synchronized(serverLock) {
+            cleanupStaleCacheLocked(context)
+        }
+    }
+
+    // Must be called while holding serverLock so a concurrent startSession cannot
+    // register a session between the empty-session check and cache deletion.
+    private fun cleanupStaleCacheLocked(context: Context) {
         if (sessions.isNotEmpty()) return
         try {
             val root = File(context.cacheDir, CACHE_DIR_NAME)
             if (root.exists()) {
                 root.deleteRecursively()
             }
-        } catch (_: Throwable) {}
+        } catch (t: Throwable) {
+            Log.w(TAG, "Unable to clean stale archive stream cache", t)
+        }
     }
 
     fun startSession(context: Context, spec: ArchivePlaybackSpec): StreamHandle {
-        ensureServerStarted()
-        cleanupStaleCache(context)
-
         val sessionId = UUID.randomUUID().toString().replace("-", "")
-        val rootDir = File(context.cacheDir, CACHE_DIR_NAME).apply { mkdirs() }
-        val sessionDir = File(rootDir, sessionId).apply { mkdirs() }
         val safeName = spec.entryName.replace(Regex("[^a-zA-Z0-9._-]"), "_").ifBlank { "video.bin" }
-        val tempFile = File(sessionDir, safeName)
+        val session = synchronized(serverLock) {
+            ensureServerStartedLocked()
+            cleanupStaleCacheLocked(context)
+            val rootDir = File(context.cacheDir, CACHE_DIR_NAME)
+            if (!rootDir.exists() && !rootDir.mkdirs() && !rootDir.isDirectory) {
+                throw IOException("Не удалось создать кэш потокового воспроизведения")
+            }
+            if (!rootDir.isDirectory) {
+                throw IOException("Путь к кэшу потокового воспроизведения не является папкой")
+            }
 
-        val session = StreamSession(sessionId, spec, tempFile, sessionDir)
-        sessions[sessionId] = session
+            val sessionDir = File(rootDir, sessionId)
+            if (!sessionDir.mkdirs() && !sessionDir.isDirectory) {
+                throw IOException("Не удалось создать папку сессии потокового воспроизведения")
+            }
+            val tempFile = File(sessionDir, safeName)
+            StreamSession(sessionId, spec, tempFile, sessionDir).also {
+                sessions[sessionId] = it
+            }
+        }
 
+        val tempFile = session.tempFile
         val extractor = Thread({
             try {
                 ArchiveManager.extractSingleEntryToFile(
@@ -164,6 +186,8 @@ object ArchiveStreamServer {
                 if (!session.cancelled.get()) {
                     Log.e(TAG, "Stream extraction error for ${spec.entryName}", t)
                     session.error.set(t)
+                    runCatching { tempFile.delete() }
+                    session.writtenBytes.set(0L)
                 }
             } finally {
                 synchronized(session.dataLock) {
@@ -212,11 +236,11 @@ object ArchiveStreamServer {
     }
 
     fun stopAll() {
-        val keys = sessions.keys.toList()
-        for (k in keys) {
-            sessions.remove(k)?.cancelAndDelete()
-        }
         synchronized(serverLock) {
+            val keys = sessions.keys.toList()
+            for (key in keys) {
+                sessions.remove(key)?.cancelAndDelete()
+            }
             try {
                 serverSocket?.close()
             } catch (_: Throwable) {}
@@ -227,18 +251,21 @@ object ArchiveStreamServer {
     }
 
     private fun ensureServerStarted() {
+        synchronized(serverLock) {
+            ensureServerStartedLocked()
+        }
+    }
+
+    // Caller must hold serverLock so shutdown cannot race server creation/session registration.
+    private fun ensureServerStartedLocked() {
         val existing = serverSocket
         if (existing != null && !existing.isClosed && listenPort > 0) return
 
-        synchronized(serverLock) {
-            val current = serverSocket
-            if (current != null && !current.isClosed && listenPort > 0) return
+        val socket = ServerSocket(0, 32, InetAddress.getByName("127.0.0.1"))
+        serverSocket = socket
+        listenPort = socket.localPort
 
-            val socket = ServerSocket(0, 32, InetAddress.getByName("127.0.0.1"))
-            serverSocket = socket
-            listenPort = socket.localPort
-
-            val thread = Thread({
+        val thread = Thread({
                 while (!socket.isClosed) {
                     try {
                         val client = socket.accept()
@@ -260,8 +287,7 @@ object ArchiveStreamServer {
                 isDaemon = true
                 start()
             }
-            acceptThread = thread
-        }
+        acceptThread = thread
     }
 
     private fun handleClient(socket: Socket) {
