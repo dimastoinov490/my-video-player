@@ -591,17 +591,24 @@ object ArchiveManager {
         password: String?
     ): ArchiveOpenSession {
         val openedStreams = ArrayList<Closeable>()
-        val openCallback = OpenArchiveCallback(source, password, openedStreams)
+        val fileSource = source as? ArchiveSource.FilePath
+        val primaryFile = fileSource?.let { resolvePrimaryVolumeFile(File(it.path)) }
+        val openSource = if (fileSource != null && primaryFile != null) {
+            fileSource.copy(path = primaryFile.absolutePath, displayName = primaryFile.name)
+        } else {
+            source
+        }
+        val openCallback = OpenArchiveCallback(openSource, password, openedStreams)
 
         try {
-            val primaryStream: IInStream = when (source) {
+            val primaryStream: IInStream = when (openSource) {
                 is ArchiveSource.FilePath -> {
-                    val file = File(source.path)
+                    val file = File(openSource.path)
                     if (!file.exists()) {
-                        throw IOException("Файл не найден: ${source.path}")
+                        throw IOException("Файл не найден: ${file.absolutePath}")
                     }
                     if (!file.canRead()) {
-                        throw SecurityException("Нет доступа к файлу: ${source.path}")
+                        throw SecurityException("Нет доступа к файлу: ${file.absolutePath}")
                     }
                     if (file.name.endsWith(".001", ignoreCase = true)) {
                         VolumedArchiveInStream(file.absolutePath, openCallback).also {
@@ -615,7 +622,7 @@ object ArchiveManager {
                 }
 
                 is ArchiveSource.ContentUri -> {
-                    openSafInStream(context, source.uri, source.displayName, openedStreams)
+                    openSafInStream(context, openSource.uri, openSource.displayName, openedStreams)
                 }
             }
 
@@ -631,6 +638,53 @@ object ArchiveManager {
             openedStreams.forEach { runCatching { it.close() } }
             throw t
         }
+    }
+
+    /**
+     * Multi-volume formats must be opened from their first part. Opening .r00 or .z01
+     * directly skips the archive header; opening .002 directly also bypasses the
+     * volume stream's sequence handling.
+     */
+    internal fun resolvePrimaryVolumeFile(selectedFile: File): File {
+        val name = selectedFile.name
+        val parent = selectedFile.parentFile ?: File(".")
+        val candidates = when {
+            Regex("""^(.*)\.r\d{2}$""", RegexOption.IGNORE_CASE).matches(name) -> {
+                val base = name.replace(Regex("""\.r\d{2}$""", RegexOption.IGNORE_CASE), "")
+                listOf(File(parent, "$base.rar"))
+            }
+            Regex("""^(.*)\.z\d{2}$""", RegexOption.IGNORE_CASE).matches(name) -> {
+                val base = name.replace(Regex("""\.z\d{2}$""", RegexOption.IGNORE_CASE), "")
+                listOf(File(parent, "$base.zip"))
+            }
+            Regex("""^(.*)\.part\d+\.rar$""", RegexOption.IGNORE_CASE).matches(name) -> {
+                val match = Regex("""^(.*)\.part(\d+)\.rar$""", RegexOption.IGNORE_CASE).matchEntire(name)!!
+                val base = match.groupValues[1]
+                val width = match.groupValues[2].length
+                listOf(
+                    File(parent, "$base.part${"1".padStart(width, '0')}.rar"),
+                    File(parent, "$base.part1.rar")
+                ).distinct()
+            }
+            Regex("""^(.*)\.(\d{3})$""").matches(name) -> {
+                val match = Regex("""^(.*)\.(\d{3})$""").matchEntire(name)!!
+                listOf(File(parent, "${match.groupValues[1]}.001"))
+            }
+            else -> emptyList()
+        }
+        return candidates
+            .asSequence()
+            .mapNotNull { candidate ->
+                if (candidate.isFile && candidate.canRead()) {
+                    candidate
+                } else {
+                    // Preserve the actual on-disk casing on case-sensitive storage.
+                    parent.listFiles()?.firstOrNull {
+                        it.isFile && it.name.equals(candidate.name, ignoreCase = true) && it.canRead()
+                    }
+                }
+            }
+            .firstOrNull() ?: selectedFile
     }
 
     private fun openSafInStream(
