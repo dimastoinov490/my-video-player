@@ -89,6 +89,7 @@ fun ExactHtmlVideoLibraryView(
     onOpenTerminal: () -> Unit = {},
     browseRefreshTick: Int = 0,
     currentNavIndex: Int = 0,
+    audioPermissionGranted: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -319,7 +320,7 @@ fun ExactHtmlVideoLibraryView(
 
     fun syncAllData(webView: WebView) {
         sendVideosToWeb(webView, latestVideos, force = true)
-        sendAudiosToWeb(webView)
+        if (audioPermissionGranted) sendAudiosToWeb(webView)
         sendFoldersToWeb(webView, currentBrowsePath)
         sendPlaylistsToWeb(webView)
     }
@@ -327,6 +328,12 @@ fun ExactHtmlVideoLibraryView(
     LaunchedEffect(videos, isPageReady) {
         if (isPageReady) {
             webViewRef?.let { sendVideosToWeb(it, videos) }
+        }
+    }
+
+    LaunchedEffect(audioPermissionGranted, isPageReady) {
+        if (isPageReady && audioPermissionGranted) {
+            webViewRef?.let { sendAudiosToWeb(it) }
         }
     }
 
