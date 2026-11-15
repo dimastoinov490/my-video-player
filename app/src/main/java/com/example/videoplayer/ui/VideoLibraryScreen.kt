@@ -78,6 +78,7 @@ fun VideoLibraryScreen(
     onOpenSettings: () -> Unit,
     onOpenArchive: (ArchiveSource, File?) -> Unit = { _, _ -> },
     onOpenArchivePicker: () -> Unit = {},
+    onCreateZipArchive: (String) -> Unit = {},
     onOpenBrowser: (String) -> Unit = {},
     onOpenTerminal: () -> Unit = {},
     browseRefreshTick: Int = 0
@@ -185,6 +186,7 @@ fun VideoLibraryScreen(
                 onOpenCustomUrl = onOpenCustomUrl,
                 onOpenArchive = onOpenArchive,
                 onOpenArchivePicker = onOpenArchivePicker,
+                onCreateZipArchive = onCreateZipArchive,
                 onOpenBrowser = onOpenBrowser,
                 onOpenTerminal = onOpenTerminal,
                 browseRefreshTick = browseRefreshTick,
