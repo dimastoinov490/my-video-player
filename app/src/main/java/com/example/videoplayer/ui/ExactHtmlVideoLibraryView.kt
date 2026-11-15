@@ -85,6 +85,7 @@ fun ExactHtmlVideoLibraryView(
     onRefreshVideos: () -> Unit,
     onOpenArchive: (ArchiveSource, File?) -> Unit = { _, _ -> },
     onOpenArchivePicker: () -> Unit = {},
+    onCreateZipArchive: (String) -> Unit = {},
     onOpenBrowser: (String) -> Unit = {},
     onOpenTerminal: () -> Unit = {},
     browseRefreshTick: Int = 0,
@@ -97,6 +98,7 @@ fun ExactHtmlVideoLibraryView(
     val latestVideos by rememberUpdatedState(videos)
     val latestOpenArchive by rememberUpdatedState(onOpenArchive)
     val latestOpenArchivePicker by rememberUpdatedState(onOpenArchivePicker)
+    val latestCreateZipArchive by rememberUpdatedState(onCreateZipArchive)
     val latestOpenBrowser by rememberUpdatedState(onOpenBrowser)
     val latestOpenTerminal by rememberUpdatedState(onOpenTerminal)
     val sentThumbs = remember { java.util.Collections.synchronizedSet(HashSet<String>()) }
@@ -531,6 +533,13 @@ fun ExactHtmlVideoLibraryView(
                         fun openArchivePicker() {
                             Handler(Looper.getMainLooper()).post {
                                 latestOpenArchivePicker()
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun createZipArchive(path: String) {
+                            Handler(Looper.getMainLooper()).post {
+                                latestCreateZipArchive(path)
                             }
                         }
 
