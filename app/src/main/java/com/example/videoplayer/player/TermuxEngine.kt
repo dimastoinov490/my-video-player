@@ -5,79 +5,64 @@ import java.io.File
 
 object TermuxEngine {
 
+    private fun nativeFile(context: Context, name: String): File =
+        File(context.applicationInfo.nativeLibraryDir, name)
+
     fun isProotAvailable(context: Context): Boolean {
-        val prootFile = File(context.applicationInfo.nativeLibraryDir, "libproot.so")
-        return prootFile.isFile && prootFile.canExecute()
+        // Android extracts jniLibs into nativeLibraryDir. PRoot itself is an
+        // executable ELF despite the .so suffix used for APK extraction.
+        return listOf(
+            nativeFile(context, "libproot.so"),
+            nativeFile(context, "libproot_loader.so"),
+            nativeFile(context, "libtalloc.so"),
+            nativeFile(context, "libandroid-shmem.so")
+        ).all { it.isFile && it.canRead() } &&
+            nativeFile(context, "libproot.so").canExecute() &&
+            nativeFile(context, "libproot_loader.so").canExecute()
     }
 
     fun isRootFsReady(context: Context): Boolean {
         val rootFs = File(context.filesDir, "rootfs")
-        return rootFs.isDirectory && File(rootFs, "bin/sh").exists()
+        return rootFs.isDirectory &&
+            File(rootFs, "bin/sh").isFile &&
+            File(rootFs, "etc").isDirectory
     }
 
     fun createTermuxSession(context: Context): ProcessBuilder {
         val rootFs = File(context.filesDir, "rootfs")
-        val prootPath = File(context.applicationInfo.nativeLibraryDir, "libproot.so").absolutePath
+        require(isProotAvailable(context)) {
+            "PRoot runtime is incomplete: expected proot, loader, libtalloc and libandroid-shmem in the APK"
+        }
+        require(isRootFsReady(context)) { "Alpine root filesystem is not installed or is incomplete" }
 
-        // Ищем системный бинарник su на телефоне (Magisk / Superuser)
-        val hostSuPath = findHostSuBinary()
-
+        val nativeDir = context.applicationInfo.nativeLibraryDir
+        val prootPath = nativeFile(context, "libproot.so").absolutePath
+        val loaderPath = nativeFile(context, "libproot_loader.so").absolutePath
         val commandList = mutableListOf(
             prootPath,
-            "--link2symlink",      // Эмуляция симлинков для работы apt/apk
-            "--sysvipc",           // Поддержка разделяемой памяти
-            "-r", rootFs.absolutePath, // Корневая папка Linux
-
-            // Стандартные системные точки монтирования
+            "--link2symlink",
+            "--sysvipc",
+            "-0", // Fake root inside PRoot; does not grant Android/system root access.
+            "-r", rootFs.absolutePath,
             "-b", "/dev",
             "-b", "/proc",
             "-b", "/sys",
-            "-b", "/sdcard",       // Доступ к внутренней памяти телефона
-            "-b", "${context.filesDir}:/app_data" // Доступ к папке приложения
+            "-b", "/sdcard",
+            "-b", "${context.filesDir}:/app_data",
+            "-w", "/root",
+            "/bin/sh",
+            "-l"
         )
 
-        // Если хост рутован, пробрасываем системный su внутрь контейнера
-        if (hostSuPath != null) {
-            commandList.add("-b")
-            commandList.add("$hostSuPath:/bin/su")
-        }
-
-        commandList.add("-w")
-        commandList.add("/root")   // Рабочая директория по умолчанию
-        commandList.add("/bin/sh") // Оболочка
-        commandList.add("-l")
-
         val pb = ProcessBuilder(commandList)
-
-        // Переменные окружения, как в Termux
         val env = pb.environment()
         env["HOME"] = "/root"
         env["TERM"] = "xterm-256color"
-        env["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/bin/su"
+        env["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
         env["USER"] = "root"
-
+        env["PROOT_LOADER"] = loaderPath
+        env["LD_LIBRARY_PATH"] = nativeDir
         pb.redirectErrorStream(true)
         return pb
-    }
-
-    // Автопоиск бинарника su в стандартных путях Android
-    private fun findHostSuBinary(): String? {
-        val possiblePaths = listOf(
-            "/system/bin/su",
-            "/system/xbin/su",
-            "/sbin/su",
-            "/su/bin/su",
-            "/su/bin"
-        )
-        for (path in possiblePaths) {
-            try {
-                val file = File(path)
-                if (file.exists() && file.isFile && file.canExecute()) {
-                    return path
-                }
-            } catch (_: SecurityException) {
-            }
-        }
-        return null
     }
 }

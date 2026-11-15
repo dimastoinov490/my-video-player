@@ -14,17 +14,25 @@ import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 import java.util.zip.GZIPInputStream
 
 object LinuxInstaller {
 
     fun getRootFsDir(context: Context): File {
-        return File(context.filesDir, "rootfs")
+        val rootFs = File(context.filesDir, "rootfs")
+        val backupRoot = File(context.filesDir, "rootfs.previous")
+        // Recover the last working installation if the app was interrupted
+        // between moving the old rootfs aside and activating the new one.
+        if (!rootFs.exists() && File(backupRoot, "bin/sh").isFile && backupRoot.renameTo(rootFs)) {
+            return rootFs
+        }
+        return rootFs
     }
 
     fun isInstalled(context: Context): Boolean {
-        val binSh = File(getRootFsDir(context), "bin/sh")
-        return binSh.exists()
+        val rootFs = getRootFsDir(context)
+        return File(rootFs, "bin/sh").isFile && File(rootFs, "etc").isDirectory
     }
 
     fun isBootstrapDone(context: Context): Boolean {
@@ -98,57 +106,113 @@ object LinuxInstaller {
 
     suspend fun installAlpine(context: Context, onProgress: (String) -> Unit) = withContext(Dispatchers.IO) {
         val rootFs = getRootFsDir(context)
-        if (!rootFs.exists()) rootFs.mkdirs()
-
+        val stagingRoot = File(context.filesDir, "rootfs.installing")
+        val backupRoot = File(context.filesDir, "rootfs.previous")
         val arch = resolveAlpineArch()
-        onProgress("Загрузка образа Alpine Linux ($arch)...")
-        val alpineUrl = "https://dl-cdn.alpinelinux.org/alpine/v3.20/releases/$arch/alpine-minirootfs-3.20.0-$arch.tar.gz"
-        val tarGzFile = File(context.cacheDir, "alpine.tar.gz")
+        val alpineVersion = "3.24.0"
+        val alpineUrl = "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/$arch/alpine-minirootfs-$alpineVersion-$arch.tar.gz"
+        val tarGzFile = File(context.cacheDir, "alpine-$alpineVersion-$arch.tar.gz")
+        val checksumFile = File(context.cacheDir, "alpine-$alpineVersion-$arch.sha256")
 
         try {
-            val connection = (URL(alpineUrl).openConnection() as HttpURLConnection).apply {
-                connectTimeout = 15_000
-                readTimeout = 30_000
-                instanceFollowRedirects = true
-                requestMethod = "GET"
+            stagingRoot.deleteRecursively()
+            if (!stagingRoot.mkdirs()) throw IOException("Не удалось создать временный каталог rootfs")
+
+            onProgress("Загрузка Alpine Linux $alpineVersion ($arch)...")
+            downloadFile(alpineUrl, tarGzFile, 64L * 1024L * 1024L)
+            downloadFile("$alpineUrl.sha256", checksumFile, 4096L)
+
+            val expectedHash = checksumFile.readText().trim().substringBefore(' ').lowercase()
+            if (!expectedHash.matches(Regex("[0-9a-f]{64}"))) {
+                throw IOException("Некорректная SHA-256 контрольная сумма Alpine")
             }
-            val code = connection.responseCode
-            if (code !in 200..299) {
-                throw IOException("HTTP $code при загрузке образа Alpine ($arch)")
+            val actualHash = sha256(tarGzFile)
+            if (!actualHash.equals(expectedHash, ignoreCase = true)) {
+                throw IOException("Контрольная сумма Alpine не совпадает")
             }
-            connection.inputStream.use { input ->
-                FileOutputStream(tarGzFile).use { output ->
-                    input.copyTo(output)
-                }
-            }
-            connection.disconnect()
 
             onProgress("Распаковка корневой файловой системы...")
             GZIPInputStream(BufferedInputStream(tarGzFile.inputStream())).use { gzipInput ->
-                unTar(gzipInput, rootFs)
+                unTar(gzipInput, stagingRoot)
             }
 
-            // Создаем необходимые системные папки внутри rootfs
-            File(rootFs, "dev").mkdirs()
-            File(rootFs, "proc").mkdirs()
-            File(rootFs, "sys").mkdirs()
-            File(rootFs, "sdcard").mkdirs()
-            File(rootFs, "app_data").mkdirs()
-            File(rootFs, "root").mkdirs()
-
-            // Прописываем DNS для работы интернета через PRoot
-            val etcDir = File(rootFs, "etc")
-            if (!etcDir.exists()) etcDir.mkdirs()
+            listOf("dev", "proc", "sys", "sdcard", "app_data", "root").forEach {
+                File(stagingRoot, it).mkdirs()
+            }
+            val etcDir = File(stagingRoot, "etc")
+            etcDir.mkdirs()
             File(etcDir, "resolv.conf").writeText("nameserver 8.8.8.8\nnameserver 1.1.1.1\n")
 
-            // Сохраняем скрипт первичной настройки Python3 и yt-dlp, а также AI Engine скрипт
+            if (!File(stagingRoot, "bin/sh").isFile) {
+                throw IOException("Загруженный Alpine rootfs неполный")
+            }
+
+            onProgress("Подготовка Linux-окружения...")
+            if (backupRoot.exists() && !backupRoot.deleteRecursively()) {
+                throw IOException("Не удалось очистить резервную копию rootfs")
+            }
+            val hadPreviousRootFs = rootFs.exists()
+            if (hadPreviousRootFs && !rootFs.renameTo(backupRoot)) {
+                throw IOException("Не удалось сохранить предыдущий rootfs")
+            }
+            if (!stagingRoot.renameTo(rootFs)) {
+                if (hadPreviousRootFs) backupRoot.renameTo(rootFs)
+                throw IOException("Не удалось активировать установленный Alpine rootfs")
+            }
+            if (backupRoot.exists()) backupRoot.deleteRecursively()
+
             ensureBootstrapScript(context)
             ensureAiEngineScript(context)
-
             onProgress("Linux-окружение успешно установлено!")
         } finally {
+            stagingRoot.deleteRecursively()
             tarGzFile.delete()
+            checksumFile.delete()
         }
+    }
+
+    private fun downloadFile(url: String, destination: File, maxBytes: Long) {
+        val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+            connectTimeout = 15_000
+            readTimeout = 30_000
+            instanceFollowRedirects = true
+            requestMethod = "GET"
+        }
+        try {
+            val code = connection.responseCode
+            if (code !in 200..299) throw IOException("HTTP $code при загрузке $url")
+            if (connection.contentLengthLong > maxBytes) {
+                throw IOException("Загружаемый файл превышает допустимый размер")
+            }
+            connection.inputStream.use { input ->
+                FileOutputStream(destination).use { output ->
+                    val buffer = ByteArray(16 * 1024)
+                    var total = 0L
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        total += count
+                        if (total > maxBytes) throw IOException("Загружаемый файл превышает допустимый размер")
+                        output.write(buffer, 0, count)
+                    }
+                }
+            }
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun sha256(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().buffered().use { input ->
+            val buffer = ByteArray(16 * 1024)
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                digest.update(buffer, 0, count)
+            }
+        }
+        return digest.digest().joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }
     }
 
     private fun resolveAlpineArch(): String {
@@ -156,9 +220,7 @@ object LinuxInstaller {
         return when {
             primaryAbi.contains("arm64") -> "aarch64"
             primaryAbi.contains("armeabi") -> "armv7"
-            primaryAbi.contains("x86_64") -> "x86_64"
-            primaryAbi.contains("x86") -> "x86"
-            else -> "aarch64"
+            else -> throw IllegalStateException("Неподдерживаемая архитектура Android: $primaryAbi")
         }
     }
 
@@ -166,6 +228,7 @@ object LinuxInstaller {
     private fun unTar(inputStream: InputStream, outputDir: File) {
         val buffered = BufferedInputStream(inputStream)
         val rootCanonical = outputDir.canonicalFile
+        val rootPathWithSep = rootCanonical.path.let { if (it.endsWith(File.separator)) it else it + File.separator }
         val header = ByteArray(512)
         val copyBuffer = ByteArray(16 * 1024)
         var nextLongName: String? = null
@@ -224,7 +287,6 @@ object LinuxInstaller {
 
             val destFile = File(rootCanonical, entryName)
             val destCanonical = destFile.canonicalFile
-            val rootPathWithSep = rootCanonical.path.let { if (it.endsWith(File.separator)) it else it + File.separator }
             if (destCanonical.path != rootCanonical.path && !destCanonical.path.startsWith(rootPathWithSep)) {
                 skipDataBlock(buffered, entrySize)
                 continue
@@ -264,15 +326,30 @@ object LinuxInstaller {
             }
         }
 
-        // Создаем симлинки и жёсткие ссылки после распаковки файлов
+        // Создаем симлинки и жёсткие ссылки после распаковки файлов.
+        // Reject archive links that would escape the private rootfs directory.
         for ((destFile, target, kind) in deferredLinks) {
             try {
                 if (destFile.exists()) destFile.delete()
                 if (kind == '2') {
+                    val targetFile = if (target.startsWith("/")) {
+                        File(rootCanonical, target.removePrefix("/"))
+                    } else {
+                        File(destFile.parentFile ?: rootCanonical, target)
+                    }
+                    val canonicalTarget = targetFile.canonicalFile
+                    if (canonicalTarget.path != rootCanonical.path &&
+                        !canonicalTarget.path.startsWith(rootPathWithSep)) {
+                        continue
+                    }
                     Os.symlink(target, destFile.absolutePath)
                 } else {
                     val targetClean = target.removePrefix("./").trimStart('/')
                     val resolvedTarget = File(rootCanonical, targetClean).canonicalFile
+                    if (resolvedTarget.path != rootCanonical.path &&
+                        !resolvedTarget.path.startsWith(rootPathWithSep)) {
+                        continue
+                    }
                     if (resolvedTarget.exists()) {
                         try {
                             Os.link(resolvedTarget.absolutePath, destFile.absolutePath)
@@ -334,7 +411,7 @@ object LinuxInstaller {
         while (remaining > 0L) {
             val toRead = minOf(remaining, buf.size.toLong()).toInt()
             val n = input.read(buf, 0, toRead)
-            if (n <= 0) break
+            if (n <= 0) throw IOException("Неожиданный конец TAR-архива в метаданных")
             baos.write(buf, 0, n)
             remaining -= n
         }
@@ -364,7 +441,7 @@ object LinuxInstaller {
         while (remaining > 0L) {
             val toRead = minOf(remaining, buf.size.toLong()).toInt()
             val n = input.read(buf, 0, toRead)
-            if (n <= 0) break
+            if (n <= 0) throw IOException("Неожиданный конец TAR-архива при пропуске данных")
             remaining -= n
         }
     }
@@ -390,13 +467,17 @@ object LinuxInstaller {
 
     private val BOOTSTRAP_SCRIPT = """
         #!/bin/sh
+        set -eu
         export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
         if [ ! -f /root/.bootstrap_done ]; then
             echo "[*] Первый запуск: установка python3, ffmpeg и yt-dlp..."
             apk update
             apk add --no-cache python3 py3-pip curl ca-certificates ffmpeg
-            curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
-            chmod +x /usr/local/bin/yt-dlp
+            curl --fail --location --retry 3 --retry-delay 2 --connect-timeout 15 --max-time 600 \
+                https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
+                -o /usr/local/bin/yt-dlp
+            test -s /usr/local/bin/yt-dlp
+            chmod 755 /usr/local/bin/yt-dlp
             touch /root/.bootstrap_done
             echo "[*] Готово! Теперь можно использовать yt-dlp и python3."
         fi

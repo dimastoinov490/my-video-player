@@ -27,12 +27,15 @@ import com.example.videoplayer.player.LinuxInstaller
 import com.example.videoplayer.player.TermuxEngine
 import com.example.videoplayer.ui.theme.GrayText
 import com.example.videoplayer.ui.theme.LocalAppTheme
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.PrintWriter
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,9 +47,17 @@ fun LinuxTerminalScreen(
     val listState = rememberLazyListState()
 
     val outputLines = remember { mutableStateListOf<String>() }
+    fun appendOutputLine(line: String) {
+        // Keep terminal history bounded so long-running sessions cannot grow UI memory indefinitely.
+        if (outputLines.size >= 1000) outputLines.removeAt(0)
+        outputLines.add(line)
+    }
     var inputText by remember { mutableStateOf("") }
     var processWriter by remember { mutableStateOf<PrintWriter?>(null) }
     var activeProcess by remember { mutableStateOf<Process?>(null) }
+    // Keep a non-Compose handle so disposal can kill a process even before UI state is published.
+    val processRef = remember { AtomicReference<Process?>(null) }
+    val screenDisposed = remember { AtomicBoolean(false) }
     var isLoading by remember { mutableStateOf(true) }
     var statusText by remember { mutableStateOf("Инициализация окружения...") }
 
@@ -58,6 +69,11 @@ fun LinuxTerminalScreen(
                 processWriter?.close()
             } catch (_: Exception) {
             }
+            screenDisposed.set(true)
+            try {
+                processRef.getAndSet(null)?.destroy()
+            } catch (_: Exception) {
+            }
             try {
                 activeProcess?.destroy()
             } catch (_: Exception) {
@@ -65,10 +81,19 @@ fun LinuxTerminalScreen(
         }
     }
 
-    // Проверка и установка при первом открытии, затем запуск PRoot или fallback-сессии
+    // Не подменяем Linux-окружение системной оболочкой Android: это вводило бы пользователя в заблуждение.
     LaunchedEffect(Unit) {
         val prootReady = TermuxEngine.isProotAvailable(context)
-        if (prootReady && !LinuxInstaller.isInstalled(context)) {
+        if (!prootReady) {
+            appendOutputLine("Linux PRoot runtime is not installed in this APK.")
+            appendOutputLine("Нужны PRoot, loader, libtalloc и libandroid-shmem для ABI устройства.")
+            appendOutputLine("Системная оболочка Android вместо Alpine не запускается.")
+            statusText = "Не найден комплект Linux runtime"
+            isLoading = false
+            return@LaunchedEffect
+        }
+
+        if (!LinuxInstaller.isInstalled(context)) {
             try {
                 LinuxInstaller.installAlpine(context) { progress ->
                     coroutineScope.launch(Dispatchers.Main) {
@@ -76,46 +101,43 @@ fun LinuxTerminalScreen(
                     }
                 }
             } catch (e: Exception) {
-                outputLines.add("Ошибка установки Alpine rootfs: ${e.localizedMessage ?: "нет сети"}")
+                appendOutputLine("Ошибка установки Alpine rootfs: ${e.localizedMessage ?: "нет сети"}")
             }
         }
 
         statusText = "Запуск сессии..."
-        if (prootReady && LinuxInstaller.isInstalled(context)) {
-            outputLines.add("Welcome to Alpine Linux (Termux-style PRoot)")
-            outputLines.add("Type 'su' to gain root privileges if host is rooted.")
+        if (LinuxInstaller.isInstalled(context)) {
+            appendOutputLine("Welcome to Alpine Linux (Termux-style PRoot)")
+            appendOutputLine("PRoot virtual root is enabled (-0); Android system root is not granted.")
         } else {
-            outputLines.add("Android System Shell (/system/bin/sh)")
-            if (!prootReady) {
-                outputLines.add("Примечание: libproot.so не найден в nativeLibraryDir; запущена встроенная оболочка Android.")
-            }
+            appendOutputLine("Alpine rootfs не установлен. Установка не завершилась.")
+            isLoading = false
+            return@LaunchedEffect
         }
-        outputLines.add("--------------------------------------------------")
-        isLoading = false
+        appendOutputLine("--------------------------------------------------")
 
         coroutineScope.launch(Dispatchers.IO) {
+            var sessionProcess: Process? = null
             try {
-                val useProot = prootReady && LinuxInstaller.isInstalled(context)
                 LinuxInstaller.ensureAiEngineScript(context)
-                if (useProot) {
-                    LinuxInstaller.ensureBootstrapScript(context)
-                }
-                val process = if (useProot) {
-                    TermuxEngine.createTermuxSession(context).start()
-                } else {
-                    ProcessBuilder("/system/bin/sh").apply {
-                        directory(context.filesDir)
-                        environment()["HOME"] = context.filesDir.absolutePath
-                        environment()["TERM"] = "xterm-256color"
-                        redirectErrorStream(true)
-                    }.start()
+                LinuxInstaller.ensureBootstrapScript(context)
+                val process = TermuxEngine.createTermuxSession(context).start()
+                sessionProcess = process
+                // Publish immediately: readLine() is blocking and does not react to coroutine cancellation.
+                processRef.set(process)
+                // Close the narrow race where the screen is disposed as start() returns.
+                if (screenDisposed.get()) {
+                    processRef.compareAndSet(process, null)
+                    process.destroy()
+                    return@launch
                 }
                 val writer = PrintWriter(process.outputStream, true)
                 withContext(Dispatchers.Main) {
                     activeProcess = process
                     processWriter = writer
+                    isLoading = false
                 }
-                if (useProot && !LinuxInstaller.isBootstrapDone(context)) {
+                if (!LinuxInstaller.isBootstrapDone(context)) {
                     coroutineScope.launch(Dispatchers.IO) {
                         // Даем сессии время на старт и запускаем bootstrap.sh (внутри проверка .bootstrap_done)
                         kotlinx.coroutines.delay(500)
@@ -128,16 +150,38 @@ fun LinuxTerminalScreen(
                 while (line != null) {
                     val currentLine = line
                     withContext(Dispatchers.Main) {
-                        outputLines.add(currentLine)
+                        appendOutputLine(currentLine)
                         if (outputLines.isNotEmpty()) {
                             listState.animateScrollToItem(outputLines.size - 1)
                         }
                     }
                     line = reader.readLine()
                 }
+                withContext(Dispatchers.Main) {
+                    if (activeProcess === process) {
+                        processWriter = null
+                        activeProcess = null
+                        statusText = "Сессия Linux завершена"
+                    }
+                    appendOutputLine("[*] Сессия Linux завершена.")
+                }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    outputLines.add("Ошибка терминала: ${e.localizedMessage}")
+                    appendOutputLine("Ошибка терминала: ${e.localizedMessage}")
+                    isLoading = false
+                    processWriter = null
+                    activeProcess = null
+                }
+            } finally {
+                // Also covers cancellation between process.start() and publishing it to Compose state.
+                sessionProcess?.let { process ->
+                    processRef.compareAndSet(process, null)
+                    try {
+                        process.destroy()
+                    } catch (_: Exception) {
+                    }
                 }
             }
         }
@@ -146,7 +190,7 @@ fun LinuxTerminalScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Linux Terminal (PRoot + su)", color = Color.White) },
+                title = { Text("Linux Terminal (PRoot)", color = Color.White) },
                 navigationIcon = {
                     IconButton(
                         onClick = onBack,
@@ -181,21 +225,21 @@ fun LinuxTerminalScreen(
                 ModelImportButton(
                     context = context,
                     onImportComplete = { linuxModelPath ->
-                        outputLines.add("[*] Модель импортирована в PRoot: $linuxModelPath")
-                        outputLines.add("[*] Конфиг обновлен: /app_data/config.json")
-                        outputLines.add("[*] Проверка: python3 /app_data/ai_engine.py")
+                        appendOutputLine("[*] Модель импортирована в PRoot: $linuxModelPath")
+                        appendOutputLine("[*] Конфиг обновлен: /app_data/config.json")
+                        appendOutputLine("[*] Проверка: python3 /app_data/ai_engine.py")
                     },
                     modifier = Modifier.weight(1f)
                 )
                 LightAiModelsCatalogButton(
                     context = context,
                     onModelReady = { linuxModelPath ->
-                        outputLines.add("[*] Подключена лёгкая модель: $linuxModelPath")
-                        outputLines.add("[*] Конфиг обновлен: /app_data/config.json")
-                        outputLines.add("[*] Запуск ИИ-сервера: python3 /app_data/ai_server.py")
+                        appendOutputLine("[*] Подключена лёгкая модель: $linuxModelPath")
+                        appendOutputLine("[*] Конфиг обновлен: /app_data/config.json")
+                        appendOutputLine("[*] Запуск ИИ-сервера: python3 /app_data/ai_server.py")
                     },
                     onAiToggleChanged = { enabled ->
-                        outputLines.add(
+                        appendOutputLine(
                             if (enabled) "[*] ИИ-ассистент вёрстки включён в config.json"
                             else "[*] ИИ-ассистент вёрстки выключен в config.json"
                         )
@@ -250,7 +294,7 @@ fun LinuxTerminalScreen(
                     modifier = Modifier
                         .weight(1f)
                         .testTag("terminal_command_input"),
-                    placeholder = { Text("команда (например: apk update, su)", color = Color.Gray) },
+                    placeholder = { Text("команда (например: apk update, python3 --version)", color = Color.Gray) },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = Color.White,
@@ -265,7 +309,7 @@ fun LinuxTerminalScreen(
                         val cmd = inputText
                         val writer = processWriter
                         if (cmd.isNotBlank() && writer != null) {
-                            outputLines.add("# $cmd")
+                            appendOutputLine("# $cmd")
                             inputText = ""
                             coroutineScope.launch(Dispatchers.IO) {
                                 writer.println(cmd)
@@ -275,7 +319,7 @@ fun LinuxTerminalScreen(
                     modifier = Modifier
                         .heightIn(min = 48.dp)
                         .testTag("terminal_enter_button"),
-                    enabled = !isLoading
+                    enabled = !isLoading && processWriter != null
                 ) {
                     Text("Enter")
                 }
@@ -318,7 +362,7 @@ fun LinuxTerminalEntryCard(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "Консоль, пакеты APK и поддержка su",
+                    text = "Alpine Linux, пакеты apk и Python",
                     style = MaterialTheme.typography.bodySmall,
                     color = GrayText
                 )

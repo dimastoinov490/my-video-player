@@ -11,7 +11,41 @@ permissions:
   contents: read
 
 jobs:
+  prepare-proot-runtime:
+    name: Build PRoot runtime (${{ matrix.android_abi }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - termux_arch: aarch64
+            android_abi: arm64-v8a
+          - termux_arch: arm
+            android_abi: armeabi-v7a
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install ELF packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y binutils dpkg-dev patchelf
+
+      - name: Build pinned official Termux PRoot runtime
+        env:
+          TERMUX_PACKAGES_REF: 8eb3169dbd10d71ef26e2847191f9ae2a452ab2e
+        run: bash .github/scripts/build-proot-runtime.sh "${{ matrix.termux_arch }}" "${{ matrix.android_abi }}"
+
+      - name: Upload PRoot runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-proot-${{ matrix.android_abi }}
+          path: app/src/main/jniLibs/${{ matrix.android_abi }}/*
+          if-no-files-found: error
+          retention-days: 1
+
   build:
+    needs: prepare-proot-runtime
     runs-on: ubuntu-latest
 
     steps:
@@ -23,6 +57,18 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
+
+      - name: Restore ARM64 PRoot runtime
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-proot-arm64-v8a
+          path: app/src/main/jniLibs/arm64-v8a
+
+      - name: Restore ARMv7 PRoot runtime
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-proot-armeabi-v7a
+          path: app/src/main/jniLibs/armeabi-v7a
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
