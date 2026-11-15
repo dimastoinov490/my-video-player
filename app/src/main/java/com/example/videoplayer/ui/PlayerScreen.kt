@@ -78,6 +78,8 @@ import com.example.videoplayer.archive.ArchivePlaybackSpec
 import com.example.videoplayer.archive.ArchiveSource
 import com.example.videoplayer.archive.ArchiveStreamServer
 import com.example.videoplayer.player.PlaybackTrack
+import com.example.videoplayer.player.AudioEnhancementSession
+import com.example.videoplayer.player.DolbyAudioEnhancer
 import com.example.videoplayer.player.GoogleCastManager
 import com.example.videoplayer.player.CastStartResult
 import com.google.android.gms.cast.framework.CastButtonFactory
@@ -288,6 +290,7 @@ fun PlayerScreen(
 
     var nativeVideoView by remember { mutableStateOf<VideoView?>(null) }
     var nativeMediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
+    var nativeAudioEnhancement by remember { mutableStateOf<AudioEnhancementSession?>(null) }
     var hasStartedVlcPlayback by remember(videoUri) { mutableStateOf(false) }
 
     BackHandler {
@@ -317,6 +320,10 @@ fun PlayerScreen(
                     .putLong("${progressKey}_duration", duration)
                     .apply()
             }
+            try {
+                nativeAudioEnhancement?.close()
+                nativeAudioEnhancement = null
+            } catch (_: Throwable) {}
             try {
                 ArchiveStreamServer.stopSession(latestArchiveSessionId)
             } catch (_: Throwable) {}
@@ -699,6 +706,10 @@ fun PlayerScreen(
                             setVideoURI(uri)
                             setOnPreparedListener { mp ->
                                 nativeMediaPlayer = mp
+                                // Android MediaPlayer exposes a real audio session ID. Attach
+                                // managed effects here; LibVLC does not expose one through this app's API.
+                                nativeAudioEnhancement?.close()
+                                nativeAudioEnhancement = DolbyAudioEnhancer.applyDolbyAtmosEffect(mp.audioSessionId)
                                 totalDurationMs = mp.duration.toLong()
                                 if (!resumePositionApplied) {
                                     resumePositionApplied = true
