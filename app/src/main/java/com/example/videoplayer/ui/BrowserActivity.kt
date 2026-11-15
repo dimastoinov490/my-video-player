@@ -468,6 +468,7 @@ class BrowserActivity : FragmentActivity() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 super.onPageStarted(view, url, favicon)
                 if (target !== webView) return
+                url?.let { address -> browserTabs.firstOrNull { it.view === target }?.url = address }
                 isLoading = true
                 progressBar.visibility = View.VISIBLE
                 progressBar.progress = 5
@@ -544,11 +545,11 @@ class BrowserActivity : FragmentActivity() {
 
             override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message?): Boolean {
                 if (!isUserGesture || !browserPrefs.getBoolean("popups", false)) return false
+                val message = resultMsg ?: return false
                 val popupWebView = createBrowserWebView()
                 val tab = BrowserTab(nextTabId++, popupWebView, "", "Новая вкладка")
                 browserTabs.add(tab)
                 switchToTab(tab)
-                val message = resultMsg ?: return false
                 val transport = message.obj as? WebView.WebViewTransport ?: return false
                 transport.webView = popupWebView
                 message.sendToTarget()
@@ -831,7 +832,7 @@ class BrowserActivity : FragmentActivity() {
             "https://duckduckgo.com/?q=",
             "https://search.brave.com/search?q="
         )
-        val current = browserPrefs.getString("search_engine", urls[0])
+        val current = browserPrefs.getString("search_engine", urls[0]) ?: urls[0]
         val selected = urls.indexOf(current).coerceAtLeast(0)
         AlertDialog.Builder(this).setTitle("Поисковая система")
             .setSingleChoiceItems(engines, selected) { dialog, which ->
@@ -941,8 +942,8 @@ fun configureFullChromiumSettings(webView: WebView) {
         javaScriptEnabled = true
         domStorageEnabled = true
         databaseEnabled = true
-        // Do not allow scripts to spawn unsolicited windows.
-        javaScriptCanOpenWindowsAutomatically = true
+        // Pop-up windows are disabled until the user enables them in browser settings.
+        javaScriptCanOpenWindowsAutomatically = false
         setSupportMultipleWindows(true)
 
         // Отрендерить страницы как на ПК/телефоне с полным масштабом
