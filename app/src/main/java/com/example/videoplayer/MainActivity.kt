@@ -6,6 +6,7 @@ import android.content.SharedPreferences
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -34,6 +35,7 @@ import com.example.videoplayer.archive.ArchiveManager
 import com.example.videoplayer.archive.ArchivePlaybackSpec
 import com.example.videoplayer.archive.ArchiveSource
 import com.example.videoplayer.archive.ArchiveStreamServer
+import com.example.videoplayer.archive.ZipArchiveCreator
 import com.example.videoplayer.ui.ArchiveBrowserScreen
 import com.example.videoplayer.ui.BrowserActivity
 import com.example.videoplayer.ui.LinuxTerminalScreen
@@ -42,6 +44,10 @@ import com.example.videoplayer.ui.PlayerScreen
 import com.example.videoplayer.ui.VideoLibraryScreen
 import com.example.videoplayer.ui.theme.*
 import java.io.File
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : FragmentActivity() {
     private var inPipState by mutableStateOf(false)
@@ -119,6 +125,7 @@ class MainActivity : FragmentActivity() {
         setContent {
             VideoPlayerTheme {
                 val theme = LocalAppTheme.current
+                val coroutineScope = rememberCoroutineScope()
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = theme.background
@@ -196,6 +203,35 @@ class MainActivity : FragmentActivity() {
                                 },
                                 onOpenArchivePicker = {
                                     safArchivePicker.launch(arrayOf("*/*"))
+                                },
+                                onCreateZipArchive = { sourcePath ->
+                                    val source = File(sourcePath)
+                                    if (!source.exists() || (!source.isFile && !source.isDirectory)) {
+                                        Toast.makeText(this@MainActivity, "Источник больше недоступен", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        val rawName = if (source.isDirectory) source.name else source.nameWithoutExtension
+                                        val baseName = rawName.ifBlank { "Archive" }
+                                        var destination = File(source.parentFile, "$baseName.zip")
+                                        var suffix = 1
+                                        while (destination.exists()) {
+                                            destination = File(source.parentFile, "$baseName ($suffix).zip")
+                                            suffix++
+                                        }
+                                        Toast.makeText(this@MainActivity, "Создание ZIP-архива…", Toast.LENGTH_SHORT).show()
+                                        coroutineScope.launch {
+                                            try {
+                                                val created = withContext(Dispatchers.IO) {
+                                                    ZipArchiveCreator.create(listOf(source), destination)
+                                                }
+                                                archiveRefreshTick++
+                                                Toast.makeText(this@MainActivity, "Архив создан: ${created.name}", Toast.LENGTH_LONG).show()
+                                            } catch (e: CancellationException) {
+                                                throw e
+                                            } catch (e: Exception) {
+                                                Toast.makeText(this@MainActivity, "Не удалось создать ZIP: ${e.message ?: "ошибка"}", Toast.LENGTH_LONG).show()
+                                            }
+                                        }
+                                    }
                                 },
                                 onOpenBrowser = { url ->
                                     startActivity(

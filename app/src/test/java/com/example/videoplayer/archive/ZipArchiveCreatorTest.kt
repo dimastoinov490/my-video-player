@@ -77,6 +77,41 @@ class ZipArchiveCreatorTest {
         }
     }
 
+    @Test
+    fun rejectsArchiveDestinationInsideSourceDirectory() = withTempDirectory { root ->
+        val source = File(root, "source").apply { mkdirs() }
+        File(source, "video.mp4").writeText("video")
+        val output = File(source, "result.zip")
+
+        try {
+            ZipArchiveCreator.create(listOf(source), output)
+            fail("Expected destination inside source directory to be rejected")
+        } catch (_: java.io.IOException) {
+            assertFalse(output.exists())
+        }
+    }
+
+    @Test
+    fun rejectsDirectorySymlinkCycles() = withTempDirectory { root ->
+        val source = File(root, "source").apply { mkdirs() }
+        File(source, "video.mp4").writeText("video")
+        val loop = File(source, "loop")
+        try {
+            java.nio.file.Files.createSymbolicLink(loop.toPath(), source.toPath())
+        } catch (_: Exception) {
+            // Symbolic links are not available on every test filesystem.
+            return@withTempDirectory
+        }
+        val output = File(root, "cycle.zip")
+
+        try {
+            ZipArchiveCreator.create(listOf(source), output)
+            fail("Expected directory symlink cycle to be rejected")
+        } catch (_: java.io.IOException) {
+            assertFalse(output.exists())
+        }
+    }
+
     private inline fun withTempDirectory(block: (File) -> Unit) {
         val dir = createTempDir(prefix = "zip-creator-test-")
         try {
