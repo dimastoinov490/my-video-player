@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.ComponentName
 import android.content.Intent
 import android.graphics.Bitmap
 import android.media.MediaScannerConnection
@@ -27,6 +28,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
+import androidx.core.content.ContextCompat
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionToken
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -65,6 +72,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
+import com.example.videoplayer.service.AudioPlaybackService
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -72,6 +80,7 @@ import java.util.concurrent.atomic.AtomicReference
  * Сохраняет дизайн символ в символ без упрощений.
  */
 @SuppressLint("SetJavaScriptEnabled")
+@OptIn(UnstableApi::class)
 @Composable
 fun ExactHtmlVideoLibraryView(
     videos: List<VideoItem>,
@@ -94,6 +103,25 @@ fun ExactHtmlVideoLibraryView(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    var audioController by remember { mutableStateOf<MediaController?>(null) }
+
+    DisposableEffect(context) {
+        val sessionToken = SessionToken(context, ComponentName(context, AudioPlaybackService::class.java))
+        val controllerFuture = MediaController.Builder(context, sessionToken).buildAsync()
+        controllerFuture.addListener(
+            {
+                runCatching { controllerFuture.get() }
+                    .onSuccess { audioController = it }
+            },
+            ContextCompat.getMainExecutor(context)
+        )
+        onDispose {
+            audioController = null
+            MediaController.releaseFuture(controllerFuture)
+        }
+    }
+
+    val latestAudioController by rememberUpdatedState(audioController)
     val latestRefresh by rememberUpdatedState(onRefreshVideos)
     val latestVideos by rememberUpdatedState(videos)
     val latestOpenArchive by rememberUpdatedState(onOpenArchive)
@@ -494,6 +522,55 @@ fun ExactHtmlVideoLibraryView(
                         fun playVideo(uri: String) {
                             Handler(Looper.getMainLooper()).post {
                                 onVideoSelected(uri)
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun playAudio(uri: String) {
+                            val singleTrack = JSONArray().put(JSONObject().put("uri", uri))
+                            playAudioQueue(singleTrack.toString(), 0)
+                        }
+
+                        @JavascriptInterface
+                        fun playAudioQueue(queueJson: String, selectedIndex: Int) {
+                            Handler(Looper.getMainLooper()).post {
+                                val controller = latestAudioController
+                                if (controller == null) {
+                                    Toast.makeText(context, "Аудиоплеер ещё подключается", Toast.LENGTH_SHORT).show()
+                                    return@post
+                                }
+                                try {
+                                    val source = JSONArray(queueJson)
+                                    val mediaItems = ArrayList<MediaItem>(source.length())
+                                    for (index in 0 until source.length()) {
+                                        val track = source.optJSONObject(index) ?: continue
+                                        val uri = track.optString("uri").trim()
+                                        if (uri.isBlank()) continue
+                                        val metadata = MediaMetadata.Builder()
+                                            .setTitle(track.optString("title").ifBlank {
+                                                uri.substringAfterLast('/').substringBefore('?').ifBlank { "Аудио" }
+                                            })
+                                            .setArtist(track.optString("artist").takeIf { it.isNotBlank() })
+                                            .setAlbumTitle(track.optString("album").takeIf { it.isNotBlank() })
+                                            .build()
+                                        mediaItems.add(
+                                            MediaItem.Builder()
+                                                .setUri(uri)
+                                                .setMediaMetadata(metadata)
+                                                .build()
+                                        )
+                                    }
+                                    if (mediaItems.isEmpty()) {
+                                        Toast.makeText(context, "В очереди нет доступных аудиофайлов", Toast.LENGTH_SHORT).show()
+                                        return@post
+                                    }
+                                    val safeIndex = selectedIndex.coerceIn(0, mediaItems.lastIndex)
+                                    controller.setMediaItems(mediaItems, safeIndex, 0L)
+                                    controller.prepare()
+                                    controller.play()
+                                } catch (error: Exception) {
+                                    Toast.makeText(context, "Не удалось открыть очередь аудио", Toast.LENGTH_SHORT).show()
+                                }
                             }
                         }
 
