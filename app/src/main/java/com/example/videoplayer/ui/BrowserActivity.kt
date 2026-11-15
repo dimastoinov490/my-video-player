@@ -50,6 +50,7 @@ class BrowserActivity : FragmentActivity() {
     private data class BrowserTab(val id: Int, val view: WebView, var url: String, var title: String)
     private val browserTabs = mutableListOf<BrowserTab>()
     private var nextTabId = 1
+    private var mobileUserAgent: String? = null
     private lateinit var webViewHost: FrameLayout
     private val browserPrefs by lazy { getSharedPreferences("nexora_browser", MODE_PRIVATE) }
 
@@ -459,6 +460,7 @@ class BrowserActivity : FragmentActivity() {
     private fun setupWebView(target: WebView) {
         configureFullChromiumSettings(target)
         target.settings.userAgentString = target.settings.userAgentString.replace("; wv", "")
+        if (mobileUserAgent == null) mobileUserAgent = target.settings.userAgentString
         applyBrowserPreferences(target)
         setupDownloadListener(this, target)
 
@@ -534,7 +536,7 @@ class BrowserActivity : FragmentActivity() {
                 super.onReceivedTitle(view, title)
                 if (!title.isNullOrBlank()) {
                     browserTabs.firstOrNull { it.view === target }?.title = title
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    if (target === webView && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                         setTaskDescription(ActivityManager.TaskDescription(title))
                     }
                 }
@@ -645,10 +647,11 @@ class BrowserActivity : FragmentActivity() {
             )
         }
 
+        val menuScroll = ScrollView(this).apply { addView(popupView) }
         val popupWindow = PopupWindow(
-            popupView,
+            menuScroll,
             (240 * density).toInt(),
-            ViewGroup.LayoutParams.WRAP_CONTENT,
+            (resources.displayMetrics.heightPixels * 0.72f).toInt(),
             true
         ).apply {
             elevation = 16 * density
@@ -747,8 +750,8 @@ class BrowserActivity : FragmentActivity() {
 
     private fun showTabsDialog() {
         if (browserTabs.isEmpty()) return
-        val labels = browserTabs.mapIndexed { index, tab -> "\${index + 1}. \${tab.title.ifBlank { "Новая вкладка" }}\n\${tab.url.ifBlank { "Пустая вкладка" }}" }.toTypedArray()
-        AlertDialog.Builder(this).setTitle("Вкладки — \${browserTabs.size}")
+        val labels = browserTabs.mapIndexed { index, tab -> (index + 1).toString() + ". " + tab.title.ifBlank { "Новая вкладка" } + "\n" + tab.url.ifBlank { "Пустая вкладка" } }.toTypedArray()
+        AlertDialog.Builder(this).setTitle("Вкладки — " + browserTabs.size)
             .setItems(labels) { _, which -> switchToTab(browserTabs[which]) }
             .setPositiveButton("Новая вкладка") { _, _ -> createNewTab() }
             .setNegativeButton("Закрыть", null).show()
@@ -775,7 +778,7 @@ class BrowserActivity : FragmentActivity() {
             val url = item.optString("url")
             if (url.isBlank()) continue
             urls.add(url)
-            labels.add("\${item.optString("title").ifBlank { url }}\n$url")
+            labels.add(item.optString("title").ifBlank { url } + "\n" + url)
         }
         AlertDialog.Builder(this).setTitle("История")
             .setItems(labels.toTypedArray()) { _, which -> loadAddress(urls[which]) }
@@ -813,8 +816,10 @@ class BrowserActivity : FragmentActivity() {
         target.settings.javaScriptCanOpenWindowsAutomatically = browserPrefs.getBoolean("popups", false)
         CookieManager.getInstance().setAcceptCookie(browserPrefs.getBoolean("cookies", true))
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) CookieManager.getInstance().setAcceptThirdPartyCookies(target, browserPrefs.getBoolean("third_party_cookies", true))
-        if (browserPrefs.getBoolean("desktop_site", false)) {
-            target.settings.userAgentString = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        target.settings.userAgentString = if (browserPrefs.getBoolean("desktop_site", false)) {
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        } else {
+            mobileUserAgent ?: target.settings.userAgentString
         }
     }
 
