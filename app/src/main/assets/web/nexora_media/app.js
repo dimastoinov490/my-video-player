@@ -2437,32 +2437,37 @@
     if (act === 'info') toast(`${v.title} — ${v.fmt}${v.size ? ', ' + v.size : ''}, ${v.dur}`);
   }
 
-  /* ---------- сцена 1600x900 (16:9) + портретный поворот на 90° + свайп-прокрутка ---------- */
+  /* ---------- адаптация сцены 1600x900 к реальному экрану ---------- */
   let rotated = false, curScale = 1, suppressClick = 0, fitFrame = 0;
 
-  // Use the actual WebView layout viewport, not innerWidth/innerHeight.
-  // The latter can be stale for a frame during Android orientation changes.
   function fit() {
     const root = document.documentElement;
-    const W = Math.max(1, root.clientWidth || window.innerWidth || 1);
-    const H = Math.max(1, root.clientHeight || window.innerHeight || 1);
+    const vv = window.visualViewport;
+    // Prefer the visible viewport on mobile browsers; fall back to the layout
+    // viewport for browsers without VisualViewport support.
+    const layoutW = Math.max(1, root.clientWidth || window.innerWidth || 1);
+    const layoutH = Math.max(1, root.clientHeight || window.innerHeight || 1);
+    const W = Math.max(1, vv && vv.width ? vv.width : layoutW);
+    const H = Math.max(1, vv && vv.height ? vv.height : layoutH);
+    const left = vv ? vv.offsetLeft || 0 : 0;
+    const top = vv ? vv.offsetTop || 0 : 0;
     const rot = H > W;
-    const dpr = window.devicePixelRatio || 1;
-    const vw = rot ? H : W;
-    const vh = rot ? W : H;
-    const s = Math.min(vw / 1600, vh / 900);
+    const sceneW = rot ? 900 : 1600;
+    const sceneH = rot ? 1600 : 900;
+    const s = Math.min(W / sceneW, H / sceneH);
 
     rotated = rot;
     curScale = s;
 
-    // Keep the fixed 16:9 scene proportional and center its rotated bounds.
-    // Positive 90deg maps the 1600x900 scene to a 900x1600 portrait canvas.
-    const snap = (v) => Math.round(v * dpr) / dpr;
+    // The scene is transformed around its top-left corner. Calculate the
+    // translated bounds after rotation so the entire canvas stays centered.
+    const tx = rot ? left + (W + sceneW * s) / 2 : left + (W - sceneW * s) / 2;
+    const ty = top + (H - sceneH * s) / 2;
     const style = root.style;
     style.setProperty('--s', String(s));
     style.setProperty('--r', rot ? '90deg' : '0deg');
-    style.setProperty('--tx', snap(rot ? (W + 900 * s) / 2 : (W - 1600 * s) / 2) + 'px');
-    style.setProperty('--ty', snap(rot ? (H - 1600 * s) / 2 : (H - 900 * s) / 2) + 'px');
+    style.setProperty('--tx', tx + 'px');
+    style.setProperty('--ty', ty + 'px');
   }
 
   function scheduleFit() {
@@ -2475,13 +2480,20 @@
 
   window.addEventListener('resize', scheduleFit, { passive: true });
   window.addEventListener('orientationchange', () => {
-    // Android WebView may report the new orientation before its layout size
-    // has settled. Refit after the viewport has completed its transition.
+    // Recalculate after Android/browser viewport dimensions have settled.
     scheduleFit();
-    setTimeout(scheduleFit, 180);
-    setTimeout(scheduleFit, 420);
+    setTimeout(scheduleFit, 120);
+    setTimeout(scheduleFit, 360);
   }, { passive: true });
-  fit();
+  if (window.screen && screen.orientation && screen.orientation.addEventListener) {
+    screen.orientation.addEventListener('change', scheduleFit);
+  }
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', scheduleFit, { passive: true });
+    window.visualViewport.addEventListener('scroll', scheduleFit, { passive: true });
+  }
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(scheduleFit);
+  scheduleFit();
 
   /* плавный свайп пальцем в повёрнутом на 90° макете */
   (() => {
