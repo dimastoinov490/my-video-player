@@ -29,8 +29,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.C
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -61,6 +65,8 @@ import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import com.google.zxing.common.BitMatrix
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -102,6 +108,7 @@ fun ExactHtmlVideoLibraryView(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val coroutineScope = rememberCoroutineScope()
     var audioController by remember { mutableStateOf<MediaController?>(null) }
 
@@ -121,7 +128,22 @@ fun ExactHtmlVideoLibraryView(
         }
     }
 
+    // Respect the app's background playback preference for the Media3 session too.
+    DisposableEffect(lifecycleOwner, audioController) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                val allowBackgroundPlayback = context
+                    .getSharedPreferences("video_prefs", Context.MODE_PRIVATE)
+                    .getBoolean("bg_play", false)
+                if (!allowBackgroundPlayback) audioController?.pause()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     val latestAudioController by rememberUpdatedState(audioController)
+
     val latestRefresh by rememberUpdatedState(onRefreshVideos)
     val latestVideos by rememberUpdatedState(videos)
     val latestOpenArchive by rememberUpdatedState(onOpenArchive)
@@ -143,6 +165,32 @@ fun ExactHtmlVideoLibraryView(
         }
     }
     var currentBrowsePath by remember { mutableStateOf(rootBrowsePath) }
+
+    // Keep the compact HTML player synchronized with the real Media3 session.
+    LaunchedEffect(audioController, isPageReady) {
+        if (!isPageReady) return@LaunchedEffect
+        val controller = audioController ?: return@LaunchedEffect
+        while (isActive) {
+            val item = controller.currentMediaItem
+            val metadata = item?.mediaMetadata
+            val duration = controller.duration.takeIf { it > 0 && it != C.TIME_UNSET } ?: 0L
+            val state = JSONObject()
+                .put("title", metadata?.title?.toString().orEmpty())
+                .put("artist", metadata?.artist?.toString().orEmpty())
+                .put("isPlaying", controller.isPlaying)
+                .put("hasTrack", item != null)
+                .put("position", controller.currentPosition.coerceAtLeast(0L))
+                .put("duration", duration)
+                .put("index", controller.currentMediaItemIndex)
+                .put("queueSize", controller.mediaItemCount)
+                .toString()
+            webViewRef?.takeIf { isPageReady && it.isAttachedToWindow }?.evaluateJavascript(
+                "window.updateAudioPlayback && window.updateAudioPlayback($state)",
+                null
+            )
+            delay(if (controller.isPlaying) 450L else 1000L)
+        }
+    }
 
     fun sendThumbsToWeb(webView: WebView, list: List<VideoItem>) {
         if (list.isEmpty()) return
@@ -570,6 +618,45 @@ fun ExactHtmlVideoLibraryView(
                                     controller.play()
                                 } catch (error: Exception) {
                                     Toast.makeText(context, "Не удалось открыть очередь аудио", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun audioPlayPause() {
+                            Handler(Looper.getMainLooper()).post {
+                                latestAudioController?.let { controller ->
+                                    if (controller.isPlaying) controller.pause() else controller.play()
+                                }
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun audioNext() {
+                            Handler(Looper.getMainLooper()).post {
+                                latestAudioController?.let { controller ->
+                                    if (controller.hasNextMediaItem()) controller.seekToNextMediaItem()
+                                }
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun audioPrevious() {
+                            Handler(Looper.getMainLooper()).post {
+                                latestAudioController?.let { controller ->
+                                    if (controller.hasPreviousMediaItem()) controller.seekToPreviousMediaItem()
+                                    else controller.seekTo(0L)
+                                }
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun audioSeekTo(positionMs: Long) {
+                            Handler(Looper.getMainLooper()).post {
+                                latestAudioController?.let { controller ->
+                                    val target = positionMs.coerceAtLeast(0L)
+                                    val duration = controller.duration
+                                    controller.seekTo(if (duration > 0 && duration != C.TIME_UNSET) target.coerceAtMost(duration) else target)
                                 }
                             }
                         }
