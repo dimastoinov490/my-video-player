@@ -217,6 +217,7 @@ class MainActivity : FragmentActivity() {
                                             destination = File(source.parentFile, "$baseName ($suffix).zip")
                                             suffix++
                                         }
+                                        Toast.makeText(this@MainActivity, "Создание ZIP-архива…", Toast.LENGTH_SHORT).show()
                                         coroutineScope.launch {
                                             try {
                                                 val created = withContext(Dispatchers.IO) {
