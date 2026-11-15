@@ -342,11 +342,11 @@ class BrowserActivity : FragmentActivity() {
                 "https://$trimmed"
             }
             else -> {
-                "https://www.google.com/search?q=" + try {
+                val searchBase = browserPrefs.getString("search_engine", "https://www.google.com/search?q=")
+                    ?: "https://www.google.com/search?q="
+                searchBase + try {
                     URLEncoder.encode(trimmed, "UTF-8")
-                } catch (_: Exception) {
-                    trimmed
-                }
+                } catch (_: Exception) { trimmed }
             }
         }
         webView.loadUrl(urlToLoad)
@@ -535,6 +535,18 @@ class BrowserActivity : FragmentActivity() {
                 }
             }
 
+            override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message?): Boolean {
+                if (!isUserGesture || !browserPrefs.getBoolean("popups", false)) return false
+                val popupWebView = createBrowserWebView()
+                val tab = BrowserTab(nextTabId++, popupWebView, "", "Новая вкладка")
+                browserTabs.add(tab)
+                switchToTab(tab)
+                val transport = resultMsg?.obj as? WebView.WebViewTransport ?: return false
+                transport.webView = popupWebView
+                resultMsg.sendToTarget()
+                return true
+            }
+
             override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
                 if (target !== webView) return
                 if (customView != null) {
@@ -644,6 +656,8 @@ class BrowserActivity : FragmentActivity() {
         addMenuItem(popupView, "Закладки") { popupWindow.dismiss(); showBookmarksDialog() }
         addMenuItem(popupView, "Добавить закладку") { popupWindow.dismiss(); addCurrentBookmark() }
         addMenuItem(popupView, "Настройки") { popupWindow.dismiss(); showBrowserSettings() }
+        addMenuItem(popupView, "Поисковая система") { popupWindow.dismiss(); showSearchEngineDialog() }
+        addMenuItem(popupView, "Главная страница") { popupWindow.dismiss(); showHomePageDialog() }
         addMenuItem(popupView, "Вперёд", enabled = webView.canGoForward()) {
             popupWindow.dismiss()
             if (webView.canGoForward()) webView.goForward()
@@ -798,6 +812,41 @@ class BrowserActivity : FragmentActivity() {
         }
     }
 
+    private fun showSearchEngineDialog() {
+        val engines = arrayOf("Google", "Bing", "DuckDuckGo", "Brave Search")
+        val urls = arrayOf(
+            "https://www.google.com/search?q=",
+            "https://www.bing.com/search?q=",
+            "https://duckduckgo.com/?q=",
+            "https://search.brave.com/search?q="
+        )
+        val current = browserPrefs.getString("search_engine", urls[0])
+        val selected = urls.indexOf(current).coerceAtLeast(0)
+        AlertDialog.Builder(this).setTitle("Поисковая система")
+            .setSingleChoiceItems(engines, selected) { dialog, which ->
+                browserPrefs.edit().putString("search_engine", urls[which]).apply()
+                dialog.dismiss()
+            }.setNegativeButton("Отмена", null).show()
+    }
+
+    private fun showHomePageDialog() {
+        val input = EditText(this).apply {
+            setSingleLine(true)
+            setText(browserPrefs.getString("home_page", "https://www.google.com"))
+            hint = "https://example.com"
+        }
+        AlertDialog.Builder(this).setTitle("Главная страница").setView(input)
+            .setPositiveButton("Сохранить") { _, _ ->
+                val value = input.text.toString().trim()
+                if (value.startsWith("https://") || value.startsWith("http://")) {
+                    browserPrefs.edit().putString("home_page", value).apply()
+                    Toast.makeText(this, "Главная страница сохранена", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, "Укажите полный адрес с http:// или https://", Toast.LENGTH_SHORT).show()
+                }
+            }.setNegativeButton("Отмена", null).show()
+    }
+
     private fun showBrowserSettings() {
         val keys = arrayOf("javascript", "cookies", "third_party_cookies", "images", "popups", "desktop_site")
         val labels = arrayOf("JavaScript", "Файлы cookie", "Сторонние cookie", "Изображения", "Всплывающие окна", "Версия для ПК")
@@ -882,7 +931,8 @@ fun configureFullChromiumSettings(webView: WebView) {
         domStorageEnabled = true
         databaseEnabled = true
         // Do not allow scripts to spawn unsolicited windows.
-        javaScriptCanOpenWindowsAutomatically = false
+        javaScriptCanOpenWindowsAutomatically = true
+        setSupportMultipleWindows(true)
 
         // Отрендерить страницы как на ПК/телефоне с полным масштабом
         loadWithOverviewMode = true
