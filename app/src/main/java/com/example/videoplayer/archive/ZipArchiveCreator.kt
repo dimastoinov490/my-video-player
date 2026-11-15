@@ -124,7 +124,9 @@ object ZipArchiveCreator {
 
             if (canonical.isDirectory) {
                 result.add(PendingEntry(canonical, if (cleanPath.endsWith('/')) cleanPath else "$cleanPath/"))
-                if (!visitedDirectories.add(canonical.path)) return
+                if (!visitedDirectories.add(canonical.path)) {
+                    throw IOException("Папка добавлена в архив повторно или содержит циклическую ссылку: ${file.absolutePath}")
+                }
                 val children = canonical.listFiles()?.sortedBy { it.name }
                     ?: throw IOException("Не удалось прочитать папку: ${canonical.absolutePath}")
                 for (child in children) {
