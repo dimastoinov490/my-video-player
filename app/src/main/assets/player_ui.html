@@ -515,7 +515,7 @@ body{background:#010104}
 .audio-now .tile{
   background:
     linear-gradient(145deg,rgba(255,122,0,.2),rgba(49,19,11,.6)),
-    url("thumb_nature.jpg") center/cover;
+    url("nexora/vinyl.webp") center/cover;
   border-color:rgba(255,154,26,.5);
 }
 .audio-now-btn.main{background:linear-gradient(135deg,#ffb21a,#ff5200);box-shadow:0 0 calc(18*var(--u)) rgba(255,106,0,.3)}
@@ -536,6 +536,15 @@ input,select,textarea{accent-color:#ff9a1a}
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
 }
+
+
+.audio-now{position:relative;overflow:hidden}
+.audio-now::after{
+  content:"";position:absolute;left:calc(22*var(--u));right:calc(22*var(--u));bottom:calc(2*var(--u));
+  height:calc(48*var(--u));background:url("nexora/wave.webp") center/100% 100% no-repeat;
+  opacity:.88;pointer-events:none;
+}
+.audio-now-top,.audio-now-progress{position:relative;z-index:1}
 
 </style>
 </head>
