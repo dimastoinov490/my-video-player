@@ -26,15 +26,31 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Restore cached PRoot runtime
+        id: proot-cache
+        uses: actions/cache@v4
+        with:
+          path: app/src/main/jniLibs/${{ matrix.android_abi }}
+          key: termux-proot-${{ matrix.android_abi }}-8eb3169dbd10d71ef26e2847191f9ae2a452ab2e-${{ hashFiles('.github/scripts/build-proot-runtime.sh') }}
+
       - name: Install ELF packaging tools
+        if: steps.proot-cache.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y binutils dpkg-dev patchelf
 
       - name: Build pinned official Termux PRoot runtime
+        if: steps.proot-cache.outputs.cache-hit != 'true'
         env:
           TERMUX_PACKAGES_REF: 8eb3169dbd10d71ef26e2847191f9ae2a452ab2e
         run: bash .github/scripts/build-proot-runtime.sh "${{ matrix.termux_arch }}" "${{ matrix.android_abi }}"
+
+      - name: Validate restored PRoot runtime
+        run: |
+          set -euo pipefail
+          for file in libproot.so libproot_loader.so libtalloc.so libandroid-shmem.so; do
+            test -s "app/src/main/jniLibs/${{ matrix.android_abi }}/$file"
+          done
 
       - name: Upload PRoot runtime
         uses: actions/upload-artifact@v4
@@ -72,12 +88,6 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
-
-      - name: Restore Debug Keystore from Base64
-        run: |
-          if [ -f debug.keystore.base64 ]; then
-            base64 --decode debug.keystore.base64 > debug.keystore
-          fi
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
