@@ -896,8 +896,8 @@ body{font-family:Roboto,"Liberation Sans Narrow","Liberation Sans",Arial,sans-se
       <button class="settings-entry item" type="button" data-settings-action="playback">
         <span class="settings-symbol"><svg class="ic"><use href="#i-play"/></svg></span><span class="settings-copy"><b>Воспроизведение</b><small>Аппаратное декодирование, фон и ориентация</small></span><span class="settings-arrow"><svg class="ic"><use href="#i-chev"/></svg></span>
       </button>
-      <button class="settings-entry item" type="button" data-settings-action="interface">
-        <span class="settings-symbol"><svg class="ic"><use href="#i-gear"/></svg></span><span class="settings-copy"><b>Интерфейс</b><small>Оформление и поведение экранов</small></span><span class="settings-arrow"><svg class="ic"><use href="#i-chev"/></svg></span>
+      <button class="settings-entry item" type="button" data-settings-action="playlists">
+        <span class="settings-symbol"><svg class="ic"><use href="#i-list"/></svg></span><span class="settings-copy"><b>Плейлисты</b><small>Создание и управление подборками медиафайлов</small></span><span class="settings-arrow"><svg class="ic"><use href="#i-chev"/></svg></span>
       </button>
       <button class="settings-entry item" type="button" data-settings-action="library">
         <span class="settings-symbol"><svg class="ic"><use href="#i-folder"/></svg></span><span class="settings-copy"><b>Библиотека</b><small>Видео, аудио, изображения и папки</small></span><span class="settings-arrow"><svg class="ic"><use href="#i-chev"/></svg></span>
@@ -1966,8 +1966,9 @@ document.querySelectorAll('#p-settings [data-settings-action]').forEach(button =
       switchNavTab('video', 1);
     } else if (action === 'advanced') {
       switchNavTab('more', 5);
-    } else if (action === 'interface') {
-      openSub('settings');
+    } else if (action === 'playlists') {
+      switchNavTab('video', 1);
+      document.querySelector('#tabs .t2')?.click();
     }
     setTimeout(() => button.classList.remove('pressed'), 220);
   });
