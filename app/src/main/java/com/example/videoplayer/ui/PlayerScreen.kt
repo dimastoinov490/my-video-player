@@ -575,7 +575,7 @@ fun PlayerScreen(
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF000104))
+            .background(Color(0xFF010104))
             .pointerInput(isControlsLocked) {
                 detectTapGestures(
                     onTap = {
@@ -798,8 +798,8 @@ fun PlayerScreen(
                     .statusBarsPadding()
                     .padding(top = (80f * uVal).dp.coerceAtLeast(20.dp)),
                 shape = RoundedCornerShape(20.dp),
-                color = Color(0xEE080C1E),
-                border = BorderStroke(1.dp, Color(0xFF00D8FF)),
+                color = Color(0xEE120D20),
+                border = BorderStroke(1.dp, Color(0xFFFF9A1A)),
                 shadowElevation = 8.dp
             ) {
                 Text(
@@ -860,7 +860,7 @@ fun PlayerScreen(
                         text = "Nexora",
                         style = TextStyle(
                             brush = Brush.horizontalGradient(
-                                listOf(Color(0xFF74F0FF), Color(0xFF8FA6FF), Color(0xFF9A5CFF))
+                                listOf(Color(0xFFFFC36A), Color(0xFFB05CFF), Color(0xFFA24EE6))
                             ),
                             fontSize = (36f * uVal).sp,
                             fontWeight = FontWeight.SemiBold,
@@ -911,7 +911,7 @@ fun PlayerScreen(
                         ) {
                             DropdownMenuItem(
                                 text = { Text("Информация о видео", color = Color.White) },
-                                leadingIcon = { Icon(Icons.Default.Info, null, tint = Color(0xFF00D8FF)) },
+                                leadingIcon = { Icon(Icons.Default.Info, null, tint = Color(0xFFFF9A1A)) },
                                 onClick = {
                                     showTopOverflowMenu = false
                                     infoFeedbackText = "Формат: ${videoUri.substringAfterLast('.')} • Длительность: ${formatTime(totalDurationMs)}"
@@ -919,7 +919,7 @@ fun PlayerScreen(
                             )
                             DropdownMenuItem(
                                 text = { Text("Заблокировать экран", color = Color.White) },
-                                leadingIcon = { Icon(Icons.Default.Lock, null, tint = Color(0xFF5A78FF)) },
+                                leadingIcon = { Icon(Icons.Default.Lock, null, tint = Color(0xFFB05CFF)) },
                                 onClick = {
                                     showTopOverflowMenu = false
                                     isControlsLocked = true
@@ -966,7 +966,7 @@ fun PlayerScreen(
                         ) {
                             Text(
                                 text = formatTime(currentTimeMs),
-                                color = Color(0xFF00D4E5),
+                                color = Color(0xFFFF8A00),
                                 fontSize = (22f * uVal).sp,
                                 fontWeight = FontWeight.SemiBold,
                                 fontFamily = FontFamily.Monospace
@@ -986,7 +986,7 @@ fun PlayerScreen(
                         } else 0f
 
                         val seekTrackBrush = Brush.horizontalGradient(
-                            colors = listOf(Color(0xFF00BAF1), Color(0xFF606DF7), Color(0xFFA63EF6))
+                            colors = listOf(Color(0xFFFF6A00), Color(0xFF9A45F2), Color(0xFFA63EF6))
                         )
 
                         Box(
@@ -1042,14 +1042,14 @@ fun PlayerScreen(
 
                                 // Soft glow
                                 drawCircle(
-                                    color = Color(0x8C279DFE),
+                                    color = Color(0x8CFF9A1A),
                                     radius = knobRadius + (7f * uVal).dp.toPx().coerceAtLeast(3f),
                                     center = Offset(knobCenterX, knobCenterY)
                                 )
                                 // Knob circle
                                 drawCircle(
                                     brush = Brush.radialGradient(
-                                        colors = listOf(Color(0xFF6CC0FF), Color(0xFF279DFE)),
+                                        colors = listOf(Color(0xFFFFB02A), Color(0xFFFF7A00)),
                                         center = Offset(knobCenterX - (3f * uVal).dp.toPx(), knobCenterY - (3f * uVal).dp.toPx()),
                                         radius = knobRadius
                                     ),
@@ -1206,7 +1206,7 @@ fun PlayerScreen(
                             )
                             Button(
                                 onClick = { isControlsLocked = false },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00D8FF)),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9A1A)),
                                 shape = RoundedCornerShape(12.dp)
                             ) {
                                 Icon(Icons.Default.LockOpen, null, tint = Color.Black, modifier = Modifier.size(16.dp))
@@ -1238,7 +1238,7 @@ fun PlayerScreen(
                         modifier = Modifier.heightIn(max = 380.dp).verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text("Звуковая дорожка", color = Color(0xFF00D8FF), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        Text("Звуковая дорожка", color = Color(0xFFFF9A1A), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                         if (useNativeFallback) {
                             Text("Выбор дорожек недоступен в резервном Android-плеере.", color = Color.LightGray, fontSize = 12.sp)
                         } else if (audioTracks.isEmpty()) {
@@ -1264,15 +1264,15 @@ fun PlayerScreen(
                                                 infoFeedbackText = "Звуковая дорожка изменена"
                                             } else infoFeedbackText = "Не удалось переключить дорожку"
                                         },
-                                        colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF00D8FF))
+                                        colors = RadioButtonDefaults.colors(selectedColor = Color(0xFFFF9A1A))
                                     )
                                     Text(track.name.ifBlank { "Дорожка ${track.id}" }, color = Color.LightGray, fontSize = 12.sp)
                                 }
                             }
                         }
 
-                        Divider(color = Color(0x334A607A))
-                        Text("Субтитры", color = Color(0xFF00D8FF), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        Divider(color = Color(0x33A58BBE))
+                        Text("Субтитры", color = Color(0xFFFF9A1A), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                         if (useNativeFallback) {
                             Text("Выбор субтитров недоступен в резервном Android-плеере.", color = Color.LightGray, fontSize = 12.sp)
                         } else {
@@ -1293,7 +1293,7 @@ fun PlayerScreen(
                                             infoFeedbackText = "Субтитры отключены"
                                         } else infoFeedbackText = "Не удалось изменить субтитры"
                                     },
-                                    colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF00D8FF))
+                                    colors = RadioButtonDefaults.colors(selectedColor = Color(0xFFFF9A1A))
                                 )
                                 Text("Отключены", color = Color.LightGray, fontSize = 12.sp)
                             }
@@ -1318,7 +1318,7 @@ fun PlayerScreen(
                                                     infoFeedbackText = "Субтитры включены"
                                                 } else infoFeedbackText = "Не удалось включить субтитры"
                                             },
-                                            colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF00D8FF))
+                                            colors = RadioButtonDefaults.colors(selectedColor = Color(0xFFFF9A1A))
                                         )
                                         Text(track.name.ifBlank { "Субтитры ${track.id}" }, color = Color.LightGray, fontSize = 12.sp)
                                     }
@@ -1329,10 +1329,10 @@ fun PlayerScreen(
                 },
                 confirmButton = {
                     TextButton(onClick = { showSubtitlesDialog = false }) {
-                        Text("Закрыть", color = Color(0xFF00D8FF))
+                        Text("Закрыть", color = Color(0xFFFF9A1A))
                     }
                 },
-                containerColor = Color(0xFF0D111A),
+                containerColor = Color(0xFF100B18),
                 shape = RoundedCornerShape(16.dp)
             )
         }
@@ -1388,7 +1388,7 @@ fun PlayerScreen(
                         Text("Закрыть", color = Color(0xFFA63EF6))
                     }
                 },
-                containerColor = Color(0xFF0D111A),
+                containerColor = Color(0xFF100B18),
                 shape = RoundedCornerShape(16.dp)
             )
         }
@@ -1397,7 +1397,7 @@ fun PlayerScreen(
         if (showMoreBottomSheet) {
             ModalBottomSheet(
                 onDismissRequest = { showMoreBottomSheet = false },
-                containerColor = Color(0xFF0B0E14),
+                containerColor = Color(0xFF090610),
                 scrimColor = Color.Black.copy(alpha = 0.6f)
             ) {
                 Column(
@@ -1422,7 +1422,7 @@ fun PlayerScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text("Блокировка касаний", color = Color.LightGray, fontSize = 14.sp)
-                        Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFF00D8FF))
+                        Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFFFF9A1A))
                     }
 
                     // Speed selector
@@ -1462,7 +1462,7 @@ fun PlayerScreen(
                                     },
                                     label = { Text("${spd}x", fontSize = 11.sp) },
                                     colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = Color(0xFF00D8FF),
+                                        selectedContainerColor = Color(0xFFFF9A1A),
                                         selectedLabelColor = Color.Black
                                     )
                                 )
@@ -1495,7 +1495,7 @@ fun PlayerScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text("Картинка в картинке", color = Color.LightGray, fontSize = 14.sp)
-                        Icon(Icons.Default.PictureInPictureAlt, contentDescription = null, tint = Color(0xFF00D8FF))
+                        Icon(Icons.Default.PictureInPictureAlt, contentDescription = null, tint = Color(0xFFFF9A1A))
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -1546,12 +1546,12 @@ private fun NexoraLogoCanvas(uVal: Float) {
         val rectH = 59.6f * sY
         val rx = 15f * sX
         val gLogo = Brush.linearGradient(
-            colors = listOf(Color(0xFF00D8FF), Color(0xFF5A78FF), Color(0xFF9A45F2)),
+            colors = listOf(Color(0xFFFF9A1A), Color(0xFFB05CFF), Color(0xFF9A45F2)),
             start = Offset(0f, 0f),
             end = Offset(size.width, size.height)
         )
         drawRoundRect(
-            color = Color(0xFF03071A),
+            color = Color(0xFF080510),
             topLeft = Offset(rectX, rectY),
             size = Size(rectW, rectH),
             cornerRadius = CornerRadius(rx, rx)
@@ -1569,10 +1569,10 @@ private fun NexoraLogoCanvas(uVal: Float) {
             lineTo(45f * sX, 32f * sY)
             close()
         }
-        drawPath(triPath, color = Color(0xFFABE2FF))
+        drawPath(triPath, color = Color(0xFFFFD08A))
         drawPath(
             triPath,
-            color = Color(0xFFABE2FF),
+            color = Color(0xFFFFD08A),
             style = Stroke(
                 width = (3f * sX).coerceAtLeast(1.5f),
                 join = StrokeJoin.Round
@@ -1587,7 +1587,7 @@ private fun CastIconCanvas(uVal: Float) {
         val sX = size.width / 52f
         val sY = size.height / 42f
         val gAll = Brush.linearGradient(
-            colors = listOf(Color(0xFF00D8FF), Color(0xFF5A78FF), Color(0xFFA63EF6)),
+            colors = listOf(Color(0xFFFF9A1A), Color(0xFFB05CFF), Color(0xFFA63EF6)),
             start = Offset.Zero,
             end = Offset(size.width, size.height)
         )
@@ -1651,7 +1651,7 @@ private fun SubtitlesIconCanvas(uVal: Float) {
         val sX = size.width / 52f
         val sY = size.height / 46f
         val gCyan = Brush.linearGradient(
-            colors = listOf(Color(0xFF00DCFF), Color(0xFF3D8BFF)),
+            colors = listOf(Color(0xFFFF9A1A), Color(0xFFFF6A00)),
             start = Offset.Zero,
             end = Offset(size.width, size.height)
         )
@@ -1682,13 +1682,13 @@ private fun RepeatIconCanvas(uVal: Float, isActive: Boolean) {
         val sY = size.height / 46f
         val gBlue = if (isActive) {
             Brush.linearGradient(
-                colors = listOf(Color(0xFF00E2FF), Color(0xFF74F0FF)),
+                colors = listOf(Color(0xFFFFB02A), Color(0xFFFFC36A)),
                 start = Offset.Zero,
                 end = Offset(size.width, size.height)
             )
         } else {
             Brush.linearGradient(
-                colors = listOf(Color(0xFF3FB0FF), Color(0xFF8A62FF)),
+                colors = listOf(Color(0xFFFF9A1A), Color(0xFFB05CFF)),
                 start = Offset.Zero,
                 end = Offset(size.width, size.height)
             )
@@ -1734,7 +1734,7 @@ private fun PrevIconCanvas(uVal: Float) {
         val sX = size.width / 40f
         val sY = size.height / 36f
         val gCyan = Brush.linearGradient(
-            colors = listOf(Color(0xFF00DCFF), Color(0xFF3D8BFF)),
+            colors = listOf(Color(0xFFFF9A1A), Color(0xFFFF6A00)),
             start = Offset.Zero,
             end = Offset(size.width, size.height)
         )
@@ -1765,7 +1765,7 @@ private fun SmallPlayPauseCanvas(uVal: Float, isPlaying: Boolean) {
         val sX = size.width / 80f
         val sY = size.height / 80f
         val gRing = Brush.linearGradient(
-            colors = listOf(Color(0xFF00E2FF), Color(0xFF4F8DFF), Color(0xFFA24EE6)),
+            colors = listOf(Color(0xFFFFB02A), Color(0xFFB05CFF), Color(0xFFA24EE6)),
             start = Offset(0f, size.height * 0.25f),
             end = Offset(size.width, size.height * 0.75f)
         )
@@ -1815,7 +1815,7 @@ private fun NextIconCanvas(uVal: Float) {
         val sX = size.width / 40f
         val sY = size.height / 36f
         val gPurple = Brush.linearGradient(
-            colors = listOf(Color(0xFF6A8BFF), Color(0xFFB05CFF)),
+            colors = listOf(Color(0xFFA24EE6), Color(0xFFB05CFF)),
             start = Offset.Zero,
             end = Offset(size.width, size.height)
         )
@@ -1846,7 +1846,7 @@ private fun PipIconCanvas(uVal: Float) {
         val sX = size.width / 56f
         val sY = size.height / 46f
         val gCyan = Brush.linearGradient(
-            colors = listOf(Color(0xFF00DCFF), Color(0xFF3D8BFF)),
+            colors = listOf(Color(0xFFFF9A1A), Color(0xFFFF6A00)),
             start = Offset.Zero,
             end = Offset(size.width, size.height)
         )
@@ -2028,8 +2028,8 @@ private fun VerticalBarCanvas(uVal: Float, fraction: Float) {
                 drawRect(
                     brush = Brush.verticalGradient(
                         0.0f to Color(0xFFA63EF6),
-                        0.45f to Color(0xFF606DF7),
-                        1.0f to Color(0xFF00BAF1)
+                        0.45f to Color(0xFF9A45F2),
+                        1.0f to Color(0xFFFF6A00)
                     ),
                     topLeft = Offset(0f, size.height - fillH),
                     size = Size(size.width, fillH)
@@ -2044,7 +2044,7 @@ private fun SunIconCanvas(uVal: Float) {
     Canvas(modifier = Modifier.size((56f * uVal).dp, (56f * uVal).dp)) {
         val s = size.width / 24f
         val gCyan = Brush.linearGradient(
-            colors = listOf(Color(0xFF00DCFF), Color(0xFF3D8BFF)),
+            colors = listOf(Color(0xFFFF9A1A), Color(0xFFFF6A00)),
             start = Offset.Zero,
             end = Offset(size.width, size.height)
         )
@@ -2076,7 +2076,7 @@ private fun SpeakerIconCanvas(uVal: Float) {
     Canvas(modifier = Modifier.size((56f * uVal).dp, (56f * uVal).dp)) {
         val s = size.width / 24f
         val gPurple = Brush.linearGradient(
-            colors = listOf(Color(0xFF6A8BFF), Color(0xFFB05CFF)),
+            colors = listOf(Color(0xFFA24EE6), Color(0xFFB05CFF)),
             start = Offset.Zero,
             end = Offset(size.width, size.height)
         )
