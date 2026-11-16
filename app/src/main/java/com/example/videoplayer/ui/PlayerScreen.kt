@@ -860,7 +860,7 @@ fun PlayerScreen(
                         text = "Nexora",
                         style = TextStyle(
                             brush = Brush.horizontalGradient(
-                                listOf(Color(0xFFFFC36A), Color(0xFF8FA6FF), Color(0xFF9A5CFF))
+                                listOf(Color(0xFFFFC36A), Color(0xFFB05CFF), Color(0xFFA24EE6))
                             ),
                             fontSize = (36f * uVal).sp,
                             fontWeight = FontWeight.SemiBold,
@@ -1042,7 +1042,7 @@ fun PlayerScreen(
 
                                 // Soft glow
                                 drawCircle(
-                                    color = Color(0x8C279DFE),
+                                    color = Color(0x8CFF9A1A),
                                     radius = knobRadius + (7f * uVal).dp.toPx().coerceAtLeast(3f),
                                     center = Offset(knobCenterX, knobCenterY)
                                 )
@@ -1688,7 +1688,7 @@ private fun RepeatIconCanvas(uVal: Float, isActive: Boolean) {
             )
         } else {
             Brush.linearGradient(
-                colors = listOf(Color(0xFF3FB0FF), Color(0xFF8A62FF)),
+                colors = listOf(Color(0xFFFF9A1A), Color(0xFFB05CFF)),
                 start = Offset.Zero,
                 end = Offset(size.width, size.height)
             )
@@ -1765,7 +1765,7 @@ private fun SmallPlayPauseCanvas(uVal: Float, isPlaying: Boolean) {
         val sX = size.width / 80f
         val sY = size.height / 80f
         val gRing = Brush.linearGradient(
-            colors = listOf(Color(0xFFFFB02A), Color(0xFF4F8DFF), Color(0xFFA24EE6)),
+            colors = listOf(Color(0xFFFFB02A), Color(0xFFB05CFF), Color(0xFFA24EE6)),
             start = Offset(0f, size.height * 0.25f),
             end = Offset(size.width, size.height * 0.75f)
         )
@@ -1815,7 +1815,7 @@ private fun NextIconCanvas(uVal: Float) {
         val sX = size.width / 40f
         val sY = size.height / 36f
         val gPurple = Brush.linearGradient(
-            colors = listOf(Color(0xFF6A8BFF), Color(0xFFB05CFF)),
+            colors = listOf(Color(0xFFA24EE6), Color(0xFFB05CFF)),
             start = Offset.Zero,
             end = Offset(size.width, size.height)
         )
@@ -2076,7 +2076,7 @@ private fun SpeakerIconCanvas(uVal: Float) {
     Canvas(modifier = Modifier.size((56f * uVal).dp, (56f * uVal).dp)) {
         val s = size.width / 24f
         val gPurple = Brush.linearGradient(
-            colors = listOf(Color(0xFF6A8BFF), Color(0xFFB05CFF)),
+            colors = listOf(Color(0xFFA24EE6), Color(0xFFB05CFF)),
             start = Offset.Zero,
             end = Offset(size.width, size.height)
         )
