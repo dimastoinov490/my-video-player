@@ -663,6 +663,48 @@ body{font-family:Roboto,"Liberation Sans Narrow","Liberation Sans",Arial,sans-se
 .photo-empty{grid-column:1/-1;padding:calc(28*var(--u));border:1px solid rgba(110,95,190,.4);border-radius:calc(18*var(--u));background:linear-gradient(170deg,#0d0b1a,#030208);color:#a7a3c8;text-align:center;font-size:calc(15*var(--u));line-height:1.5}
 @media (orientation:portrait){.photo-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
+
+/* Nexora ZIP screen refinements — shared geometry, colors and component language. */
+#p-video .tabs{background:linear-gradient(180deg,#0d0b1a,#030208);border-color:rgba(110,95,190,.4);box-shadow:inset 0 1px rgba(255,255,255,.035)}
+#p-video .pill{background:linear-gradient(180deg,rgba(255,138,0,.24),rgba(255,82,0,.12));border-color:rgba(255,138,0,.52);box-shadow:0 0 calc(20*var(--u)) rgba(255,122,0,.18),inset 0 1px rgba(255,255,255,.06)}
+#p-video .tab.active{color:#ff9a1a}
+#video-list .vcard{background:linear-gradient(170deg,#0d0b1a,#030208);border:1px solid rgba(110,95,190,.4);box-shadow:inset 0 1px rgba(255,255,255,.035);transition:transform .18s,border-color .2s,box-shadow .2s}
+#video-list .vcard:active{transform:scale(.985);border-color:rgba(255,138,0,.58);box-shadow:0 0 calc(18*var(--u)) rgba(255,122,0,.14)}
+#video-list .vcard .t{color:#fff;font-weight:600}
+#video-list .vcard .m{color:#8d8aa8}
+#video-list .thumb{background-color:#080611}
+#video-list .badge{background:linear-gradient(120deg,#ffb21a,#ff7a00);color:#261000;font-weight:700}
+#video-list .dur{background:rgba(3,2,8,.82);border:1px solid rgba(255,255,255,.13);color:#fff}
+#p-audio .search,#p-browse .search{background:linear-gradient(180deg,#0d0b1a,#030208);border-color:rgba(110,95,190,.4);border-left-color:rgba(255,138,0,.6);box-shadow:inset 0 1px rgba(255,255,255,.035)}
+#p-audio #l-audio .card,#p-browse #l-browse .card{background:linear-gradient(170deg,#0d0b1a,#030208);border:1px solid rgba(110,95,190,.4);box-shadow:inset 0 1px rgba(255,255,255,.035);border-radius:calc(22*var(--u))}
+#p-audio #l-audio .tile,#p-browse #l-browse .tile{background:linear-gradient(145deg,rgba(255,138,0,.2),rgba(255,82,0,.07));border-color:rgba(255,138,0,.32);color:#ff9a1a}
+#p-audio .audio-now{background:radial-gradient(circle at 8% 100%,rgba(90,40,220,.28),transparent 48%),radial-gradient(circle at 96% 100%,rgba(255,100,0,.32),transparent 52%),linear-gradient(170deg,#0d0b1a,#030208);border-color:rgba(110,95,190,.48);box-shadow:0 calc(12*var(--u)) calc(36*var(--u)) rgba(0,0,0,.5),inset 0 1px rgba(255,255,255,.06)}
+#p-audio .audio-now .tile{background:radial-gradient(circle at 50% 50%,#25133b,#090611 68%);border:1px solid rgba(255,138,0,.4);border-radius:50%;position:relative;overflow:hidden}
+#p-audio .audio-now .tile::before{content:"";position:absolute;inset:12%;border-radius:50%;border:calc(2*var(--u)) solid rgba(255,255,255,.18);box-shadow:0 0 0 calc(7*var(--u)) rgba(255,255,255,.025),0 0 0 calc(15*var(--u)) rgba(255,255,255,.025)}
+#p-audio .audio-now .tile svg{z-index:1;color:#ff9a1a}
+#p-audio .audio-now-btn.main{background:linear-gradient(150deg,#ffb21a,#ff6900);color:#281000;border-color:rgba(255,196,90,.65);box-shadow:0 0 calc(18*var(--u)) rgba(255,120,0,.28)}
+#p-browse .row b{color:#fff}
+#p-browse #l-browse .card .s{color:#8d8aa8}
+#p-browse #l-browse .card .m{color:#ff9a1a}
+#p-settings .settings-board{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:calc(16*var(--u))}
+#p-settings .settings-entry{min-width:0;min-height:calc(150*var(--u));display:flex;align-items:center;gap:calc(18*var(--u));padding:calc(20*var(--u));text-align:left;border-radius:calc(24*var(--u));background:linear-gradient(170deg,#0d0b1a,#030208);border:1px solid rgba(110,95,190,.4);color:#fff;box-shadow:inset 0 1px rgba(255,255,255,.035);font:inherit;cursor:pointer;transition:transform .16s,border-color .2s,background .2s}
+#p-settings .settings-entry:active,#p-settings .settings-entry.pressed{transform:scale(.98);border-color:rgba(255,138,0,.6);background:linear-gradient(170deg,#171020,#09050b)}
+#p-settings .settings-symbol{width:calc(64*var(--u));height:calc(64*var(--u));flex:none;border-radius:calc(18*var(--u));display:grid;place-items:center;background:linear-gradient(145deg,rgba(255,138,0,.2),rgba(255,82,0,.07));border:1px solid rgba(255,138,0,.3);color:#ff9a1a}
+#p-settings .settings-symbol svg{width:calc(34*var(--u));height:calc(34*var(--u))}
+#p-settings .settings-copy{display:flex;flex-direction:column;gap:calc(7*var(--u));min-width:0;flex:1}
+#p-settings .settings-copy b{font-size:calc(22*var(--u));font-weight:600;color:#fff}
+#p-settings .settings-copy small{font-size:calc(17*var(--u));line-height:1.35;color:#8d8aa8}
+#p-settings .settings-arrow{color:#77718f;flex:none}
+#p-settings .settings-arrow svg{width:calc(24*var(--u));height:calc(24*var(--u))}
+#p-settings .settings-footer{margin-top:calc(28*var(--u));padding:calc(20*var(--u));text-align:center;color:#ff9a1a;font-size:calc(18*var(--u));border:1px solid rgba(110,95,190,.25);border-radius:calc(20*var(--u));background:rgba(13,11,26,.55)}
+#p-settings .settings-footer span{display:block;color:#8d8aa8;font-size:calc(15*var(--u));margin-top:calc(5*var(--u))}
+#s-settings .card.static{background:linear-gradient(170deg,#0d0b1a,#030208);border-color:rgba(110,95,190,.4);border-radius:calc(22*var(--u))}
+#s-settings .row b{color:#fff}
+@media (orientation:portrait){
+ #p-settings .settings-board{grid-template-columns:1fr}
+ #p-settings .settings-entry{min-height:calc(112*var(--u))}
+}
+
 </style>
 </head>
 <body>
@@ -820,6 +862,32 @@ body{font-family:Roboto,"Liberation Sans Narrow","Liberation Sans",Arial,sans-se
     <div class="phead item"><div><h1>Мои плейлисты</h1><p id="n-playlists-count">Всего: 0</p></div>
       <button class="create" id="btn-create-playlist"><svg class="ic"><use href="#i-plus"/></svg>Создать</button></div>
     <div id="l-playlists"></div>
+  </div></section>
+
+  <!-- ============ SETTINGS HUB ============ -->
+  <section class="page" id="p-settings"><div class="scroll">
+    <div class="phead item"><div><h1>Настройки</h1><p>Настройка Nexora под себя</p></div></div>
+    <div class="settings-board">
+      <button class="settings-entry item" type="button" data-settings-action="playback">
+        <span class="settings-symbol">${ic("play")}</span><span class="settings-copy"><b>Воспроизведение</b><small>Аппаратное декодирование, фон и ориентация</small></span><span class="settings-arrow">${ic("chev")}</span>
+      </button>
+      <button class="settings-entry item" type="button" data-settings-action="interface">
+        <span class="settings-symbol">${ic("gear")}</span><span class="settings-copy"><b>Интерфейс</b><small>Оформление и поведение экранов</small></span><span class="settings-arrow">${ic("chev")}</span>
+      </button>
+      <button class="settings-entry item" type="button" data-settings-action="library">
+        <span class="settings-symbol">${ic("folder")}</span><span class="settings-copy"><b>Библиотека</b><small>Видео, аудио, изображения и папки</small></span><span class="settings-arrow">${ic("chev")}</span>
+      </button>
+      <button class="settings-entry item" type="button" data-settings-action="audio">
+        <span class="settings-symbol">${ic("music")}</span><span class="settings-copy"><b>Аудио</b><small>Музыкальная библиотека и управление воспроизведением</small></span><span class="settings-arrow">${ic("chev")}</span>
+      </button>
+      <button class="settings-entry item" type="button" data-settings-action="video">
+        <span class="settings-symbol">${ic("video")}</span><span class="settings-copy"><b>Видео</b><small>Видеотека и параметры просмотра</small></span><span class="settings-arrow">${ic("chev")}</span>
+      </button>
+      <button class="settings-entry item" type="button" data-settings-action="advanced">
+        <span class="settings-symbol">${ic("dots")}</span><span class="settings-copy"><b>Дополнительно</b><small>Браузер, Linux, диагностика и сетевые функции</small></span><span class="settings-arrow">${ic("chev")}</span>
+      </button>
+    </div>
+    <div class="settings-footer item">Nexora Media <span>Медиаплеер нового поколения</span></div>
   </div></section>
 
   <!-- ============ MORE ============ -->
@@ -1079,7 +1147,7 @@ body{font-family:Roboto,"Liberation Sans Narrow","Liberation Sans",Arial,sans-se
     <button class="ni" data-p="audio"><svg class="ic"><use href="#i-music"/></svg>Аудио</button>
     <button class="ni" data-p="photo"><svg class="ic"><use href="#i-image"/></svg>Фото</button>
     <button class="ni" data-p="browse"><svg class="ic"><use href="#i-folder"/></svg>Папки</button>
-    <button class="ni" data-p="more"><svg class="ic"><use href="#i-gear"/></svg>Настройки</button>
+    <button class="ni" data-p="settings"><svg class="ic"><use href="#i-gear"/></svg>Настройки</button>
   </nav>
 
 </div></div>
@@ -1845,6 +1913,28 @@ function switchNavTab(tabName, i) {
 document.querySelectorAll('.ni').forEach((b,i)=>b.addEventListener('click',()=>{
   switchNavTab(b.dataset.p, i);
 }));
+
+/* ---- ZIP settings navigation ---- */
+document.querySelectorAll('#p-settings [data-settings-action]').forEach(button => {
+  button.addEventListener('click', () => {
+    const action = button.getAttribute('data-settings-action');
+    button.classList.add('pressed');
+    if (action === 'playback') {
+      openSub('settings');
+    } else if (action === 'library') {
+      switchNavTab('browse', 4);
+    } else if (action === 'audio') {
+      switchNavTab('audio', 2);
+    } else if (action === 'video') {
+      switchNavTab('video', 1);
+    } else if (action === 'advanced') {
+      switchNavTab('more', 5);
+    } else if (action === 'interface') {
+      openSub('settings');
+    }
+    setTimeout(() => button.classList.remove('pressed'), 220);
+  });
+});
 
 /* ---- Header buttons ---- */
 const hsearch = document.querySelector('.hsearch');
