@@ -1995,8 +1995,8 @@ if (historyBtn) {
     if (window.AndroidBridge && window.AndroidBridge.refreshVideos) {
       window.AndroidBridge.refreshVideos();
     } else {
-      const items = (allVideos && allVideos.length > 0) ? allVideos : defaultSampleVideos;
-      if (items.length > 0) playMedia(items[0].uri);
+      // Refreshing a list must never start playback as a side effect.
+      renderVideos();
     }
   });
 }
