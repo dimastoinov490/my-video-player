@@ -647,10 +647,21 @@ body{font-family:Roboto,"Liberation Sans Narrow","Liberation Sans",Arial,sans-se
 .zpaste,.zcard,.modal-card{background:linear-gradient(170deg,#0d0b1a,#030208);border-color:rgba(110,95,190,.4)}
 .sub{background:#010104}
 .sub .card{background:linear-gradient(170deg,#0d0b1a,#030208)}
-/* ZIP hero panel width: 240px of 1496px usable canvas = 16.04%; scale remains tied to --u. */
+/* Main-screen split follows the supplied Nexora home reference: identity panel 28%, content 72%. */
 @media (orientation:landscape) and (min-width:521px){
- .home-main{grid-template-columns:16.04% minmax(0,1fr)}
+ .home-main{grid-template-columns:28% minmax(0,72%)}
 }
+
+
+/* ZIP-derived gallery surfaces: same near-black violet cards and orange accents. */
+.photo-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:calc(14*var(--u));padding:calc(12*var(--u)) 0 calc(24*var(--u))}
+.photo-card{position:relative;display:block;overflow:hidden;min-width:0;aspect-ratio:1.22;border:1px solid rgba(110,95,190,.4);border-radius:calc(14*var(--u));padding:0;background:linear-gradient(170deg,#0d0b1a,#030208);box-shadow:inset 0 1px rgba(255,255,255,.035);text-align:left}
+.photo-card img{display:block;width:100%;height:100%;object-fit:cover}
+.photo-card::after{content:"";position:absolute;inset:48% 0 0;background:linear-gradient(transparent,rgba(0,0,0,.82))}
+.photo-name{position:absolute;z-index:1;left:calc(9*var(--u));right:calc(8*var(--u));bottom:calc(8*var(--u));color:#fff;font-size:calc(12*var(--u));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.photo-no-thumb{display:grid;place-items:center;height:100%;color:#ff8a00;font-size:calc(34*var(--u))}
+.photo-empty{grid-column:1/-1;padding:calc(28*var(--u));border:1px solid rgba(110,95,190,.4);border-radius:calc(18*var(--u));background:linear-gradient(170deg,#0d0b1a,#030208);color:#a7a3c8;text-align:center;font-size:calc(15*var(--u));line-height:1.5}
+@media (orientation:portrait){.photo-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 </style>
 </head>
@@ -777,8 +788,12 @@ body{font-family:Roboto,"Liberation Sans Narrow","Liberation Sans",Arial,sans-se
   </section>
 
   <section class="page" id="p-photo"><div class="scroll">
-    <div class="phead item"><div><h1>Фото</h1><p>Изображения на устройстве</p></div></div>
-    <div class="photo-intro"><h2>Фототека Nexora</h2><p>Откройте папки с изображениями в разделе «Папки». Здесь будет отображаться ваша фотоколлекция после подключения фототеки устройства.</p><div class="photo-actions"><button type="button" onclick="switchNavTab('browse',4)">Открыть папки</button></div></div>
+    <div class="phead item">
+      <div><h1>Фото</h1><p>Галерея изображений устройства</p></div>
+      <button class="hbtn round" type="button" aria-label="Обновить фототеку" onclick="if(window.AndroidBridge&&AndroidBridge.refreshPhotos)AndroidBridge.refreshPhotos()"><svg class="ic"><use href="#i-hist"/></svg></button>
+    </div>
+    <div class="row item"><span>Всего изображений: <span id="n-photo">0</span></span><b class="caps">Фототека</b></div>
+    <div class="photo-grid" id="photo-grid"><div class="photo-empty">Откройте раздел «Фото» и разрешите доступ к изображениям устройства.</div></div>
   </div></section>
 
   <!-- ============ BROWSE ============ -->
@@ -1077,6 +1092,7 @@ const ic=n=>`<svg class="ic"><use href="#i-${n}"/></svg>`;
 let allVideos = [];
 const thumbCache = {};   // uri -> data:image/jpeg (кадры из видео, присылает Android)
 let allAudios = [];
+let allPhotos = [];
 let allFolders = [];
 let allPlaylists = [];
 let moreItems = [
@@ -1115,10 +1131,36 @@ const draw=(id,arr,fn,off=2)=>{
 };
 
 /* ---- Render Functions ---- */
+function renderPhotos() {
+  const count = document.getElementById('n-photo');
+  const grid = document.getElementById('photo-grid');
+  if (count) count.textContent = String(allPhotos.length);
+  if (!grid) return;
+  if (!allPhotos.length) {
+    grid.innerHTML = '<div class="photo-empty">Фотографии не найдены или доступ к изображениям не предоставлен.</div>';
+    renderHome();
+    return;
+  }
+  grid.innerHTML = allPhotos.map((photo, index) => {
+    const uri = esc(photo.uri || '');
+    const name = esc(photo.name || 'Изображение');
+    const thumb = String(photo.thumb || '');
+    const src = thumb.startsWith('data:image/') ? thumb : '';
+    return '<button type="button" class="photo-card item" style="--i:' + (index % 12) + '" data-uri="' + uri + '" aria-label="Открыть ' + name + '">' +
+      (src ? '<img loading="lazy" src="' + src + '" alt="">' : '<span class="photo-no-thumb">' + ic('image') + '</span>') +
+      '<span class="photo-name">' + name + '</span></button>';
+  }).join('');
+  grid.querySelectorAll('.photo-card').forEach(card => card.addEventListener('click', () => {
+    const uri = card.getAttribute('data-uri') || '';
+    if (uri && window.AndroidBridge && AndroidBridge.openPhoto) AndroidBridge.openPhoto(uri);
+  }));
+  renderHome();
+}
+
 function renderHome(){
   const videos=(allVideos&&allVideos.length)?allVideos:(PREVIEW?defaultSampleVideos:[]);
   const v=document.getElementById('home-video-count'),a=document.getElementById('home-audio-count'),p=document.getElementById('home-photo-count'),m=document.getElementById('home-storage-count');
-  if(v)v.textContent=String(videos.length);if(a)a.textContent=String(allAudios.length||(PREVIEW?2:0));if(p)p.textContent='—';
+  if(v)v.textContent=String(videos.length);if(a)a.textContent=String(allAudios.length||(PREVIEW?2:0));if(p)p.textContent=String(allPhotos.length);
   let device=null;if(!PREVIEW&&typeof hasB==='function'&&hasB('getDeviceInfo')){try{device=JSON.parse(callB('getDeviceInfo')||'{}')}catch(e){device=null}}
   if(m)m.textContent=device&&Number(device.storageFreeGb)>0?Number(device.storageFreeGb).toFixed(1)+' GB':'—';
   const target=document.getElementById('home-latest-videos');if(!target)return;
@@ -1897,6 +1939,15 @@ window.setVideoThumb = function(uri, dataUri) {
       }
     }
   });
+};
+
+window.setPhotos = function(photosJson) {
+  try {
+    allPhotos = typeof photosJson === 'string' ? JSON.parse(photosJson) : photosJson;
+    renderPhotos();
+  } catch (e) {
+    console.error("setPhotos error", e);
+  }
 };
 
 window.setAudios = function(audiosJson) {

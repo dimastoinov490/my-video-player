@@ -106,6 +106,7 @@ fun ExactHtmlVideoLibraryView(
     browseRefreshTick: Int = 0,
     currentNavIndex: Int = 0,
     audioPermissionGranted: Boolean = false,
+    photoPermissionGranted: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -283,6 +284,30 @@ fun ExactHtmlVideoLibraryView(
         }
     }
 
+    fun sendPhotosToWeb(webView: WebView) {
+        coroutineScope.launch {
+            val payload = withContext(Dispatchers.IO) {
+                val photos = MediaStoreHelper.getPhotos(context, limit = 80)
+                val json = JSONArray()
+                for (photo in photos) {
+                    val obj = JSONObject()
+                    obj.put("name", photo.displayName)
+                    obj.put("uri", photo.uri.toString())
+                    obj.put("date", photo.dateAdded)
+                    obj.put("size", photo.size)
+                    obj.put("thumb", MediaStoreHelper.getPhotoThumbnailDataUri(context, photo.id).orEmpty())
+                    json.put(obj)
+                }
+                json.toString()
+            }
+            withContext(Dispatchers.Main) {
+                if (webViewRef === webView && webView.isAttachedToWindow) {
+                    webView.evaluateJavascript("if (window.setPhotos) { window.setPhotos($payload); }", null)
+                }
+            }
+        }
+    }
+
     fun sendAudiosToWeb(webView: WebView) {
         coroutineScope.launch {
             val audioData = withContext(Dispatchers.IO) {
@@ -433,6 +458,12 @@ fun ExactHtmlVideoLibraryView(
     LaunchedEffect(audioPermissionGranted, isPageReady) {
         if (isPageReady && audioPermissionGranted) {
             webViewRef?.let { sendAudiosToWeb(it) }
+        }
+    }
+
+    LaunchedEffect(photoPermissionGranted, isPageReady) {
+        if (isPageReady && photoPermissionGranted) {
+            webViewRef?.let { sendPhotosToWeb(it) }
         }
     }
 
@@ -667,6 +698,28 @@ fun ExactHtmlVideoLibraryView(
                         fun refreshVideos() {
                             Handler(Looper.getMainLooper()).post {
                                 latestRefresh()
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun refreshPhotos() {
+                            Handler(Looper.getMainLooper()).post {
+                                webViewRef?.let { sendPhotosToWeb(it) }
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun openPhoto(uri: String) {
+                            Handler(Looper.getMainLooper()).post {
+                                runCatching {
+                                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                                        setDataAndType(Uri.parse(uri), "image/*")
+                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    }
+                                    context.startActivity(intent)
+                                }.onFailure {
+                                    Toast.makeText(context, "Не удалось открыть изображение", Toast.LENGTH_SHORT).show()
+                                }
                             }
                         }
 
