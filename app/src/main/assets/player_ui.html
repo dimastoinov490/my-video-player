@@ -579,6 +579,16 @@ input,select,textarea{accent-color:#ff9a1a}
 #p-photo .photo-actions{display:flex;gap:calc(15*var(--u));margin-top:calc(24*var(--u))}#p-photo .photo-actions button{padding:calc(18*var(--u)) calc(25*var(--u));border-radius:calc(18*var(--u));border:1px solid rgba(255,122,0,.35);background:rgba(255,122,0,.1);color:#ff9b18;font:inherit;font-size:calc(23*var(--u))}
 @media (orientation:portrait){.app{max-width:520px}#p-home .home-main{grid-template-columns:1fr;grid-template-rows:auto 1fr;overflow-y:auto;bottom:calc(150*var(--u))}#p-home .home-identity{min-height:calc(250*var(--u));border-right:0;border-bottom:1px solid rgba(255,122,0,.18)}#p-home .home-emblem{width:calc(130*var(--u));height:calc(130*var(--u));font-size:calc(80*var(--u))}#p-home .home-content{padding:calc(20*var(--u))}#p-home .home-stats{grid-template-columns:repeat(2,minmax(0,1fr))}#p-home .home-stat{height:calc(150*var(--u))}#p-home .home-latest{grid-template-columns:1fr}#p-home .home-video{height:calc(250*var(--u))}}
 
+
+@media (orientation:landscape){
+ .nav{bottom:0;height:calc(82*var(--u))}
+ .nav .ni{height:calc(82*var(--u));padding-bottom:calc(5*var(--u))}
+ .nav-active{height:calc(80*var(--u));top:calc(1*var(--u))}
+ .home-main{bottom:calc(86*var(--u))}
+ .scroll{bottom:calc(90*var(--u))}
+}
+@media (orientation:portrait){.nav{bottom:calc(10*var(--u));height:calc(140*var(--u))}.nav .ni{height:100%}.nav-active{height:calc(137*var(--u))}}
+
 </style>
 </head>
 <body>
@@ -1044,7 +1054,7 @@ function renderHome(){
   const target=document.getElementById('home-latest-videos');if(!target)return;
   if(!videos.length){target.innerHTML='<div class="home-empty">Видео пока нет. Добавьте видео в медиатеку.</div>';return;}
   const art=['nexora/p_car.webp','nexora/p_sun.webp','nexora/p_cat.webp'];
-  target.innerHTML=videos.slice(0,3).map((item,i)=>{const uri=String(item.uri||'');const src=thumbCache[uri]||item.thumb||art[i%art.length];return '<div class="home-video" data-home-uri="'+esc(uri)+'"><img src="'+esc(src)+'" alt=""><b>'+esc(item.title||'Видео')+'</b></div>';}).join('');
+  target.innerHTML=videos.slice(0,3).map((item,i)=>{const uri=String(item.uri||'');const src=thumbCache[uri]||(item.thumb&&String(item.thumb).startsWith('data:')?item.thumb:art[i%art.length]);return '<div class="home-video" data-home-uri="'+esc(uri)+'"><img src="'+esc(src)+'" alt=""><b>'+esc(item.title||'Видео')+'</b></div>';}).join('');
   target.querySelectorAll('.home-video').forEach(card=>card.addEventListener('click',()=>playMedia(card.dataset.homeUri)));
 }
 
