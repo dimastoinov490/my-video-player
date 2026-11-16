@@ -1165,6 +1165,7 @@ function renderAudio() {
   if (items.length === 0) {
     const list = document.getElementById('l-audio');
     if (list) list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted)">Аудиофайлов пока нет</div>';
+    renderHome();
     return;
   }
 
@@ -1211,6 +1212,7 @@ function renderAudio() {
       }
     });
   });
+  renderHome();
 }
 
 let currentBrowsePath = '/storage/emulated/0';
