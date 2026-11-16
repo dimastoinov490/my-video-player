@@ -549,6 +549,36 @@ input,select,textarea{accent-color:#ff9a1a}
 }
 .audio-now-top,.audio-now-progress{position:relative;z-index:1}
 
+
+/* ===== Nexora reference dashboard ===== */
+.app{max-width:none}.nav{height:calc(140*var(--u))}
+.nav .ni{left:auto!important;width:16.6667%;height:100%;top:0;padding:0 0 calc(14*var(--u))}
+.nav .ni:nth-of-type(1){left:0!important}.nav .ni:nth-of-type(2){left:16.6667%!important}.nav .ni:nth-of-type(3){left:33.3333%!important}.nav .ni:nth-of-type(4){left:50%!important}.nav .ni:nth-of-type(5){left:66.6667%!important}.nav .ni:nth-of-type(6){left:83.3333%!important}
+.nav-active{width:16.6667%;height:calc(137*var(--u));border-radius:calc(38*var(--u))}
+#p-home{display:none}#p-home.active{display:block}
+.home-header{position:absolute;z-index:2;left:0;right:0;top:0;height:calc(74*var(--u));display:flex;align-items:center;gap:calc(18*var(--u));padding:0 calc(28*var(--u));background:linear-gradient(180deg,rgba(7,8,10,.98),rgba(7,8,10,.72));border:calc(2*var(--u)) solid rgba(255,122,0,.48);border-radius:calc(22*var(--u)) calc(22*var(--u)) 0 0;box-shadow:0 0 calc(18*var(--u)) rgba(255,112,0,.12)}
+.home-menu{width:calc(44*var(--u));height:calc(44*var(--u));border-radius:50%;display:grid;place-items:center;color:var(--orange);background:rgba(255,122,0,.08);border:1px solid rgba(255,122,0,.25);font-size:calc(29*var(--u))}
+.home-brand{display:flex;align-items:center;gap:calc(14*var(--u));font-size:calc(25*var(--u));font-weight:700;color:#fff}.home-brand .brand-play{font-size:calc(38*var(--u));color:#ff970f;filter:drop-shadow(0 0 calc(7*var(--u)) rgba(255,130,0,.55))}
+.home-server{margin-left:auto;display:flex;align-items:center;gap:calc(12*var(--u));font-size:calc(16*var(--u));color:#25e66b;white-space:nowrap}.home-server svg{font-size:calc(26*var(--u))}
+.home-main{position:absolute;left:0;right:0;top:calc(74*var(--u));bottom:calc(150*var(--u));display:grid;grid-template-columns:28% 72%;min-height:0}
+.home-identity{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:calc(8*var(--u));border-right:1px solid rgba(255,122,0,.18);background:radial-gradient(circle at 50% 48%,rgba(255,122,0,.12),transparent 65%)}
+.home-emblem{width:calc(180*var(--u));height:calc(180*var(--u));display:grid;place-items:center;border-radius:50%;border:1px solid rgba(255,122,0,.28);box-shadow:0 0 calc(28*var(--u)) rgba(255,110,0,.13),inset 0 0 calc(24*var(--u)) rgba(255,110,0,.08);color:#ff9b16;font-size:calc(112*var(--u));filter:drop-shadow(0 0 calc(10*var(--u)) rgba(255,125,0,.6))}
+.home-identity strong{font-size:calc(25*var(--u));font-weight:700;color:#fff}.home-identity strong em{font-style:normal;color:var(--orange)}.home-identity small{font-size:calc(15*var(--u));color:#c5c5c5}
+.home-content{padding:calc(4*var(--u)) calc(24*var(--u)) calc(8*var(--u));min-width:0;display:flex;flex-direction:column;justify-content:center;gap:calc(20*var(--u))}
+.home-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:calc(16*var(--u))}
+.home-stat{height:calc(125*var(--u));min-width:0;border-radius:calc(20*var(--u));padding:calc(16*var(--u));background:linear-gradient(145deg,rgba(25,27,32,.94),rgba(12,13,17,.96));border:1px solid rgba(255,255,255,.13);box-shadow:inset 0 1px rgba(255,255,255,.04);display:flex;flex-direction:column;justify-content:center}
+.home-stat svg{font-size:calc(28*var(--u));color:var(--orange);margin-bottom:calc(5*var(--u))}.home-stat b{font-size:calc(22*var(--u));line-height:1.1;color:#fff}.home-stat span{font-size:calc(14*var(--u));color:#b9bbc1;margin-top:calc(4*var(--u))}
+.home-latest-head{display:flex;align-items:center;justify-content:space-between;color:#ff9b18;font-size:calc(19*var(--u));font-weight:700;padding:0 calc(2*var(--u))}.home-latest-head button{background:none;border:0;color:#ff9b18;font:inherit;font-size:calc(17*var(--u));cursor:pointer}
+.home-latest{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:calc(18*var(--u));min-height:0}
+.home-video{height:calc(122*var(--u));position:relative;overflow:hidden;border-radius:calc(15*var(--u));border:1px solid rgba(255,255,255,.13);background:#111;cursor:pointer;box-shadow:0 calc(5*var(--u)) calc(12*var(--u)) rgba(0,0,0,.35)}
+.home-video img{width:100%;height:100%;object-fit:cover;display:block}.home-video:after{content:"";position:absolute;inset:40% 0 0;background:linear-gradient(transparent,rgba(0,0,0,.88))}
+.home-video b{position:absolute;z-index:1;left:calc(12*var(--u));right:calc(8*var(--u));bottom:calc(8*var(--u));font-size:calc(15*var(--u));font-weight:500;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.home-video:active{transform:scale(.98)}.home-empty{grid-column:1/-1;color:var(--muted);font-size:calc(16*var(--u));padding:calc(20*var(--u))}
+#p-photo .photo-intro{margin:calc(25*var(--u));padding:calc(25*var(--u));border:1px solid var(--line);border-radius:calc(24*var(--u));background:linear-gradient(145deg,#17191e,#090b0e)}
+#p-photo .photo-intro h2{color:#fff;font-size:calc(34*var(--u));margin-bottom:calc(12*var(--u))}#p-photo .photo-intro p{color:var(--muted);font-size:calc(25*var(--u));line-height:1.45}
+#p-photo .photo-actions{display:flex;gap:calc(15*var(--u));margin-top:calc(24*var(--u))}#p-photo .photo-actions button{padding:calc(18*var(--u)) calc(25*var(--u));border-radius:calc(18*var(--u));border:1px solid rgba(255,122,0,.35);background:rgba(255,122,0,.1);color:#ff9b18;font:inherit;font-size:calc(23*var(--u))}
+@media (orientation:portrait){.app{max-width:520px}#p-home .home-main{grid-template-columns:1fr;grid-template-rows:auto 1fr;overflow-y:auto;bottom:calc(150*var(--u))}#p-home .home-identity{min-height:calc(250*var(--u));border-right:0;border-bottom:1px solid rgba(255,122,0,.18)}#p-home .home-emblem{width:calc(130*var(--u));height:calc(130*var(--u));font-size:calc(80*var(--u))}#p-home .home-content{padding:calc(20*var(--u))}#p-home .home-stats{grid-template-columns:repeat(2,minmax(0,1fr))}#p-home .home-stat{height:calc(150*var(--u))}#p-home .home-latest{grid-template-columns:1fr}#p-home .home-video{height:calc(250*var(--u))}}
+
 </style>
 </head>
 <body>
@@ -608,8 +638,29 @@ input,select,textarea{accent-color:#ff9a1a}
     <path d="M556 189 C600 188 622 168 646 112 C668 62 700 35 775 0" fill="none" stroke="url(#gl)" stroke-width="3"/>
   </svg></div>
 
+  <section class="page active" id="p-home">
+    <header class="home-header">
+      <button class="home-menu" type="button" aria-label="Открыть настройки" onclick="switchNavTab('more',5)">☰</button>
+      <div class="home-brand"><span class="brand-play">▶</span><span><em style="color:#ff9510;font-style:normal">Nexora</em> Media</span></div>
+      <div class="home-server"><svg class="ic"><use href="#i-wifi"/></svg><span id="home-server-status">Сервер онлайн</span>⌄</div>
+    </header>
+    <div class="home-main">
+      <aside class="home-identity"><div class="home-emblem">▶</div><strong>Nexora <em>Media</em></strong><small>Твой медиа-сервер</small></aside>
+      <div class="home-content">
+        <div class="home-stats">
+          <div class="home-stat"><svg class="ic"><use href="#i-clap"/></svg><b id="home-video-count">0</b><span>Видео</span></div>
+          <div class="home-stat"><svg class="ic"><use href="#i-note"/></svg><b id="home-audio-count">0</b><span>Аудио</span></div>
+          <div class="home-stat"><svg class="ic"><use href="#i-info"/></svg><b id="home-photo-count">0</b><span>Фото</span></div>
+          <div class="home-stat"><svg class="ic"><use href="#i-folder"/></svg><b id="home-storage-count">—</b><span>Память</span></div>
+        </div>
+        <div class="home-latest-head"><span>Последние видео</span><button type="button" onclick="switchNavTab('video',1)">Все&nbsp; →</button></div>
+        <div class="home-latest" id="home-latest-videos"><div class="home-empty">Загрузка видео…</div></div>
+      </div>
+    </div>
+  </section>
+
   <!-- ============ VIDEO ============ -->
-  <section class="page active" id="p-video">
+  <section class="page" id="p-video">
     <button class="hbtn round hsearch" aria-label="Поиск"><svg class="ic"><use href="#i-search"/></svg></button>
     <button class="hbtn round history" aria-label="Обновить список видео"><svg class="ic"><use href="#i-hist"/></svg></button>
     <div class="tabs" id="tabs">
@@ -646,6 +697,11 @@ input,select,textarea{accent-color:#ff9a1a}
     </div>
   </div>
   </section>
+
+  <section class="page" id="p-photo"><div class="scroll">
+    <div class="phead item"><div><h1>Фото</h1><p>Изображения на устройстве</p></div></div>
+    <div class="photo-intro"><h2>Фототека Nexora</h2><p>Откройте папки с изображениями в разделе «Папки». Здесь будет отображаться ваша фотоколлекция после подключения фототеки устройства.</p><div class="photo-actions"><button type="button" onclick="switchNavTab('browse',4)">Открыть папки</button></div></div>
+  </div></section>
 
   <!-- ============ BROWSE ============ -->
   <section class="page" id="p-browse">
@@ -925,11 +981,12 @@ input,select,textarea{accent-color:#ff9a1a}
       <path d="M620 137 C780 140 900 139 996 122" fill="none" stroke="rgba(255,110,0,.4)" stroke-width="2"/>
     </svg>
     <div class="nav-active" id="navActive"></div>
-    <button class="ni active" data-p="video"     style="left:calc(16*var(--u))"><svg class="ic"><use href="#i-clap"/></svg>Видео</button>
-    <button class="ni"        data-p="audio"     style="left:calc(214*var(--u))"><svg class="ic"><use href="#i-note"/></svg>Аудио</button>
-    <button class="ni"        data-p="browse"    style="left:calc(410*var(--u))"><svg class="ic"><use href="#i-folder"/></svg>Обзор</button>
-    <button class="ni"        data-p="playlists" style="left:calc(608*var(--u))"><svg class="ic"><use href="#i-list"/></svg>Плейлисты</button>
-    <button class="ni"        data-p="more"      style="left:calc(805*var(--u))"><svg class="ic"><use href="#i-hdots"/></svg>Ещё</button>
+    <button class="ni active" data-p="home"><svg class="ic"><use href="#i-info"/></svg>Главная</button>
+    <button class="ni" data-p="video"><svg class="ic"><use href="#i-clap"/></svg>Видео</button>
+    <button class="ni" data-p="audio"><svg class="ic"><use href="#i-note"/></svg>Аудио</button>
+    <button class="ni" data-p="photo"><svg class="ic"><use href="#i-info"/></svg>Фото</button>
+    <button class="ni" data-p="browse"><svg class="ic"><use href="#i-folder"/></svg>Папки</button>
+    <button class="ni" data-p="more"><svg class="ic"><use href="#i-dots"/></svg>Настройки</button>
   </nav>
 
 </div></div>
@@ -980,6 +1037,17 @@ const draw=(id,arr,fn,off=2)=>{
 };
 
 /* ---- Render Functions ---- */
+function renderHome(){
+  const videos=(allVideos&&allVideos.length)?allVideos:(PREVIEW?defaultSampleVideos:[]);
+  const v=document.getElementById('home-video-count'),a=document.getElementById('home-audio-count'),p=document.getElementById('home-photo-count'),m=document.getElementById('home-storage-count');
+  if(v)v.textContent=String(videos.length);if(a)a.textContent=String(allAudios.length||(PREVIEW?2:0));if(p)p.textContent='—';if(m)m.textContent=allFolders.length?String(allFolders.length):'—';
+  const target=document.getElementById('home-latest-videos');if(!target)return;
+  if(!videos.length){target.innerHTML='<div class="home-empty">Видео пока нет. Добавьте видео в медиатеку.</div>';return;}
+  const art=['nexora/p_car.webp','nexora/p_sun.webp','nexora/p_cat.webp'];
+  target.innerHTML=videos.slice(0,3).map((item,i)=>{const uri=String(item.uri||'');const src=thumbCache[uri]||item.thumb||art[i%art.length];return '<div class="home-video" data-home-uri="'+esc(uri)+'"><img src="'+esc(src)+'" alt=""><b>'+esc(item.title||'Видео')+'</b></div>';}).join('');
+  target.querySelectorAll('.home-video').forEach(card=>card.addEventListener('click',()=>playMedia(card.dataset.homeUri)));
+}
+
 function renderVideos() {
   const listEl = document.getElementById('video-list');
   if (!listEl) return;
@@ -1035,6 +1103,7 @@ function renderVideos() {
     frag.appendChild(card);
   });
   listEl.appendChild(frag);
+  renderHome();
 }
 
 function audioFormatTime(ms) {
@@ -2240,6 +2309,7 @@ window.addEventListener('DOMContentLoaded', scheduleLayoutMetrics);
 scheduleLayoutMetrics();
 
 /* Initial render */
+renderHome();
 renderVideos();
 renderAudio();
 renderBrowse();
