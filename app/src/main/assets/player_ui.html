@@ -705,6 +705,31 @@ body{font-family:Roboto,"Liberation Sans Narrow","Liberation Sans",Arial,sans-se
  #p-settings .settings-entry{min-height:calc(112*var(--u))}
 }
 
+
+/* Video library: ZIP-style media cards and playlist tile states. */
+#p-video .vlist{overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none}
+#p-video .vlist::-webkit-scrollbar{display:none}
+#video-list .vcard{width:100%;display:grid;grid-template-columns:calc(190*var(--u)) minmax(0,1fr);grid-template-rows:auto auto;column-gap:calc(24*var(--u));align-items:center;padding:calc(16*var(--u));margin:0 0 calc(14*var(--u));border-radius:calc(22*var(--u));text-align:left;color:#fff;font:inherit}
+#video-list .vcard .thumb{grid-row:1/3;grid-column:1;width:100%;height:calc(118*var(--u));border-radius:calc(14*var(--u));overflow:hidden;position:relative}
+#video-list .vcard .t{grid-column:2;grid-row:1;font-size:calc(23*var(--u));font-weight:600;line-height:1.25;overflow-wrap:anywhere}
+#video-list .vcard .m{grid-column:2;grid-row:2;font-size:calc(17*var(--u));color:#8d8aa8;margin-top:calc(6*var(--u))}
+#video-list .playlist-vcard{grid-template-columns:calc(118*var(--u)) minmax(0,1fr);min-height:calc(126*var(--u))}
+#video-list .playlist-thumb{display:grid;place-items:center;background:linear-gradient(145deg,rgba(255,138,0,.22),rgba(90,50,150,.2));border:1px solid rgba(255,138,0,.32);color:#ff9a1a}
+#video-list .playlist-thumb svg{width:42%;height:42%}
+#video-list .video-empty{padding:calc(30*var(--u));text-align:center;color:#8d8aa8;background:linear-gradient(170deg,#0d0b1a,#030208);border:1px solid rgba(110,95,190,.4);border-radius:calc(20*var(--u))}
+#p-video .hbtn{border:1px solid rgba(110,95,190,.4);background:linear-gradient(160deg,#111020,#05040a)}
+#p-video .tabs{border:1px solid rgba(110,95,190,.42)}
+#p-video .tab{font-weight:600}
+#p-video .vlist{background:transparent}
+#p-video .vcard:focus-visible,#p-settings .settings-entry:focus-visible{outline:2px solid #ff9a1a;outline-offset:3px}
+@media (orientation:portrait){
+ #video-list .vcard{grid-template-columns:calc(130*var(--u)) minmax(0,1fr);column-gap:calc(14*var(--u))}
+ #video-list .vcard .thumb{height:calc(90*var(--u))}
+ #video-list .vcard .t{font-size:calc(16*var(--u))}
+ #video-list .vcard .m{font-size:calc(12*var(--u))}
+ #video-list .playlist-vcard{grid-template-columns:calc(76*var(--u)) minmax(0,1fr);min-height:calc(92*var(--u))}
+}
+
 </style>
 </head>
 <body>
@@ -1849,19 +1874,31 @@ tabs.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{
   tabs.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
   b.classList.add('active');tabs.classList.toggle('second',b.dataset.i==='1');
   if (b.dataset.i === '1') {
-    // Show playlists inside video page
     const listEl = document.getElementById('video-list');
+    const items = allPlaylists.length ? allPlaylists : (PREVIEW ? defaultPlaylists : []);
     if (listEl) {
       listEl.innerHTML = '';
-      defaultPlaylists.forEach(pl => {
-        const c = document.createElement('div');
-        c.className = 'vcard';
-        c.style.cursor = 'pointer';
-        c.innerHTML = `<div class="thumb" style="display:grid;place-items:center;background:#2c1708">${ic(pl.icon)}</div>
-                       <div class="t">${esc(pl.title)}</div><div class="m">${esc(pl.count)}</div>`;
-        c.onclick = () => playMedia(pl.uri);
-        listEl.appendChild(c);
-      });
+      if (!items.length) {
+        listEl.innerHTML = '<div class="video-empty">Плейлистов пока нет. Создайте первый в разделе «Мои плейлисты».</div>';
+      } else {
+        const frag = document.createDocumentFragment();
+        items.forEach(pl => {
+          const c = document.createElement('button');
+          c.type = 'button';
+          c.className = 'vcard playlist-vcard';
+          c.dataset.playlistId = String(pl.id || '');
+          c.innerHTML = '<span class="thumb playlist-thumb">' + ic(pl.icon || 'list') + '</span>' +
+            '<span class="t">' + esc(pl.title || 'Плейлист') + '</span>' +
+            '<span class="m">' + esc(pl.count || pl.desc || 'Медиатека') + '</span>';
+          c.addEventListener('click', () => {
+            if (pl.uri) playMedia(pl.uri);
+            else if (pl.id && window.AndroidBridge && AndroidBridge.openPlaylist) AndroidBridge.openPlaylist(String(pl.id));
+            else toast('Плейлист: ' + (pl.title || ''));
+          });
+          frag.appendChild(c);
+        });
+        listEl.appendChild(frag);
+      }
     }
   } else {
     renderVideos();
