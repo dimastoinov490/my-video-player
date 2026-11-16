@@ -12,12 +12,22 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
+import android.util.Base64
+import java.io.ByteArrayOutputStream
 import android.util.Size
 import com.example.videoplayer.R
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
+
+data class PhotoItem(
+    val id: Long,
+    val displayName: String,
+    val uri: Uri,
+    val dateAdded: Long,
+    val size: Long
+)
 
 data class AudioTechnicalInfo(
     val codec: String?,
@@ -30,6 +40,78 @@ object MediaStoreHelper {
     private const val TAG = "MediaStoreHelper"
 
     private val VIDEO_EXTENSIONS = setOf("mp4", "mkv", "avi", "mov", "webm", "3gp", "flv", "ts", "m4v")
+
+    /**
+     * Returns recent images from MediaStore. A bounded result keeps gallery startup
+     * predictable on older devices with large camera rolls.
+     */
+    fun getPhotos(context: Context, limit: Int = 120): List<PhotoItem> {
+        val photos = mutableListOf<PhotoItem>()
+        val projection = arrayOf(
+            MediaStore.Images.Media._ID,
+            MediaStore.Images.Media.DISPLAY_NAME,
+            MediaStore.Images.Media.DATE_ADDED,
+            MediaStore.Images.Media.SIZE
+        )
+        try {
+            context.contentResolver.query(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                projection,
+                null,
+                null,
+                "${MediaStore.Images.Media.DATE_ADDED} DESC"
+            )?.use { cursor ->
+                val idCol = cursor.getColumnIndex(MediaStore.Images.Media._ID)
+                val nameCol = cursor.getColumnIndex(MediaStore.Images.Media.DISPLAY_NAME)
+                val dateCol = cursor.getColumnIndex(MediaStore.Images.Media.DATE_ADDED)
+                val sizeCol = cursor.getColumnIndex(MediaStore.Images.Media.SIZE)
+                while (cursor.moveToNext() && photos.size < limit.coerceIn(1, 300)) {
+                    val id = if (idCol >= 0) cursor.getLong(idCol) else -1L
+                    if (id < 0L) continue
+                    photos += PhotoItem(
+                        id = id,
+                        displayName = if (nameCol >= 0) cursor.getString(nameCol) ?: "Фото" else "Фото",
+                        uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id),
+                        dateAdded = if (dateCol >= 0) cursor.getLong(dateCol) else 0L,
+                        size = if (sizeCol >= 0) cursor.getLong(sizeCol) else 0L
+                    )
+                }
+            }
+        } catch (error: Throwable) {
+            Log.e(TAG, "MediaStore image query failed: ${error.message}")
+        }
+        return photos
+    }
+
+    /** Small JPEG preview for the WebView grid; full-resolution images stay in MediaStore. */
+    fun getPhotoThumbnailDataUri(context: Context, id: Long): String? {
+        if (id <= 0L) return null
+        var bitmap: Bitmap? = null
+        return try {
+            val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
+            bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                context.contentResolver.loadThumbnail(uri, Size(320, 240), null)
+            } else {
+                @Suppress("DEPRECATION")
+                MediaStore.Images.Thumbnails.getThumbnail(
+                    context.contentResolver,
+                    id,
+                    MediaStore.Images.Thumbnails.MINI_KIND,
+                    null
+                )
+            }
+            if (bitmap == null) return null
+            ByteArrayOutputStream().use { output ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 78, output)
+                "data:image/jpeg;base64," + Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP)
+            }
+        } catch (error: Throwable) {
+            Log.w(TAG, "Unable to load image thumbnail $id: ${error.message}")
+            null
+        } finally {
+            bitmap?.recycle()
+        }
+    }
 
     fun getVideos(
         context: Context,
