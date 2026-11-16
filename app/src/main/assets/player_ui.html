@@ -116,7 +116,9 @@ svg.ic{width:1em;height:1em;display:block}
 <div class="vcard"><div class="thumb"><span class="badge">SD</span><span class="dur">0:14</span></div>
 <div class="t">name.mp4</div><div class="m">12.3 MB • 19.09.2026</div></div> */
 .vcard{background:linear-gradient(180deg,#0d0f14,#080a0e);border:calc(2*var(--u)) solid var(--line);border-radius:calc(30*var(--u));padding:calc(14*var(--u))}
-#video-list{grid-template-columns:repeat(3,1fr);gap:calc(14*var(--u))}
+#video-list{grid-template-columns:repeat(6,minmax(0,1fr));gap:calc(14*var(--u))}
+#video-list .vcard:nth-child(-n+2){grid-column:span 3}
+#video-list .vcard:nth-child(n+3){grid-column:span 2}
 #video-list .vcard{border-radius:calc(22*var(--u));padding:calc(10*var(--u));min-width:0}
 #video-list .thumb{border-radius:calc(16*var(--u))}
 #video-list .badge,#video-list .dur{padding:calc(2*var(--u)) calc(9*var(--u));border-radius:calc(10*var(--u));font-size:calc(17*var(--u))}
@@ -526,9 +528,10 @@ input,select,textarea{accent-color:#ff9a1a}
   background-image:linear-gradient(135deg,rgba(8,5,16,.12),rgba(255,100,0,.08));
 }
 #video-list .vcard:nth-child(1) .thumb:not([style*="background-image"]){background-image:url("thumb_nature.jpg")}
-#video-list .vcard:nth-child(2) .thumb:not([style*="background-image"]){background-image:url("nexora/p_car.webp")}
-#video-list .vcard:nth-child(3) .thumb:not([style*="background-image"]){background-image:url("nexora/p_sun.webp")}
-#video-list .vcard:nth-child(4) .thumb:not([style*="background-image"]){background-image:url("nexora/p_cat.webp")}
+#video-list .vcard:nth-child(2) .thumb:not([style*="background-image"]){background-image:url("nexora/t_anime.webp")}
+#video-list .vcard:nth-child(3) .thumb:not([style*="background-image"]){background-image:url("nexora/p_car.webp")}
+#video-list .vcard:nth-child(4) .thumb:not([style*="background-image"]){background-image:url("nexora/p_sun.webp")}
+#video-list .vcard:nth-child(5) .thumb:not([style*="background-image"]){background-image:url("nexora/p_cat.webp")}
 @media (max-width:360px){
   #p-video::before{font-size:calc(35*var(--u))}
   .tabs{width:calc(950*var(--u))}
