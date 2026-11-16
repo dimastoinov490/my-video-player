@@ -216,7 +216,7 @@ fun VideoLibraryScreen(
                 onVideoSelected = onVideoSelected,
                 onNavTab = { tabName, idx ->
                     bottomNavIndex = idx
-                    if (tabName.equals("audio", ignoreCase = true) || idx == 1) {
+                    if (tabName.equals("audio", ignoreCase = true) || idx == 2) {
                         requestAudioAccessIfNeeded()
                     }
                     if (tabName.equals("photo", ignoreCase = true) || idx == 3) {
