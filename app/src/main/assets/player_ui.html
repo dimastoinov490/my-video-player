@@ -1050,7 +1050,9 @@ const draw=(id,arr,fn,off=2)=>{
 function renderHome(){
   const videos=(allVideos&&allVideos.length)?allVideos:(PREVIEW?defaultSampleVideos:[]);
   const v=document.getElementById('home-video-count'),a=document.getElementById('home-audio-count'),p=document.getElementById('home-photo-count'),m=document.getElementById('home-storage-count');
-  if(v)v.textContent=String(videos.length);if(a)a.textContent=String(allAudios.length||(PREVIEW?2:0));if(p)p.textContent='—';\n  let device=null;if(!PREVIEW&&typeof hasB==='function'&&hasB('getDeviceInfo')){try{device=JSON.parse(callB('getDeviceInfo')||'{}')}catch(e){device=null}}\n  if(m)m.textContent=device&&Number(device.storageFreeGb)>0?Number(device.storageFreeGb).toFixed(1)+' GB':'—';
+  if(v)v.textContent=String(videos.length);if(a)a.textContent=String(allAudios.length||(PREVIEW?2:0));if(p)p.textContent='—';
+  let device=null;if(!PREVIEW&&typeof hasB==='function'&&hasB('getDeviceInfo')){try{device=JSON.parse(callB('getDeviceInfo')||'{}')}catch(e){device=null}}
+  if(m)m.textContent=device&&Number(device.storageFreeGb)>0?Number(device.storageFreeGb).toFixed(1)+' GB':'—';
   const target=document.getElementById('home-latest-videos');if(!target)return;
   if(!videos.length){target.innerHTML='<div class="home-empty">Видео пока нет. Добавьте видео в медиатеку.</div>';return;}
   const art=['nexora/p_car.webp','nexora/p_sun.webp','nexora/t_anime.webp'];
