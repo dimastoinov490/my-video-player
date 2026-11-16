@@ -287,7 +287,7 @@ fun ExactHtmlVideoLibraryView(
     fun sendPhotosToWeb(webView: WebView) {
         coroutineScope.launch {
             val payload = withContext(Dispatchers.IO) {
-                val photos = MediaStoreHelper.getPhotos(context, limit = 120)
+                val photos = MediaStoreHelper.getPhotos(context, limit = 80)
                 val json = JSONArray()
                 for (photo in photos) {
                     val obj = JSONObject()
