@@ -1690,10 +1690,8 @@ function updateNavIndicator() {
     navActive.style.width = activeBtn.offsetWidth + 'px';
     navActive.style.transform = 'translateX(' + activeBtn.offsetLeft + 'px)';
   } else {
-    navActive.style.width = '';
-    if (navX[activeNavIndex] !== undefined) {
-      navActive.style.transform = 'translateX(calc(' + navX[activeNavIndex] + '*var(--u)))';
-    }
+    navActive.style.width = '16.6667%';
+    navActive.style.transform = 'translateX(' + (activeNavIndex * 100 / 6) + '%)';
   }
 }
 const scheduleNavSync = () => {
