@@ -89,6 +89,10 @@ class VlcPlayerManager(private val context: Context) {
             mp.setEventListener(eventListener)
             libVLC = vlc
             mediaPlayer = mp
+            val eqState = PlaybackPreferences.getEqualizerState(context)
+            if (eqState.enabled) {
+                applyEqualizer(true, eqState.bands)
+            }
         } else {
             repo?.release()
             mediaRepository = null
@@ -348,6 +352,44 @@ class VlcPlayerManager(private val context: Context) {
         try {
             mediaPlayer?.stop()
         } catch (_: Throwable) {}
+    }
+
+    fun applyEqualizer(enabled: Boolean, bands5: List<Float>) {
+        if (isReleased) return
+        val mp = mediaPlayer ?: return
+        try {
+            if (!enabled) {
+                mp.setEqualizer(null)
+                return
+            }
+            val eq = MediaPlayer.Equalizer.create()
+            val b0 = bands5.getOrElse(0) { 0f }.coerceIn(-12f, 12f) // 60Hz
+            val b1 = bands5.getOrElse(1) { 0f }.coerceIn(-12f, 12f) // 230Hz
+            val b2 = bands5.getOrElse(2) { 0f }.coerceIn(-12f, 12f) // 910Hz
+            val b3 = bands5.getOrElse(3) { 0f }.coerceIn(-12f, 12f) // 3.6kHz
+            val b4 = bands5.getOrElse(4) { 0f }.coerceIn(-12f, 12f) // 14kHz
+            // LibVLC 10 bands: 60, 170, 310, 600, 1k, 3k, 6k, 12k, 14k, 16k
+            val mapped = floatArrayOf(
+                b0,
+                (b0 * 0.5f + b1 * 0.5f),
+                b1,
+                (b1 * 0.4f + b2 * 0.6f),
+                b2,
+                (b2 * 0.3f + b3 * 0.7f),
+                b3,
+                (b3 * 0.4f + b4 * 0.6f),
+                b4,
+                b4
+            )
+            val bandCount = MediaPlayer.Equalizer.getBandCount().coerceAtMost(mapped.size)
+            for (i in 0 until bandCount) {
+                eq.setAmp(i, mapped[i])
+            }
+            eq.setPreAmp(0f)
+            mp.setEqualizer(eq)
+        } catch (e: Throwable) {
+            Log.w("VlcPlayerManager", "applyEqualizer error", e)
+        }
     }
 
     @Synchronized

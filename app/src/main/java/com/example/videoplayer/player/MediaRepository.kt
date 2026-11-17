@@ -22,12 +22,25 @@ class MediaRepository(context: Context) {
         val profile = VlcEngineConfigurator.getHardwareProfile(appContext, selectedEngine)
         hardwareProfile = profile
 
+        val subStyle = PlaybackPreferences.getSubtitleStyle(appContext)
         val engineOptions = ArrayList(profile.vlcOptions).apply {
             add("--rtsp-tcp")
             if (!hwAccelEnabled && selectedEngine != AppPreferences.RenderEngine.SOFTWARE) {
                 removeAll { it.startsWith("--avcodec-hw=") }
                 add("--avcodec-hw=none")
             }
+            add("--freetype-rel-fontsize=${when {
+                subStyle.fontSizeSp <= 14 -> 20
+                subStyle.fontSizeSp <= 18 -> 16
+                subStyle.fontSizeSp <= 22 -> 13
+                else -> 10
+            }}")
+            val vlcColorInt = try {
+                android.graphics.Color.parseColor(subStyle.colorHex) and 0x00FFFFFF
+            } catch (_: Throwable) {
+                0xECECF0
+            }
+            add("--freetype-color=$vlcColorInt")
         }
 
         // Логируем для отладки выбранный движок, поддержку Vulkan и количество потоков CPU

@@ -14,13 +14,16 @@ fun VideoPlayerTheme(
 
     val colorScheme = darkColorScheme(
         primary = theme.primary,
-        onPrimary = Color.Black,
+        onPrimary = Color(0xFF3A1A00),
         secondary = theme.secondary,
-        onSecondary = Color.Black,
+        onSecondary = Color(0xFF3A1A00),
         background = theme.background,
         onBackground = Color.White,
         surface = theme.surface,
-        onSurface = Color.White
+        onSurface = Color.White,
+        surfaceVariant = theme.controlPanelBg ?: DeepVioletCardTop,
+        onSurfaceVariant = GrayText,
+        outline = theme.cardBorder
     )
 
     CompositionLocalProvider(LocalAppTheme provides theme) {

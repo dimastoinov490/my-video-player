@@ -78,10 +78,11 @@ fun VideoLibraryScreen(
     onOpenSettings: () -> Unit,
     onOpenArchive: (ArchiveSource, File?) -> Unit = { _, _ -> },
     onOpenArchivePicker: () -> Unit = {},
-    onCreateZipArchive: (String) -> Unit = {},
     onOpenBrowser: (String) -> Unit = {},
-    onOpenTerminal: () -> Unit = {},
-    browseRefreshTick: Int = 0
+    onOpenSystemMediaPicker: () -> Unit = {},
+    onOpenNativeThemeStudio: () -> Unit = {},
+    browseRefreshTick: Int = 0,
+    mediaRefreshTick: Int = 0
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -98,12 +99,6 @@ fun VideoLibraryScreen(
     var showScanBanner by remember { mutableStateOf(false) }
     var hasStoragePermission by remember {
         mutableStateOf(checkMediaPermissions(context))
-    }
-    var hasAudioPermission by remember {
-        mutableStateOf(checkAudioPermissions(context))
-    }
-    var hasPhotoPermission by remember {
-        mutableStateOf(checkPhotoPermissions(context))
     }
     var videoLoadJob by remember { mutableStateOf<Job?>(null) }
 
@@ -136,43 +131,6 @@ fun VideoLibraryScreen(
         }
     }
 
-    val audioPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        hasAudioPermission = granted || checkAudioPermissions(context)
-    }
-
-    fun requestAudioAccessIfNeeded() {
-        if (checkAudioPermissions(context)) {
-            hasAudioPermission = true
-            return
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            audioPermissionLauncher.launch(Manifest.permission.READ_MEDIA_AUDIO)
-        } else {
-            hasAudioPermission = checkAudioPermissions(context)
-        }
-    }
-
-    val photoPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        hasPhotoPermission = granted || checkPhotoPermissions(context)
-    }
-
-    fun requestPhotoAccessIfNeeded() {
-        if (checkPhotoPermissions(context)) {
-            hasPhotoPermission = true
-            return
-        }
-        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            Manifest.permission.READ_MEDIA_IMAGES
-        } else {
-            Manifest.permission.READ_EXTERNAL_STORAGE
-        }
-        photoPermissionLauncher.launch(permission)
-    }
-
     fun loadVideos() {
         if (!checkMediaPermissions(context)) {
             hasStoragePermission = false
@@ -203,7 +161,7 @@ fun VideoLibraryScreen(
     }
 
     Scaffold(
-        containerColor = Color(0xFF020306),
+        containerColor = Color(0xFF030208),
         bottomBar = {}
     ) { innerPadding ->
         Box(
@@ -216,15 +174,7 @@ fun VideoLibraryScreen(
                 onVideoSelected = onVideoSelected,
                 onNavTab = { tabName, idx ->
                     bottomNavIndex = idx
-                    if (tabName.equals("audio", ignoreCase = true) || idx == 2) {
-                        requestAudioAccessIfNeeded()
-                    }
-                    if (tabName.equals("photo", ignoreCase = true) || idx == 3) {
-                        requestPhotoAccessIfNeeded()
-                    }
                 },
-                audioPermissionGranted = hasAudioPermission,
-                photoPermissionGranted = hasPhotoPermission,
                 onOpenSearch = {
                     isSearchActive = true
                 },
@@ -237,10 +187,11 @@ fun VideoLibraryScreen(
                 onOpenCustomUrl = onOpenCustomUrl,
                 onOpenArchive = onOpenArchive,
                 onOpenArchivePicker = onOpenArchivePicker,
-                onCreateZipArchive = onCreateZipArchive,
                 onOpenBrowser = onOpenBrowser,
-                onOpenTerminal = onOpenTerminal,
+                onOpenSystemMediaPicker = onOpenSystemMediaPicker,
+                onOpenNativeThemeStudio = onOpenNativeThemeStudio,
                 browseRefreshTick = browseRefreshTick,
+                mediaRefreshTick = mediaRefreshTick,
                 onRefreshVideos = {
                     Toast.makeText(context, "Обновление списка видео…", Toast.LENGTH_SHORT).show()
                     videoLoadJob?.cancel()
@@ -328,24 +279,6 @@ private fun checkMediaPermissions(context: Context): Boolean {
             Manifest.permission.READ_EXTERNAL_STORAGE
         ) == PackageManager.PERMISSION_GRANTED
     }
-}
-
-private fun checkPhotoPermissions(context: Context): Boolean {
-    val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        Manifest.permission.READ_MEDIA_IMAGES
-    } else {
-        Manifest.permission.READ_EXTERNAL_STORAGE
-    }
-    return ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
-}
-
-private fun checkAudioPermissions(context: Context): Boolean {
-    val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        Manifest.permission.READ_MEDIA_AUDIO
-    } else {
-        Manifest.permission.READ_EXTERNAL_STORAGE
-    }
-    return ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
 }
 
 private fun requestMediaPermissions(launcher: androidx.activity.result.ActivityResultLauncher<Array<String>>) {
@@ -472,7 +405,7 @@ fun VideoCardItem(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(115.dp)
-                    .background(Color(0xFF151515))
+                    .background(Color(0xFF14121C))
             ) {
                 if (video.thumbnailResId != null) {
                     Image(
@@ -572,7 +505,7 @@ fun VideoCardItem(
                 ) {
                     Text(
                         text = "${if (video.size > 0) formatSize(video.size) else "12.3 MB"} • 2026",
-                        color = Color(0xFFAAAAAA),
+                        color = GrayText,
                         fontSize = 11.sp
                     )
                     Icon(

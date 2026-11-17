@@ -253,8 +253,9 @@ fun SettingsScreen(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // Список ключевых дизайнов со скриншотов для выбора по умолчанию
+                        // Список ключевых дизайнов для выбора по умолчанию
                         val defaultDesignPresets = listOf(
+                            ThemePresets.NexoraObsidianOrange,
                             ThemePresets.NexoraOriginalOrange,
                             ThemePresets.NexoraCyberScreenshot,
                             ThemePresets.Cyberpunk,
@@ -263,8 +264,7 @@ fun SettingsScreen(
 
                         defaultDesignPresets.forEach { preset ->
                             val isSelected = theme.id == preset.id ||
-                                (preset.id == "nexora_orange_original" && theme.id == "nexora_neon") ||
-                                (preset.id == "nexora_neon_screenshot" && theme.id == "nexora_screenshot")
+                                (preset.id == "nexora_obsidian_orange" && (theme.id == "nexora_neon" || theme.id == "nexora_screenshot"))
 
                             Surface(
                                 modifier = Modifier
@@ -310,7 +310,21 @@ fun SettingsScreen(
                                                     fontSize = 13.sp,
                                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                                                 )
-                                                if (preset.id == "nexora_neon_screenshot" || preset.id == "nexora_screenshot") {
+                                                if (preset.id == "nexora_obsidian_orange") {
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Surface(
+                                                        shape = RoundedCornerShape(4.dp),
+                                                        color = Color(0xFFFF9A1A).copy(alpha = 0.25f)
+                                                    ) {
+                                                        Text(
+                                                            "ОБСИДИАН НЕОН",
+                                                            color = Color(0xFFFF9A1A),
+                                                            fontSize = 9.sp,
+                                                            fontWeight = FontWeight.Black,
+                                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                                        )
+                                                    }
+                                                } else if (preset.id == "nexora_neon_screenshot" || preset.id == "nexora_screenshot") {
                                                     Spacer(modifier = Modifier.width(6.dp))
                                                     Surface(
                                                         shape = RoundedCornerShape(4.dp),
@@ -364,32 +378,32 @@ fun SettingsScreen(
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        // Кнопка возврата к оригинальному оформлению по умолчанию со скриншотов
+                        // Кнопка возврата к новому фирменному оформлению Nexora по умолчанию
                         OutlinedButton(
                             onClick = {
                                 ThemeManager.resetToOriginalNeon(context)
-                                android.widget.Toast.makeText(context, "Оформление со скриншотов установлено по умолчанию!", android.widget.Toast.LENGTH_SHORT).show()
+                                android.widget.Toast.makeText(context, "Стиль Nexora Обсидиан Оранж установлен по умолчанию!", android.widget.Toast.LENGTH_SHORT).show()
                             },
-                            border = BorderStroke(1.5.dp, Color(0xFFFF7A00)),
+                            border = BorderStroke(1.5.dp, Color(0xFFFF9A1A)),
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Icon(Icons.Default.Refresh, contentDescription = null, tint = Color(0xFFFF7A00), modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.Refresh, contentDescription = null, tint = Color(0xFFFF9A1A), modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Вернуть оформление Неон (По скриншотам)", color = Color(0xFFFF7A00), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text("Вернуть оформление Nexora Обсидиан", color = Color(0xFFFF9A1A), fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         }
 
                         Spacer(modifier = Modifier.height(8.dp))
 
                         Button(
                             onClick = { showScreenshotDialog = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = theme.primary),
+                            colors = ButtonDefaults.buttonColors(containerColor = theme.primary, contentColor = Color(0xFF3A1A00)),
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Icon(Icons.Default.Palette, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.Palette, contentDescription = null, tint = Color(0xFF3A1A00), modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("UI дизайн по скриншоту (макету)", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text("UI дизайн по скриншоту (макету)", color = Color(0xFF3A1A00), fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         }
 
                         Spacer(modifier = Modifier.height(8.dp))

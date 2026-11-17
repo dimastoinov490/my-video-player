@@ -99,8 +99,24 @@ object ThemePresets {
         controlPanelBg = Color(0xFF05050D)
     )
 
-    val NexoraScreenshot = NexoraCyberScreenshot
-    val NexoraNeon = NexoraOriginalOrange
+    val NexoraObsidianOrange = AppCustomTheme(
+        id = "nexora_obsidian_orange",
+        name = "Nexora Обсидиан и Оранж",
+        description = "Новый фирменный стиль Nexora: обсидианово-фиолетовые карточки (#0D0B1A), индиго-контуры и огненный оранжевый неон (#FF9A1A → #FF5200)",
+        primary = Color(0xFFFF9A1A),
+        secondary = Color(0xFFFF5200),
+        background = Color(0xFF030208),
+        surface = Color(0xFF0D0B1A),
+        cardBorder = Color(0x666E5FBE),
+        glow = Color(0x66FF8A00),
+        playerControlStyle = PlayerControlStyle.MODERN_FLOAT,
+        buttonSize = ButtonSizeOption.LARGE,
+        cornerRadiusDp = 22,
+        controlPanelBg = Color(0xFF14121C)
+    )
+
+    val NexoraScreenshot = NexoraObsidianOrange
+    val NexoraNeon = NexoraObsidianOrange
 
     val Cyberpunk = AppCustomTheme(
         id = "cyberpunk",
@@ -279,6 +295,7 @@ object ThemePresets {
     )
 
     val allPresets = listOf(
+        NexoraObsidianOrange,
         NexoraOriginalOrange,
         NexoraCyberScreenshot,
         Cyberpunk,
@@ -369,13 +386,13 @@ object ThemeManager {
     fun init(context: Context) {
         try {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val themeId = prefs.getString(KEY_THEME_ID, "nexora_neon") ?: "nexora_neon"
+            val themeId = prefs.getString(KEY_THEME_ID, "nexora_obsidian_orange") ?: "nexora_obsidian_orange"
 
             if (themeId == "custom_ai") {
-                val primaryInt = prefs.getInt(KEY_CUSTOM_PRIMARY, 0xFFFF8A00.toInt()).let { if (it == 0) 0xFFFF8A00.toInt() else it }
-                val secondaryInt = prefs.getInt(KEY_CUSTOM_SECONDARY, 0xFFFF9500.toInt()).let { if (it == 0) 0xFFFF9500.toInt() else it }
-                val bgInt = prefs.getInt(KEY_CUSTOM_BG, 0xFF0D0D0D.toInt()).let { if (it == 0) 0xFF0D0D0D.toInt() else it }
-                val surfaceInt = prefs.getInt(KEY_CUSTOM_SURFACE, 0xFF1E1E1E.toInt()).let { if (it == 0) 0xFF1E1E1E.toInt() else it }
+                val primaryInt = prefs.getInt(KEY_CUSTOM_PRIMARY, 0xFFFF9A1A.toInt()).let { if (it == 0) 0xFFFF9A1A.toInt() else it }
+                val secondaryInt = prefs.getInt(KEY_CUSTOM_SECONDARY, 0xFFFF5200.toInt()).let { if (it == 0) 0xFFFF5200.toInt() else it }
+                val bgInt = prefs.getInt(KEY_CUSTOM_BG, 0xFF030208.toInt()).let { if (it == 0) 0xFF030208.toInt() else it }
+                val surfaceInt = prefs.getInt(KEY_CUSTOM_SURFACE, 0xFF0D0B1A.toInt()).let { if (it == 0) 0xFF0D0B1A.toInt() else it }
                 val name = prefs.getString(KEY_CUSTOM_NAME, "ИИ Стиль") ?: "ИИ Стиль"
                 val desc = prefs.getString(KEY_CUSTOM_DESC, "Сгенерировано искусственным интеллектом") ?: ""
                 val ctrlStyleStr = prefs.getString(KEY_CUSTOM_CTRL_STYLE, PlayerControlStyle.CLASSIC_VLC.name)
@@ -450,16 +467,19 @@ object ThemeManager {
     }
 
     fun resetToOriginalNeon(context: Context) {
-        applyDefaultPreset(context, ThemePresets.NexoraOriginalOrange)
+        applyDefaultPreset(context, ThemePresets.NexoraObsidianOrange)
     }
 
     fun applyDefaultPreset(context: Context, theme: AppCustomTheme) {
         applyTheme(context, theme)
         when (theme.id) {
+            "nexora_obsidian_orange", "nexora_neon" -> {
+                ThemeConfigManager.applyConfig(DynamicPlayerConfig.obsidianOrangePreset(), context)
+            }
             "nexora_neon_screenshot", "nexora_screenshot" -> {
                 ThemeConfigManager.applyConfig(DynamicPlayerConfig.screenshotPreset(), context)
             }
-            "nexora_orange_original", "nexora_neon" -> {
+            "nexora_orange_original" -> {
                 ThemeConfigManager.applyConfig(DynamicPlayerConfig.neonOrangePreset(), context)
             }
             "cyberpunk" -> {

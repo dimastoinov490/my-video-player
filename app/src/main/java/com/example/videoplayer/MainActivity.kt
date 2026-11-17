@@ -6,7 +6,6 @@ import android.content.SharedPreferences
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -20,12 +19,18 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,19 +40,14 @@ import com.example.videoplayer.archive.ArchiveManager
 import com.example.videoplayer.archive.ArchivePlaybackSpec
 import com.example.videoplayer.archive.ArchiveSource
 import com.example.videoplayer.archive.ArchiveStreamServer
-import com.example.videoplayer.archive.ZipArchiveCreator
 import com.example.videoplayer.ui.ArchiveBrowserScreen
-import com.example.videoplayer.ui.BrowserActivity
-import com.example.videoplayer.ui.LinuxTerminalScreen
+import com.example.videoplayer.ui.FullBrowserScreen
 import com.example.videoplayer.ui.OrientationHelper
 import com.example.videoplayer.ui.PlayerScreen
+import com.example.videoplayer.ui.SettingsScreen
 import com.example.videoplayer.ui.VideoLibraryScreen
 import com.example.videoplayer.ui.theme.*
 import java.io.File
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 class MainActivity : FragmentActivity() {
     private var inPipState by mutableStateOf(false)
@@ -125,16 +125,17 @@ class MainActivity : FragmentActivity() {
         setContent {
             VideoPlayerTheme {
                 val theme = LocalAppTheme.current
-                val coroutineScope = rememberCoroutineScope()
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = theme.background
                 ) {
                     var selectedVideoUri by remember { mutableStateOf<String?>(null) }
                     var selectedArchivePlayback by remember { mutableStateOf<ArchivePlaybackSpec?>(null) }
+                    var activeBrowserUrl by remember { mutableStateOf<String?>(null) }
+                    var showThemeStudioScreen by remember { mutableStateOf(false) }
                     var archiveRefreshTick by remember { mutableIntStateOf(0) }
+                    var mediaRefreshTick by remember { mutableIntStateOf(0) }
                     var showCustomUrlDialog by remember { mutableStateOf(false) }
-                    var showLinuxTerminal by remember { mutableStateOf(false) }
                     var urlInput by remember { mutableStateOf("") }
 
                     val safArchivePicker = rememberLauncherForActivityResult(
@@ -153,6 +154,27 @@ class MainActivity : FragmentActivity() {
                         }
                     }
 
+                    val mediaPickerLauncher = rememberLauncherForActivityResult(
+                        contract = ActivityResultContracts.OpenDocument()
+                    ) { uri ->
+                        if (uri != null) {
+                            try {
+                                contentResolver.takePersistableUriPermission(
+                                    uri,
+                                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                )
+                            } catch (_: Throwable) {}
+                            val name = ArchiveManager.resolveDisplayName(this@MainActivity, uri)
+                            if (ArchiveFileUtils.isArchiveFileName(name)) {
+                                pendingArchiveState = ArchiveSource.ContentUri(uri, name) to
+                                    ArchiveManager.defaultExtractDir(name)
+                            } else {
+                                selectedArchivePlayback = null
+                                selectedVideoUri = uri.toString()
+                            }
+                        }
+                    }
+
                     val subEnterTransition = remember {
                         slideInHorizontally { it / 8 } + fadeIn(animationSpec = tween(420, easing = CubicBezierEasing(0.2f, 0.9f, 0.3f, 1f)))
                     }
@@ -168,6 +190,7 @@ class MainActivity : FragmentActivity() {
                             onBack = {
                                 selectedVideoUri = null
                                 selectedArchivePlayback = null
+                                mediaRefreshTick++
                             }
                         )
                     } else if (pendingArchiveState != null) {
@@ -186,6 +209,18 @@ class MainActivity : FragmentActivity() {
                                 pendingArchiveState = null
                             }
                         )
+                    } else if (activeBrowserUrl != null) {
+                        FullBrowserScreen(
+                            initialUrl = activeBrowserUrl!!,
+                            onClose = { activeBrowserUrl = null }
+                        )
+                    } else if (showThemeStudioScreen) {
+                        SettingsScreen(
+                            onBack = {
+                                showThemeStudioScreen = false
+                                mediaRefreshTick++
+                            }
+                        )
                     } else {
                         Box(modifier = Modifier.fillMaxSize()) {
                             VideoLibraryScreen(
@@ -197,62 +232,25 @@ class MainActivity : FragmentActivity() {
                                     urlInput = ""
                                     showCustomUrlDialog = true
                                 },
-                                onOpenSettings = { /* В v4 настройки открываются прямо в HTML */ },
+                                onOpenSettings = { showThemeStudioScreen = true },
                                 onOpenArchive = { source, destDir ->
                                     pendingArchiveState = source to destDir
                                 },
                                 onOpenArchivePicker = {
                                     safArchivePicker.launch(arrayOf("*/*"))
                                 },
-                                onCreateZipArchive = { sourcePath ->
-                                    val source = File(sourcePath)
-                                    if (!source.exists() || (!source.isFile && !source.isDirectory)) {
-                                        Toast.makeText(this@MainActivity, "Источник больше недоступен", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        val rawName = if (source.isDirectory) source.name else source.nameWithoutExtension
-                                        val baseName = rawName.ifBlank { "Archive" }
-                                        var destination = File(source.parentFile, "$baseName.zip")
-                                        var suffix = 1
-                                        while (destination.exists()) {
-                                            destination = File(source.parentFile, "$baseName ($suffix).zip")
-                                            suffix++
-                                        }
-                                        Toast.makeText(this@MainActivity, "Создание ZIP-архива…", Toast.LENGTH_SHORT).show()
-                                        coroutineScope.launch {
-                                            try {
-                                                val created = withContext(Dispatchers.IO) {
-                                                    ZipArchiveCreator.create(listOf(source), destination)
-                                                }
-                                                archiveRefreshTick++
-                                                Toast.makeText(this@MainActivity, "Архив создан: ${created.name}", Toast.LENGTH_LONG).show()
-                                            } catch (e: CancellationException) {
-                                                throw e
-                                            } catch (e: Exception) {
-                                                Toast.makeText(this@MainActivity, "Не удалось создать ZIP: ${e.message ?: "ошибка"}", Toast.LENGTH_LONG).show()
-                                            }
-                                        }
-                                    }
-                                },
                                 onOpenBrowser = { url ->
-                                    startActivity(
-                                        Intent(this@MainActivity, BrowserActivity::class.java).putExtra("url", url)
-                                    )
+                                    activeBrowserUrl = url
                                 },
-                                onOpenTerminal = {
-                                    showLinuxTerminal = true
+                                onOpenSystemMediaPicker = {
+                                    mediaPickerLauncher.launch(arrayOf("video/*", "audio/*", "*/*"))
                                 },
-                                browseRefreshTick = archiveRefreshTick
+                                onOpenNativeThemeStudio = {
+                                    showThemeStudioScreen = true
+                                },
+                                browseRefreshTick = archiveRefreshTick,
+                                mediaRefreshTick = mediaRefreshTick
                             )
-
-                            AnimatedVisibility(
-                                visible = showLinuxTerminal,
-                                enter = subEnterTransition,
-                                exit = subExitTransition
-                            ) {
-                                LinuxTerminalScreen(
-                                    onBack = { showLinuxTerminal = false }
-                                )
-                            }
 
                             // Воспроизведение по ссылке с плавной анимацией появления
                             AnimatedVisibility(
@@ -277,41 +275,76 @@ class MainActivity : FragmentActivity() {
                                     Surface(
                                         modifier = Modifier
                                             .fillMaxWidth(0.92f)
+                                            .widthIn(max = 520.dp)
                                             .clickable(
                                                 interactionSource = remember { MutableInteractionSource() },
                                                 indication = null
                                             ) { /* consume clicks inside dialog */ },
                                         shape = RoundedCornerShape(22.dp),
-                                        color = theme.surface,
-                                        border = BorderStroke(1.5.dp, theme.primary.copy(alpha = 0.35f)),
+                                        color = Color.Transparent,
+                                        border = BorderStroke(1.5.dp, Color(0x59826EC8)),
                                         shadowElevation = 24.dp
                                     ) {
                                         Column(
-                                            modifier = Modifier.padding(22.dp),
+                                            modifier = Modifier
+                                                .background(
+                                                    Brush.verticalGradient(
+                                                        listOf(Color(0xFF14121C), Color(0xFF0D0B14))
+                                                    )
+                                                )
+                                                .padding(22.dp),
                                             verticalArrangement = Arrangement.spacedBy(14.dp)
                                         ) {
-                                            Text(
-                                                "Воспроизведение по ссылке",
-                                                color = Color.White,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 18.sp
-                                            )
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(44.dp)
+                                                        .clip(CircleShape)
+                                                        .background(
+                                                            Brush.linearGradient(
+                                                                listOf(Color(0xFF5A3010), Color(0xFF3A1C0C))
+                                                            )
+                                                        ),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Link,
+                                                        contentDescription = null,
+                                                        tint = Color(0xFFFFA31A),
+                                                        modifier = Modifier.size(22.dp)
+                                                    )
+                                                }
+                                                Text(
+                                                    "Воспроизведение по ссылке",
+                                                    color = Color.White,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 18.sp
+                                                )
+                                            }
 
                                             Text(
                                                 "Введите HTTP(S), HLS или RTSP URL потока:",
-                                                color = GrayText,
+                                                color = Color(0xFF8D8AA8),
                                                 fontSize = 13.sp
                                             )
 
                                             OutlinedTextField(
                                                 value = urlInput,
                                                 onValueChange = { urlInput = it },
-                                                placeholder = { Text("https://example.com/stream.m3u8", color = GrayText) },
+                                                placeholder = { Text("https://example.com/stream.m3u8", color = Color(0xFF8D8AA8)) },
                                                 singleLine = true,
-                                                modifier = Modifier.fillMaxWidth(),
+                                                shape = RoundedCornerShape(14.dp),
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .testTag("custom_url_input"),
                                                 colors = OutlinedTextFieldDefaults.colors(
-                                                    focusedBorderColor = theme.primary,
-                                                    unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
+                                                    focusedBorderColor = Color(0xFFFF9A1A),
+                                                    unfocusedBorderColor = Color(0x616E5FBE),
+                                                    focusedContainerColor = Color(0xFF0B0914),
+                                                    unfocusedContainerColor = Color(0xFF0B0914),
                                                     focusedTextColor = Color.White,
                                                     unfocusedTextColor = Color.White
                                                 )
@@ -322,8 +355,18 @@ class MainActivity : FragmentActivity() {
                                                 horizontalArrangement = Arrangement.End,
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                TextButton(onClick = { showCustomUrlDialog = false }) {
-                                                    Text("Отмена", color = GrayText)
+                                                Button(
+                                                    onClick = { showCustomUrlDialog = false },
+                                                    colors = ButtonDefaults.buttonColors(
+                                                        containerColor = Color(0xFF2C2A48),
+                                                        contentColor = Color(0xFFC9C7E0)
+                                                    ),
+                                                    shape = RoundedCornerShape(18.dp),
+                                                    modifier = Modifier
+                                                        .heightIn(min = 48.dp)
+                                                        .testTag("custom_url_cancel")
+                                                ) {
+                                                    Text("Отмена", fontWeight = FontWeight.Medium)
                                                 }
                                                 Spacer(modifier = Modifier.width(10.dp))
                                                 Button(
@@ -333,10 +376,16 @@ class MainActivity : FragmentActivity() {
                                                             selectedVideoUri = urlInput.trim()
                                                         }
                                                     },
-                                                    colors = ButtonDefaults.buttonColors(containerColor = theme.primary),
-                                                    shape = RoundedCornerShape(12.dp)
+                                                    colors = ButtonDefaults.buttonColors(
+                                                        containerColor = Color(0xFFFFA31A),
+                                                        contentColor = Color(0xFF3A1A00)
+                                                    ),
+                                                    shape = RoundedCornerShape(18.dp),
+                                                    modifier = Modifier
+                                                        .heightIn(min = 48.dp)
+                                                        .testTag("custom_url_play")
                                                 ) {
-                                                    Text("Играть", color = Color.Black, fontWeight = FontWeight.Bold)
+                                                    Text("Играть", color = Color(0xFF3A1A00), fontWeight = FontWeight.Bold)
                                                 }
                                             }
                                         }

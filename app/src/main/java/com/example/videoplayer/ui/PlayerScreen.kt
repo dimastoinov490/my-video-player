@@ -57,11 +57,16 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -70,9 +75,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.LifecycleOwner
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -80,15 +82,21 @@ import com.example.videoplayer.R
 import com.example.videoplayer.archive.ArchivePlaybackSpec
 import com.example.videoplayer.archive.ArchiveSource
 import com.example.videoplayer.archive.ArchiveStreamServer
+import com.example.videoplayer.model.AudioItem
+import com.example.videoplayer.model.MediaStoreHelper
+import com.example.videoplayer.model.PlaylistManager
+import com.example.videoplayer.player.EqualizerState
+import com.example.videoplayer.player.PlaybackPreferences
 import com.example.videoplayer.player.PlaybackTrack
-import com.example.videoplayer.player.AudioEnhancementSession
-import com.example.videoplayer.player.DolbyAudioEnhancer
 import com.example.videoplayer.player.GoogleCastManager
 import com.example.videoplayer.player.CastStartResult
+import com.example.videoplayer.player.SubtitleStyleState
 import com.google.android.gms.cast.framework.CastButtonFactory
 import androidx.mediarouter.app.MediaRouteButton
 import com.example.videoplayer.player.VlcPlayerManager
+import com.example.videoplayer.ui.theme.DynamicPlayerConfig
 import com.example.videoplayer.ui.theme.ThemeConfigManager
+import com.example.videoplayer.ui.theme.ThemeManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -166,6 +174,15 @@ fun resolveVideoTitle(context: Context, uriString: String): String {
         }
     } catch (_: Throwable) {}
 
+    try {
+        val lastSegment = uriString.substringAfterLast('/')
+        if (lastSegment.all { it.isDigit() }) {
+            val videos = MediaStoreHelper.getVideos(context)
+            val match = videos.find { it.id.toString() == lastSegment || it.uri.toString() == uriString }
+            if (match != null) return match.displayName
+        }
+    } catch (_: Throwable) {}
+
     val fallback = uriString.substringAfterLast('/').substringBefore('?')
     return if (fallback.isBlank()) "Видео" else fallback
 }
@@ -198,6 +215,21 @@ private fun extractLanMonitorBeatEndpoint(videoUri: String): String? {
     }
 }
 
+private fun isAudioMedia(context: Context, uriString: String, archiveSpec: ArchivePlaybackSpec?): Boolean {
+    val audioExts = setOf("mp3", "m4a", "aac", "flac", "ogg", "wav", "opus", "wma")
+    val checkName = archiveSpec?.entryName ?: uriString.substringBefore('?')
+    val ext = checkName.substringAfterLast('.', "").lowercase()
+    if (ext in audioExts) return true
+    if (uriString.contains("media/external/audio") || uriString.startsWith("sample://audio")) return true
+    if (uriString.startsWith("content://")) {
+        try {
+            val mime = context.contentResolver.getType(Uri.parse(uriString))
+            if (mime != null && mime.startsWith("audio/")) return true
+        } catch (_: Throwable) {}
+    }
+    return false
+}
+
 @Composable
 fun PlayerScreen(
     videoUri: String,
@@ -207,20 +239,34 @@ fun PlayerScreen(
 ) {
     val context = LocalContext.current
     val config = ThemeConfigManager.currentConfig
-    var resolvedTitle by remember(videoUri, archiveSpec) { mutableStateOf(archiveSpec?.entryName ?: "Видео") }
+    var activeMediaUri by remember(videoUri) { mutableStateOf(videoUri) }
+    var resolvedTitle by remember(activeMediaUri, archiveSpec) { mutableStateOf(archiveSpec?.entryName ?: "Видео") }
+    var audioArtistSubtitle by remember(activeMediaUri) { mutableStateOf("") }
+    var isAudioMode by remember(activeMediaUri, archiveSpec) {
+        mutableStateOf(isAudioMedia(context, activeMediaUri, archiveSpec))
+    }
+    var audioQueue by remember { mutableStateOf<List<AudioItem>>(emptyList()) }
+    var isShuffle by remember { mutableStateOf(false) }
+    var isFavorite by remember(activeMediaUri) {
+        mutableStateOf(
+            PlaylistManager.getPlaylists(context).find { it.id == "pl_favorites" }
+                ?.itemUris?.contains(activeMediaUri) == true
+        )
+    }
+
     val progressPrefs = remember { context.getSharedPreferences("playback_progress", Context.MODE_PRIVATE) }
-    val progressKey = remember(videoUri) { playbackProgressKey(videoUri) }
-    var savedResumePositionMs by remember(videoUri) { mutableLongStateOf(progressPrefs.getLong(progressKey, 0L)) }
-    var savedResumeDurationMs by remember(videoUri) { mutableLongStateOf(progressPrefs.getLong("${progressKey}_duration", 0L)) }
-    var resumePositionApplied by remember(videoUri) { mutableStateOf(false) }
+    val progressKey = remember(activeMediaUri) { playbackProgressKey(activeMediaUri) }
+    var savedResumePositionMs by remember(activeMediaUri) { mutableLongStateOf(progressPrefs.getLong(progressKey, 0L)) }
+    var savedResumeDurationMs by remember(activeMediaUri) { mutableLongStateOf(progressPrefs.getLong("${progressKey}_duration", 0L)) }
+    var resumePositionApplied by remember(activeMediaUri) { mutableStateOf(false) }
 
     // Crash-proof player manager
     val playerManager = remember { VlcPlayerManager(context) }
     val castManager = remember { GoogleCastManager(context) }
     var useNativeFallback by remember { mutableStateOf(!playerManager.isEngineReady) }
-    var activeArchiveSessionId by remember(videoUri, archiveSpec) { mutableStateOf<String?>(null) }
-    var activeArchiveStreamUrl by remember(videoUri, archiveSpec) { mutableStateOf<String?>(null) }
-    var triedDirectZip by remember(videoUri, archiveSpec) { mutableStateOf(false) }
+    var activeArchiveSessionId by remember(activeMediaUri, archiveSpec) { mutableStateOf<String?>(null) }
+    var activeArchiveStreamUrl by remember(activeMediaUri, archiveSpec) { mutableStateOf<String?>(null) }
+    var triedDirectZip by remember(activeMediaUri, archiveSpec) { mutableStateOf(false) }
     val latestArchiveSessionId by rememberUpdatedState(activeArchiveSessionId)
 
     var isPlaying by remember { mutableStateOf(true) }
@@ -234,6 +280,9 @@ fun PlayerScreen(
     var showTopOverflowMenu by remember { mutableStateOf(false) }
     var showMoreBottomSheet by remember { mutableStateOf(false) }
     var showSubtitlesDialog by remember { mutableStateOf(false) }
+    var showEqualizerDialog by remember { mutableStateOf(false) }
+    var eqState by remember { mutableStateOf(PlaybackPreferences.getEqualizerState(context)) }
+    var subStyle by remember { mutableStateOf(PlaybackPreferences.getSubtitleStyle(context)) }
     var audioTracks by remember { mutableStateOf(emptyList<PlaybackTrack>()) }
     var subtitleTracks by remember { mutableStateOf(emptyList<PlaybackTrack>()) }
     var selectedAudioTrack by remember { mutableIntStateOf(-1) }
@@ -244,14 +293,28 @@ fun PlayerScreen(
     var repeatMode by remember { mutableStateOf(VideoRepeatMode.OFF) }
     var infoFeedbackText by remember { mutableStateOf<String?>(null) }
 
+    LaunchedEffect(Unit) {
+        audioQueue = withContext(Dispatchers.IO) {
+            MediaStoreHelper.getAudios(context)
+        }
+    }
+
     // ContentResolver queries and the fallback media scan can block; resolve the
-    // title off the main thread so opening a video never stalls the player UI.
-    LaunchedEffect(videoUri, archiveSpec) {
+    // title off the main thread so opening a media file never stalls the player UI.
+    LaunchedEffect(activeMediaUri, archiveSpec, audioQueue) {
         if (archiveSpec != null) {
             resolvedTitle = archiveSpec.entryName
+            audioArtistSubtitle = "Из архива"
         } else {
-            resolvedTitle = withContext(Dispatchers.IO) {
-                resolveVideoTitle(context, videoUri)
+            val audioMatch = audioQueue.find { it.uri.toString() == activeMediaUri }
+            if (audioMatch != null) {
+                resolvedTitle = audioMatch.title
+                audioArtistSubtitle = "${audioMatch.artist} • ${audioMatch.album}"
+            } else {
+                resolvedTitle = withContext(Dispatchers.IO) {
+                    resolveVideoTitle(context, activeMediaUri)
+                }
+                audioArtistSubtitle = if (isAudioMode) "Аудиодорожка" else ""
             }
         }
     }
@@ -290,34 +353,39 @@ fun PlayerScreen(
     val latestCurrentTimeMs by rememberUpdatedState(currentTimeMs)
     val latestTotalDurationMs by rememberUpdatedState(totalDurationMs)
     val latestRepeatMode by rememberUpdatedState(repeatMode)
+    val latestActiveUri by rememberUpdatedState(activeMediaUri)
+    val latestResolvedTitle by rememberUpdatedState(resolvedTitle)
+    val latestAudioSub by rememberUpdatedState(audioArtistSubtitle)
+    val latestIsAudio by rememberUpdatedState(isAudioMode)
 
     var nativeVideoView by remember { mutableStateOf<VideoView?>(null) }
     var nativeMediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
-    var nativeAudioEnhancement by remember { mutableStateOf<AudioEnhancementSession?>(null) }
-    var hasStartedVlcPlayback by remember(videoUri) { mutableStateOf(false) }
+    var hasStartedVlcPlayback by remember { mutableStateOf(false) }
 
-    // The background-playback switch is persisted by the library settings screen.
-    // Respect it when the Activity leaves the foreground; keeping it enabled does not
-    // replace a dedicated media foreground service, but prevents an intentional pause.
-    DisposableEffect(activity, playerManager) {
-        val lifecycleOwner = activity as? LifecycleOwner
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) {
-                val allowBackgroundPlayback = context
-                    .getSharedPreferences("video_prefs", Context.MODE_PRIVATE)
-                    .getBoolean("bg_play", false)
-                if (!allowBackgroundPlayback) {
-                    playerManager.pause()
-                    try { nativeMediaPlayer?.pause() } catch (_: Throwable) {}
-                }
-            }
+    fun switchAudioTrackByStep(step: Int) {
+        if (audioQueue.isEmpty()) return
+        val curIdx = audioQueue.indexOfFirst { it.uri.toString() == activeMediaUri }
+        val nextIdx = if (isShuffle && audioQueue.size > 1) {
+            val candidates = audioQueue.indices.filter { it != curIdx }
+            candidates.random()
+        } else if (curIdx < 0) {
+            0
+        } else {
+            (curIdx + step + audioQueue.size) % audioQueue.size
         }
-        lifecycleOwner?.lifecycle?.addObserver(observer)
-        onDispose {
-            lifecycleOwner?.lifecycle?.removeObserver(observer)
+        val nextItem = audioQueue[nextIdx]
+        activeMediaUri = nextItem.uri.toString()
+        resolvedTitle = nextItem.title
+        audioArtistSubtitle = "${nextItem.artist} • ${nextItem.album}"
+        currentTimeMs = 0L
+        totalDurationMs = nextItem.duration
+        if (!useNativeFallback) {
+            playerManager.playUrl(activeMediaUri)
+        } else {
+            nativeVideoView?.setVideoURI(nextItem.uri)
+            nativeVideoView?.start()
         }
     }
-
 
     BackHandler {
         onBack()
@@ -340,16 +408,21 @@ fun PlayerScreen(
             }
             val position = latestCurrentTimeMs
             val duration = latestTotalDurationMs
+            PlaybackPreferences.recordRecentMedia(
+                context = context,
+                uri = latestActiveUri,
+                title = latestResolvedTitle,
+                subtitle = latestAudioSub,
+                isAudio = latestIsAudio,
+                positionMs = position,
+                durationMs = duration
+            )
             if (position > 0L && (duration <= 0L || position < duration - 10_000L)) {
                 progressPrefs.edit()
-                    .putLong(progressKey, position)
-                    .putLong("${progressKey}_duration", duration)
+                    .putLong(playbackProgressKey(latestActiveUri), position)
+                    .putLong("${playbackProgressKey(latestActiveUri)}_duration", duration)
                     .apply()
             }
-            try {
-                nativeAudioEnhancement?.close()
-                nativeAudioEnhancement = null
-            } catch (_: Throwable) {}
             try {
                 ArchiveStreamServer.stopSession(latestArchiveSessionId)
             } catch (_: Throwable) {}
@@ -403,7 +476,18 @@ fun PlayerScreen(
     }
 
     // Persist progress periodically so playback can resume after leaving the player or closing the app.
-    LaunchedEffect(isPlaying, videoUri) {
+    LaunchedEffect(isPlaying, activeMediaUri, resolvedTitle) {
+        if (resolvedTitle.isNotBlank()) {
+            PlaybackPreferences.recordRecentMedia(
+                context = context,
+                uri = activeMediaUri,
+                title = resolvedTitle,
+                subtitle = audioArtistSubtitle,
+                isAudio = isAudioMode,
+                positionMs = latestCurrentTimeMs,
+                durationMs = latestTotalDurationMs
+            )
+        }
         if (!isPlaying) {
             val position = latestCurrentTimeMs
             val duration = latestTotalDurationMs
@@ -425,6 +509,15 @@ fun PlayerScreen(
             delay(5000L)
             val position = latestCurrentTimeMs
             val duration = latestTotalDurationMs
+            PlaybackPreferences.recordRecentMedia(
+                context = context,
+                uri = activeMediaUri,
+                title = resolvedTitle,
+                subtitle = audioArtistSubtitle,
+                isAudio = isAudioMode,
+                positionMs = position,
+                durationMs = duration
+            )
             if (position > 0L && (duration <= 0L || position < duration - 10_000L)) {
                 progressPrefs.edit()
                     .putLong(progressKey, position)
@@ -575,7 +668,7 @@ fun PlayerScreen(
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF010104))
+            .background(Color(0xFF030208))
             .pointerInput(isControlsLocked) {
                 detectTapGestures(
                     onTap = {
@@ -694,7 +787,7 @@ fun PlayerScreen(
                                                     }
                                                 }
                                             } else {
-                                                playerManager.playUrl(videoUri)
+                                                playerManager.playUrl(activeMediaUri)
                                             }
                                         }
                                     } catch (_: Throwable) {
@@ -732,10 +825,6 @@ fun PlayerScreen(
                             setVideoURI(uri)
                             setOnPreparedListener { mp ->
                                 nativeMediaPlayer = mp
-                                // Android MediaPlayer exposes a real audio session ID. Attach
-                                // managed effects here; LibVLC does not expose one through this app's API.
-                                nativeAudioEnhancement?.close()
-                                nativeAudioEnhancement = DolbyAudioEnhancer.applyDolbyAtmosEffect(mp.audioSessionId)
                                 totalDurationMs = mp.duration.toLong()
                                 if (!resumePositionApplied) {
                                     resumePositionApplied = true
@@ -790,31 +879,97 @@ fun PlayerScreen(
             }
         }
 
-        // Floating feedback badge
+        // Floating feedback badge (Obsidian Info Toast style)
         infoFeedbackText?.let { info ->
             Surface(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .statusBarsPadding()
                     .padding(top = (80f * uVal).dp.coerceAtLeast(20.dp)),
-                shape = RoundedCornerShape(20.dp),
-                color = Color(0xEE120D20),
-                border = BorderStroke(1.dp, Color(0xFFFF9A1A)),
-                shadowElevation = 8.dp
+                shape = RoundedCornerShape(22.dp),
+                color = Color(0xF00B1A4A),
+                border = BorderStroke(1.5.dp, Color(0x886E64DC)),
+                shadowElevation = 10.dp
             ) {
-                Text(
-                    text = info,
-                    color = Color.White,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                )
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(18.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF3E7BFF)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("i", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Text(
+                        text = info,
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
         }
 
-        // 2. OVERLAY CONTROLS (Exact layout from player_screen_v3.html)
+        // 2. DEDICATED FULL-SCREEN AUDIO PLAYER (Artboard 4) OR VIDEO OVERLAY CONTROLS
+        if (isAudioMode && !isInPipMode) {
+            AudioPlayerOverlay(
+                title = resolvedTitle,
+                subtitle = audioArtistSubtitle,
+                isPlaying = isPlaying,
+                isFavorite = isFavorite,
+                isShuffle = isShuffle,
+                repeatMode = repeatMode,
+                currentTimeMs = currentTimeMs,
+                totalDurationMs = totalDurationMs,
+                hasQueueNavigation = audioQueue.size > 1,
+                onBack = onBack,
+                onToggleFavorite = {
+                    if (isFavorite) {
+                        PlaylistManager.removeItemFromPlaylist(context, "pl_favorites", activeMediaUri)
+                        isFavorite = false
+                        infoFeedbackText = "Удалено из «Избранного»"
+                    } else {
+                        PlaylistManager.addItemToPlaylist(context, "pl_favorites", activeMediaUri)
+                        isFavorite = true
+                        infoFeedbackText = "Добавлено в «Избранное»"
+                    }
+                },
+                onOpenEqualizer = { showEqualizerDialog = true },
+                onOpenMore = { showMoreBottomSheet = true },
+                onToggleShuffle = {
+                    isShuffle = !isShuffle
+                    infoFeedbackText = if (isShuffle) "Перемешивание включено" else "Перемешивание выключено"
+                },
+                onPreviousTrack = { switchAudioTrackByStep(-1) },
+                onTogglePlayPause = {
+                    if (isPlaying) {
+                        if (!useNativeFallback) playerManager.pause() else nativeVideoView?.pause()
+                        isPlaying = false
+                    } else {
+                        if (!useNativeFallback) playerManager.resume() else nativeVideoView?.start()
+                        isPlaying = true
+                    }
+                },
+                onNextTrack = { switchAudioTrackByStep(+1) },
+                onToggleRepeat = {
+                    repeatMode = if (repeatMode == VideoRepeatMode.OFF) VideoRepeatMode.REPEAT_ONE else VideoRepeatMode.OFF
+                    infoFeedbackText = repeatMode.label
+                },
+                onSeekTo = { target ->
+                    currentTimeMs = target
+                    if (!useNativeFallback) playerManager.seekTo(target) else nativeVideoView?.seekTo(target.toInt())
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+
         AnimatedVisibility(
-            visible = showControls && !isInPipMode,
+            visible = showControls && !isInPipMode && !isAudioMode,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier.fillMaxSize()
@@ -822,7 +977,15 @@ fun PlayerScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.35f))
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color(0xBF05030A),
+                                Color(0x3D030208),
+                                Color(0xCC05030A)
+                            )
+                        )
+                    )
             ) {
                 // TOP BAR (Anchored to top, statusBarsPadding)
                 Row(
@@ -831,16 +994,34 @@ fun PlayerScreen(
                         .fillMaxWidth()
                         .statusBarsPadding()
                         .padding(
-                            top = (88f * uVal).dp.coerceAtLeast(8.dp),
-                            start = (68f * uVal).dp.coerceAtLeast(12.dp),
-                            end = (70f * uVal).dp.coerceAtLeast(12.dp)
+                            top = (36f * uVal).dp.coerceAtLeast(8.dp),
+                            start = (40f * uVal).dp.coerceAtLeast(10.dp),
+                            end = (40f * uVal).dp.coerceAtLeast(10.dp)
                         ),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Back Arrow Button
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier
+                            .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                            .testTag("player_back_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Назад",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
                     // Nexora Logo
                     Box(
                         modifier = Modifier
                             .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                            .testTag("player_brand_logo")
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null,
@@ -853,52 +1034,80 @@ fun PlayerScreen(
                         NexoraLogoCanvas(uVal)
                     }
 
-                    Spacer(modifier = Modifier.width((30f * uVal).dp.coerceAtLeast(6.dp)))
+                    Spacer(modifier = Modifier.width(6.dp))
 
-                    // Brand "Nexora"
+                    // Brand "Nexora" with fiery orange 'N'
                     Text(
-                        text = "Nexora",
-                        style = TextStyle(
-                            brush = Brush.horizontalGradient(
-                                listOf(Color(0xFFFFC36A), Color(0xFFB05CFF), Color(0xFFA24EE6))
-                            ),
-                            fontSize = (36f * uVal).sp,
-                            fontWeight = FontWeight.SemiBold,
-                            letterSpacing = (0.5f * uVal).sp
-                        )
+                        text = buildAnnotatedString {
+                            withStyle(SpanStyle(color = Color(0xFFFF9A1A), fontWeight = FontWeight.Bold)) {
+                                append("N")
+                            }
+                            withStyle(SpanStyle(color = Color.White, fontWeight = FontWeight.SemiBold)) {
+                                append("exora")
+                            }
+                        },
+                        fontSize = (32f * uVal).coerceIn(15f, 22f).sp,
+                        letterSpacing = 0.3.sp
                     )
 
-                    Spacer(modifier = Modifier.width((36f * uVal).dp.coerceAtLeast(8.dp)))
+                    Spacer(modifier = Modifier.width(10.dp))
 
                     // Video file title
                     Text(
                         text = resolvedTitle,
-                        color = Color(0xFFC4CBDB),
-                        fontSize = (29.5f * uVal).sp,
-                        fontWeight = FontWeight.Normal,
+                        color = Color(0xFFE4E2F0),
+                        fontSize = (26f * uVal).coerceIn(13f, 18f).sp,
+                        fontWeight = FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
 
-                    Spacer(modifier = Modifier.width((20f * uVal).dp.coerceAtLeast(6.dp)))
+                    Spacer(modifier = Modifier.width(6.dp))
 
                     // Cast Button
-                    Box(
+                    IconButton(
+                        onClick = { showCastDialog = true },
                         modifier = Modifier
                             .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                            .clickable(onClick = { showCastDialog = true }),
-                        contentAlignment = Alignment.Center
+                            .testTag("player_cast_button")
                     ) {
                         CastIconCanvas(uVal)
                     }
 
-                    Spacer(modifier = Modifier.width((34f * uVal).dp.coerceAtLeast(6.dp)))
+                    // Picture-in-Picture quick toggle button
+                    IconButton(
+                        onClick = {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activity != null) {
+                                try {
+                                    val params = PictureInPictureParams.Builder()
+                                        .setAspectRatio(Rational(16, 9))
+                                        .build()
+                                    activity.enterPictureInPictureMode(params)
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "PiP режим: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            } else {
+                                Toast.makeText(context, "Режим PiP поддерживается на Android 8.0+", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier
+                            .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                            .testTag("player_top_pip_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PictureInPictureAlt,
+                            contentDescription = "Картинка в картинке",
+                            tint = Color.White,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
 
                     // Top Three Dots Button
                     Box(
                         modifier = Modifier
                             .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                            .testTag("player_top_menu_button")
                             .clickable(onClick = { showTopOverflowMenu = true }),
                         contentAlignment = Alignment.Center
                     ) {
@@ -907,19 +1116,27 @@ fun PlayerScreen(
                         DropdownMenu(
                             expanded = showTopOverflowMenu,
                             onDismissRequest = { showTopOverflowMenu = false },
-                            modifier = Modifier.background(Color(0xFF0C1014))
+                            modifier = Modifier.background(Color(0xFF14121C))
                         ) {
                             DropdownMenuItem(
                                 text = { Text("Информация о видео", color = Color.White) },
                                 leadingIcon = { Icon(Icons.Default.Info, null, tint = Color(0xFFFF9A1A)) },
                                 onClick = {
                                     showTopOverflowMenu = false
-                                    infoFeedbackText = "Формат: ${videoUri.substringAfterLast('.')} • Длительность: ${formatTime(totalDurationMs)}"
+                                    infoFeedbackText = "Формат: ${activeMediaUri.substringAfterLast('.')} • Длительность: ${formatTime(totalDurationMs)}"
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Эквалайзер", color = Color.White) },
+                                leadingIcon = { Icon(Icons.Default.Tune, null, tint = Color(0xFFFF9A1A)) },
+                                onClick = {
+                                    showTopOverflowMenu = false
+                                    showEqualizerDialog = true
                                 }
                             )
                             DropdownMenuItem(
                                 text = { Text("Заблокировать экран", color = Color.White) },
-                                leadingIcon = { Icon(Icons.Default.Lock, null, tint = Color(0xFFB05CFF)) },
+                                leadingIcon = { Icon(Icons.Default.Lock, null, tint = Color(0xFFFFA31A)) },
                                 onClick = {
                                     showTopOverflowMenu = false
                                     isControlsLocked = true
@@ -927,78 +1144,160 @@ fun PlayerScreen(
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text("Сбросить UI к Неону", color = Color(0xFFA63EF6)) },
-                                leadingIcon = { Icon(Icons.Default.Refresh, null, tint = Color(0xFFA63EF6)) },
+                                text = { Text("Сбросить UI к Обсидиан-Неону", color = Color(0xFFFF9A1A)) },
+                                leadingIcon = { Icon(Icons.Default.Refresh, null, tint = Color(0xFFFF6A00)) },
                                 onClick = {
                                     showTopOverflowMenu = false
-                                    ThemeConfigManager.resetToNeon(context)
-                                    infoFeedbackText = "Применен стандартный Неон (#9D00FF)"
+                                    ThemeManager.resetToOriginalNeon(context)
+                                    ThemeConfigManager.applyConfig(DynamicPlayerConfig.obsidianOrangePreset(), context)
+                                    infoFeedbackText = "Применен стиль Nexora Обсидиан Оранж"
                                 }
                             )
                         }
                     }
                 }
 
-                // BOTTOM CONTROLS (Anchored to bottom, exact positions: buttons 57u / 26dp, seek 150u / 68dp, time 200u / 91dp)
-                val buttonRowH = (80f * uVal).dp.coerceAtLeast(48.dp)
-                val seekH = (44f * uVal).dp.coerceAtLeast(36.dp)
-                val timeRowH = (26f * uVal).dp.coerceAtLeast(20.dp)
+                // CENTER OVERLAY CONTROLS (-10s | Frosted Play/Pause | +10s)
+                if (!isControlsLocked) {
+                    Row(
+                        modifier = Modifier.align(Alignment.Center),
+                        horizontalArrangement = Arrangement.spacedBy(28.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // -10s
+                        Box(
+                            modifier = Modifier
+                                .sizeIn(minWidth = 54.dp, minHeight = 54.dp)
+                                .clip(CircleShape)
+                                .clickable {
+                                    if (!useNativeFallback) {
+                                        playerManager.seekRelative(-10_000L)
+                                    } else {
+                                        val n = ((nativeVideoView?.currentPosition ?: 0) - 10_000).coerceAtLeast(0)
+                                        nativeVideoView?.seekTo(n)
+                                        currentTimeMs = n.toLong()
+                                    }
+                                    infoFeedbackText = "-10 сек"
+                                }
+                                .testTag("player_seek_back_10"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Replay10,
+                                contentDescription = "Назад на 10 секунд",
+                                tint = Color.White,
+                                modifier = Modifier.size(36.dp)
+                            )
+                        }
 
-                Box(
+                        // Frosted Circular Play / Pause
+                        Box(
+                            modifier = Modifier
+                                .size(76.dp)
+                                .clip(CircleShape)
+                                .background(Color(0x29FFFFFF))
+                                .border(1.5.dp, Color(0x45FFFFFF), CircleShape)
+                                .clickable {
+                                    if (isPlaying) {
+                                        if (!useNativeFallback) playerManager.pause() else nativeVideoView?.pause()
+                                        isPlaying = false
+                                    } else {
+                                        if (!useNativeFallback) playerManager.resume() else nativeVideoView?.start()
+                                        isPlaying = true
+                                    }
+                                }
+                                .testTag("player_center_play_pause"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = if (isPlaying) "Пауза" else "Воспроизвести",
+                                tint = Color(0xFFF6F6F8),
+                                modifier = Modifier.size(40.dp)
+                            )
+                        }
+
+                        // +10s
+                        Box(
+                            modifier = Modifier
+                                .sizeIn(minWidth = 54.dp, minHeight = 54.dp)
+                                .clip(CircleShape)
+                                .clickable {
+                                    if (!useNativeFallback) {
+                                        playerManager.seekRelative(10_000L)
+                                    } else {
+                                        val dur = nativeVideoView?.duration ?: 0
+                                        val n = ((nativeVideoView?.currentPosition ?: 0) + 10_000).let {
+                                            if (dur > 0) it.coerceAtMost(dur) else it
+                                        }
+                                        nativeVideoView?.seekTo(n)
+                                        currentTimeMs = n.toLong()
+                                    }
+                                    infoFeedbackText = "+10 сек"
+                                }
+                                .testTag("player_seek_forward_10"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Forward10,
+                                contentDescription = "Вперёд на 10 секунд",
+                                tint = Color.White,
+                                modifier = Modifier.size(36.dp)
+                            )
+                        }
+                    }
+                }
+
+                // BOTTOM CONTROLS (Time Row, Neon-Orange Seek Bar, Bottom Actions Bar)
+                Column(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(
+                            start = (44f * uVal).dp.coerceAtLeast(16.dp),
+                            end = (44f * uVal).dp.coerceAtLeast(16.dp),
+                            bottom = 14.dp
+                        )
                 ) {
                     if (!isControlsLocked) {
-                        // 1. Time Row: center at 200u from bottom (91 dp)
+                        // 1. Time Row
                         Row(
                             modifier = Modifier
-                                .align(Alignment.BottomCenter)
                                 .fillMaxWidth()
-                                .padding(
-                                    start = (68f * uVal).dp.coerceAtLeast(16.dp),
-                                    end = (60f * uVal).dp.coerceAtLeast(16.dp),
-                                    bottom = ((200f * uVal).dp - (timeRowH / 2)).coerceAtLeast(0.dp)
-                                )
-                                .height(timeRowH),
+                                .padding(bottom = 4.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
                                 text = formatTime(currentTimeMs),
-                                color = Color(0xFFFF8A00),
-                                fontSize = (22f * uVal).sp,
-                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White,
+                                fontSize = 13.5.sp,
+                                fontWeight = FontWeight.Medium,
                                 fontFamily = FontFamily.Monospace
                             )
                             Text(
                                 text = formatTime(totalDurationMs),
-                                color = Color(0xFFA98CFF),
-                                fontSize = (22f * uVal).sp,
-                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFFA9A7C4),
+                                fontSize = 13.5.sp,
+                                fontWeight = FontWeight.Medium,
                                 fontFamily = FontFamily.Monospace
                             )
                         }
 
-                        // 2. Seek Bar: center at 150u from bottom (68 dp)
+                        // 2. Seek Bar (Background + Fiery Orange Filled Track + Glowing Knob)
                         val progressFraction = if (totalDurationMs > 0) {
                             (currentTimeMs.toFloat() / totalDurationMs.toFloat()).coerceIn(0f, 1f)
                         } else 0f
 
                         val seekTrackBrush = Brush.horizontalGradient(
-                            colors = listOf(Color(0xFFFF6A00), Color(0xFF9A45F2), Color(0xFFA63EF6))
+                            colors = listOf(Color(0xFFFF9A1A), Color(0xFFFF6A00))
                         )
 
                         Box(
                             modifier = Modifier
-                                .align(Alignment.BottomCenter)
                                 .fillMaxWidth()
-                                .padding(
-                                    start = (68f * uVal).dp.coerceAtLeast(16.dp),
-                                    end = (60f * uVal).dp.coerceAtLeast(16.dp),
-                                    bottom = ((150f * uVal).dp - (seekH / 2)).coerceAtLeast(0.dp)
-                                )
-                                .height(seekH)
+                                .height(36.dp)
                                 .pointerInput(totalDurationMs) {
                                     detectTapGestures { offset ->
                                         if (totalDurationMs > 0 && size.width > 0) {
@@ -1022,35 +1321,46 @@ fun PlayerScreen(
                                 },
                             contentAlignment = Alignment.CenterStart
                         ) {
-                            Canvas(modifier = Modifier.fillMaxWidth().height((34f * uVal).dp.coerceAtLeast(24.dp))) {
-                                val lineH = (5f * uVal).dp.toPx().coerceAtLeast(3f)
+                            Canvas(modifier = Modifier.fillMaxWidth().height(26.dp)) {
+                                val lineH = 4.dp.toPx()
                                 val lineY = (size.height - lineH) / 2f
-                                val radiusPx = (2.5f * uVal).dp.toPx()
+                                val radiusPx = 2.dp.toPx()
 
-                                // Track filled with gradient
+                                // Unfilled track
                                 drawRoundRect(
-                                    brush = seekTrackBrush,
+                                    color = Color(0x33FFFFFF),
                                     topLeft = Offset(0f, lineY),
                                     size = Size(size.width, lineH),
                                     cornerRadius = CornerRadius(radiusPx, radiusPx)
                                 )
 
+                                // Active orange gradient progress track
+                                val filledWidth = (size.width * progressFraction).coerceIn(0f, size.width)
+                                if (filledWidth > 0f) {
+                                    drawRoundRect(
+                                        brush = seekTrackBrush,
+                                        topLeft = Offset(0f, lineY),
+                                        size = Size(filledWidth, lineH),
+                                        cornerRadius = CornerRadius(radiusPx, radiusPx)
+                                    )
+                                }
+
                                 // Knob
-                                val knobRadius = (17f * uVal).dp.toPx().coerceAtLeast(8f)
-                                val knobCenterX = size.width * progressFraction
+                                val knobRadius = 7.dp.toPx()
+                                val knobCenterX = filledWidth
                                 val knobCenterY = size.height / 2f
 
-                                // Soft glow
+                                // Warm amber glow
                                 drawCircle(
-                                    color = Color(0x8CFF9A1A),
-                                    radius = knobRadius + (7f * uVal).dp.toPx().coerceAtLeast(3f),
+                                    color = Color(0x8CFF8C00),
+                                    radius = knobRadius + 4.dp.toPx(),
                                     center = Offset(knobCenterX, knobCenterY)
                                 )
                                 // Knob circle
                                 drawCircle(
                                     brush = Brush.radialGradient(
-                                        colors = listOf(Color(0xFFFFB02A), Color(0xFFFF7A00)),
-                                        center = Offset(knobCenterX - (3f * uVal).dp.toPx(), knobCenterY - (3f * uVal).dp.toPx()),
+                                        colors = listOf(Color(0xFFFFC04D), Color(0xFFFF8A00)),
+                                        center = Offset(knobCenterX - 1.5.dp.toPx(), knobCenterY - 1.5.dp.toPx()),
                                         radius = knobRadius
                                     ),
                                     radius = knobRadius,
@@ -1059,34 +1369,68 @@ fun PlayerScreen(
                             }
                         }
 
-                        // 3. Bottom Row of buttons: center at 57u from bottom (26 dp)
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .fillMaxWidth()
-                                .padding(
-                                    bottom = ((57f * uVal).dp - (buttonRowH / 2)).coerceAtLeast(0.dp)
-                                )
-                                .height(buttonRowH)
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // 3. Bottom Action Row (Lock, Subtitles, Speed Pill, Prev/Play/Next, Repeat, Scale, More)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // 1. Subtitles (b-sub, left 93u, w=52, h=46)
+                            // Lock
+                            IconButton(
+                                onClick = {
+                                    isControlsLocked = true
+                                    infoFeedbackText = "Экран заблокирован от касаний"
+                                },
+                                modifier = Modifier
+                                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                                    .testTag("player_lock_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Lock,
+                                    contentDescription = "Блокировка касаний",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+
+                            // Subtitles / Audio
                             Box(
                                 modifier = Modifier
-                                    .align(Alignment.CenterStart)
-                                    .offset(x = ((93f * uVal).dp - 24.dp).coerceAtLeast(0.dp))
                                     .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                                    .testTag("player_subtitles_button")
                                     .clickable(onClick = { showSubtitlesDialog = true }),
                                 contentAlignment = Alignment.Center
                             ) {
                                 SubtitlesIconCanvas(uVal)
                             }
 
-                            // 2. Repeat (b-rep, left 227u, w=50, h=46)
+                            // Speed Pill ("1.0x" from mockup)
                             Box(
                                 modifier = Modifier
-                                    .align(Alignment.CenterStart)
-                                    .offset(x = ((227f * uVal).dp - 24.dp).coerceAtLeast(0.dp))
+                                    .defaultMinSize(minWidth = 54.dp, minHeight = 40.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color(0xB80F0C1A))
+                                    .border(1.dp, Color(0x24FFFFFF), RoundedCornerShape(12.dp))
+                                    .clickable { showSpeedMenu = true }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                                    .testTag("player_speed_button"),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "${currentSpeed}x",
+                                    color = if (currentSpeed != 1.0f) Color(0xFFFF9A1A) else Color.White,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+
+                            // Repeat Mode
+                            Box(
+                                modifier = Modifier
                                     .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                                    .testTag("player_repeat_button")
                                     .clickable(onClick = {
                                         repeatMode = if (repeatMode == VideoRepeatMode.OFF) VideoRepeatMode.REPEAT_ONE else VideoRepeatMode.OFF
                                         infoFeedbackText = repeatMode.label
@@ -1096,72 +1440,11 @@ fun PlayerScreen(
                                 RepeatIconCanvas(uVal, repeatMode != VideoRepeatMode.OFF)
                             }
 
-                            // 3. Prev (b-prev, center - 152u, w=40, h=36)
+                            // Video Scale / Fit Mode
                             Box(
                                 modifier = Modifier
-                                    .align(Alignment.Center)
-                                    .offset(x = -((152f * uVal).dp))
                                     .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                                    .clickable(onClick = {
-                                        if (!useNativeFallback) {
-                                            playerManager.seekTo(0)
-                                        } else {
-                                            nativeVideoView?.seekTo(0)
-                                            currentTimeMs = 0L
-                                        }
-                                        infoFeedbackText = "В начало видео"
-                                    }),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                PrevIconCanvas(uVal)
-                            }
-
-                            // 4. Play/Pause (b-play, center, w=80, h=80)
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.Center)
-                                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                                    .clickable(onClick = {
-                                        if (isPlaying) {
-                                            if (!useNativeFallback) playerManager.pause() else nativeVideoView?.pause()
-                                            isPlaying = false
-                                        } else {
-                                            if (!useNativeFallback) playerManager.resume() else nativeVideoView?.start()
-                                            isPlaying = true
-                                        }
-                                    }),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                SmallPlayPauseCanvas(uVal, isPlaying)
-                            }
-
-                            // 5. Next (b-next, center + 151u, w=40, h=36)
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.Center)
-                                    .offset(x = ((151f * uVal).dp))
-                                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                                    .clickable(onClick = {
-                                        if (!useNativeFallback) {
-                                            playerManager.seekRelative(10000L)
-                                        } else {
-                                            val n = ((nativeVideoView?.currentPosition ?: 0) + 10000).coerceAtMost(nativeVideoView?.duration ?: 0)
-                                            nativeVideoView?.seekTo(n)
-                                            currentTimeMs = n.toLong()
-                                        }
-                                        infoFeedbackText = "+10 сек"
-                                    }),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                NextIconCanvas(uVal)
-                            }
-
-                            // 6. Video Scale (b-fit, right 216u, w=56, h=46)
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.CenterEnd)
-                                    .offset(x = -(((216f * uVal).dp - 24.dp).coerceAtLeast(0.dp)))
-                                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                                    .testTag("player_scale_button")
                                     .clickable(onClick = {
                                         scaleMode = when (scaleMode) {
                                             VideoScaleMode.FIT -> VideoScaleMode.FILL
@@ -1176,12 +1459,11 @@ fun PlayerScreen(
                                 PipIconCanvas(uVal)
                             }
 
-                            // 7. More (b-more, right 85u, w=16, h=48)
+                            // More Bottom Sheet
                             Box(
                                 modifier = Modifier
-                                    .align(Alignment.CenterEnd)
-                                    .offset(x = -(((85f * uVal).dp - 24.dp).coerceAtLeast(0.dp)))
                                     .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                                    .testTag("player_more_button")
                                     .clickable(onClick = { showMoreBottomSheet = true }),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -1192,26 +1474,31 @@ fun PlayerScreen(
                         // Locked screen unlock indicator
                         Row(
                             modifier = Modifier
-                                .align(Alignment.BottomCenter)
                                 .fillMaxWidth()
-                                .padding(start = 24.dp, end = 24.dp, bottom = 26.dp),
+                                .padding(horizontal = 8.dp, vertical = 8.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
                                 "Экран заблокирован от касаний",
-                                color = Color(0xFFC4CBDB),
+                                color = Color(0xFFE4E2F0),
                                 fontSize = 13.sp,
                                 fontFamily = FontFamily.Monospace
                             )
                             Button(
                                 onClick = { isControlsLocked = false },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9A1A)),
-                                shape = RoundedCornerShape(12.dp)
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFFFF9A1A),
+                                    contentColor = Color(0xFF3A1A00)
+                                ),
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier
+                                    .heightIn(min = 48.dp)
+                                    .testTag("player_unlock_button")
                             ) {
-                                Icon(Icons.Default.LockOpen, null, tint = Color.Black, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Разблокировать", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                Icon(Icons.Default.LockOpen, null, tint = Color(0xFF3A1A00), modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Разблокировать", color = Color(0xFF3A1A00), fontWeight = FontWeight.Bold, fontSize = 12.sp)
                             }
                         }
                     }
@@ -1219,7 +1506,130 @@ fun PlayerScreen(
             }
         }
 
-        // Real VLC audio and subtitle track selection.
+        // Styled Speed Selector Dialog (Obsidian-Violet & Warm Orange highlight)
+        if (showSpeedMenu) {
+            Dialog(onDismissRequest = { showSpeedMenu = false }) {
+                Surface(
+                    shape = RoundedCornerShape(22.dp),
+                    color = Color.Transparent,
+                    border = BorderStroke(1.5.dp, Color(0x809664AA)),
+                    shadowElevation = 24.dp,
+                    modifier = Modifier.widthIn(min = 240.dp, max = 320.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(Color(0xFF0F0C18), Color(0xFF050309))
+                                )
+                            )
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Speed,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Text(
+                                text = "Выбор скорости",
+                                color = Color.White,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+
+                        HorizontalDivider(color = Color(0x26FFFFFF))
+
+                        listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f).forEach { spd ->
+                            val isSelected = currentSpeed == spd
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .clip(RoundedCornerShape(15.dp))
+                                    .then(
+                                        if (isSelected) {
+                                            Modifier.background(
+                                                Brush.horizontalGradient(
+                                                    listOf(Color(0xFF8A3D10), Color(0xFF5C2A12), Color(0xFF6A3010))
+                                                )
+                                            )
+                                        } else {
+                                            Modifier
+                                        }
+                                    )
+                                    .clickable {
+                                        if (useNativeFallback) {
+                                            val nativePlayer = nativeMediaPlayer
+                                            if (nativePlayer == null) {
+                                                infoFeedbackText = "Плеер ещё загружается"
+                                            } else {
+                                                try {
+                                                    nativePlayer.playbackParams = nativePlayer.playbackParams.setSpeed(spd)
+                                                    currentSpeed = spd
+                                                    infoFeedbackText = "Скорость: ${spd}x"
+                                                } catch (e: Exception) {
+                                                    Log.w("PlayerScreen", "Native playback speed failed", e)
+                                                    infoFeedbackText = "Эта скорость не поддерживается"
+                                                }
+                                            }
+                                        } else {
+                                            if (playerManager.setRate(spd)) {
+                                                currentSpeed = spd
+                                                infoFeedbackText = "Скорость: ${spd}x"
+                                            } else {
+                                                infoFeedbackText = "Не удалось изменить скорость"
+                                            }
+                                        }
+                                        showSpeedMenu = false
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                                    .testTag("player_speed_option_$spd"),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                            if (isSelected) {
+                                                Brush.linearGradient(listOf(Color(0xFFFF9A1A), Color(0xFFE86400)))
+                                            } else {
+                                                Brush.linearGradient(listOf(Color(0x14FFFFFF), Color(0x14FFFFFF)))
+                                            }
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = if (isSelected) Icons.Default.Check else Icons.Default.Speed,
+                                        contentDescription = null,
+                                        tint = if (isSelected) Color.White else Color(0xFF8D8AA8),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                                Text(
+                                    text = "${spd}x",
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Real VLC audio, subtitle track & styling (Artboard 12).
         if (showSubtitlesDialog) {
             LaunchedEffect(showSubtitlesDialog, useNativeFallback) {
                 if (showSubtitlesDialog && !useNativeFallback) {
@@ -1230,110 +1640,48 @@ fun PlayerScreen(
                     selectedSubtitleTrack = playerManager.getSelectedSubtitleTrack()
                 }
             }
-            AlertDialog(
-                onDismissRequest = { showSubtitlesDialog = false },
-                title = { Text("Субтитры и Аудио", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp) },
-                text = {
-                    Column(
-                        modifier = Modifier.heightIn(max = 380.dp).verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text("Звуковая дорожка", color = Color(0xFFFF9A1A), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                        if (useNativeFallback) {
-                            Text("Выбор дорожек недоступен в резервном Android-плеере.", color = Color.LightGray, fontSize = 12.sp)
-                        } else if (audioTracks.isEmpty()) {
-                            Text("Звуковые дорожки пока не обнаружены.", color = Color.LightGray, fontSize = 12.sp)
-                        } else {
-                            audioTracks.forEach { track ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().clickable {
-                                        if (playerManager.selectAudioTrack(track.id)) {
-                                            selectedAudioTrack = track.id
-                                            infoFeedbackText = "Звуковая дорожка изменена"
-                                        } else {
-                                            infoFeedbackText = "Не удалось переключить дорожку"
-                                        }
-                                    }.padding(vertical = 3.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    RadioButton(
-                                        selected = selectedAudioTrack == track.id,
-                                        onClick = {
-                                            if (playerManager.selectAudioTrack(track.id)) {
-                                                selectedAudioTrack = track.id
-                                                infoFeedbackText = "Звуковая дорожка изменена"
-                                            } else infoFeedbackText = "Не удалось переключить дорожку"
-                                        },
-                                        colors = RadioButtonDefaults.colors(selectedColor = Color(0xFFFF9A1A))
-                                    )
-                                    Text(track.name.ifBlank { "Дорожка ${track.id}" }, color = Color.LightGray, fontSize = 12.sp)
-                                }
-                            }
-                        }
+            SubtitlesCustomizationDialog(
+                subStyle = subStyle,
+                useNativeFallback = useNativeFallback,
+                audioTracks = audioTracks,
+                subtitleTracks = subtitleTracks,
+                selectedAudioTrack = selectedAudioTrack,
+                selectedSubtitleTrack = selectedSubtitleTrack,
+                onStyleChanged = { nextStyle ->
+                    subStyle = nextStyle
+                    PlaybackPreferences.saveSubtitleStyle(context, nextStyle)
+                    infoFeedbackText = "Стиль субтитров обновлён (${nextStyle.fontSizeSp} sp)"
+                },
+                onSelectAudioTrack = { id ->
+                    if (playerManager.selectAudioTrack(id)) {
+                        selectedAudioTrack = id
+                        infoFeedbackText = "Звуковая дорожка изменена"
+                    } else {
+                        infoFeedbackText = "Не удалось переключить дорожку"
+                    }
+                },
+                onSelectSubtitleTrack = { id ->
+                    if (playerManager.selectSubtitleTrack(id)) {
+                        selectedSubtitleTrack = id
+                        infoFeedbackText = if (id == -1) "Субтитры отключены" else "Субтитры включены"
+                    } else {
+                        infoFeedbackText = "Не удалось изменить субтитры"
+                    }
+                },
+                onDismiss = { showSubtitlesDialog = false }
+            )
+        }
 
-                        Divider(color = Color(0x33A58BBE))
-                        Text("Субтитры", color = Color(0xFFFF9A1A), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                        if (useNativeFallback) {
-                            Text("Выбор субтитров недоступен в резервном Android-плеере.", color = Color.LightGray, fontSize = 12.sp)
-                        } else {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().clickable {
-                                    if (playerManager.selectSubtitleTrack(-1)) {
-                                        selectedSubtitleTrack = -1
-                                        infoFeedbackText = "Субтитры отключены"
-                                    } else infoFeedbackText = "Не удалось изменить субтитры"
-                                }.padding(vertical = 3.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                RadioButton(
-                                    selected = selectedSubtitleTrack == -1,
-                                    onClick = {
-                                        if (playerManager.selectSubtitleTrack(-1)) {
-                                            selectedSubtitleTrack = -1
-                                            infoFeedbackText = "Субтитры отключены"
-                                        } else infoFeedbackText = "Не удалось изменить субтитры"
-                                    },
-                                    colors = RadioButtonDefaults.colors(selectedColor = Color(0xFFFF9A1A))
-                                )
-                                Text("Отключены", color = Color.LightGray, fontSize = 12.sp)
-                            }
-                            if (subtitleTracks.isEmpty()) {
-                                Text("Встроенные субтитры не обнаружены.", color = Color.LightGray, fontSize = 12.sp)
-                            } else {
-                                subtitleTracks.forEach { track ->
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().clickable {
-                                            if (playerManager.selectSubtitleTrack(track.id)) {
-                                                selectedSubtitleTrack = track.id
-                                                infoFeedbackText = "Субтитры включены"
-                                            } else infoFeedbackText = "Не удалось включить субтитры"
-                                        }.padding(vertical = 3.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        RadioButton(
-                                            selected = selectedSubtitleTrack == track.id,
-                                            onClick = {
-                                                if (playerManager.selectSubtitleTrack(track.id)) {
-                                                    selectedSubtitleTrack = track.id
-                                                    infoFeedbackText = "Субтитры включены"
-                                                } else infoFeedbackText = "Не удалось включить субтитры"
-                                            },
-                                            colors = RadioButtonDefaults.colors(selectedColor = Color(0xFFFF9A1A))
-                                        )
-                                        Text(track.name.ifBlank { "Субтитры ${track.id}" }, color = Color.LightGray, fontSize = 12.sp)
-                                    }
-                                }
-                            }
-                        }
-                    }
+        // Artboard 9: 5-Band Interactive Equalizer Dialog
+        if (showEqualizerDialog) {
+            EqualizerDialog(
+                state = eqState,
+                onStateChanged = { nextEq ->
+                    eqState = nextEq
+                    PlaybackPreferences.saveEqualizerState(context, nextEq)
+                    playerManager.applyEqualizer(nextEq.enabled, nextEq.bands)
                 },
-                confirmButton = {
-                    TextButton(onClick = { showSubtitlesDialog = false }) {
-                        Text("Закрыть", color = Color(0xFFFF9A1A))
-                    }
-                },
-                containerColor = Color(0xFF100B18),
-                shape = RoundedCornerShape(16.dp)
+                onDismiss = { showEqualizerDialog = false }
             )
         }
 
@@ -1346,7 +1694,7 @@ fun PlayerScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(
                             "Выберите Chromecast или телевизор с Google Cast:",
-                            color = Color.LightGray,
+                            color = Color(0xFFE4E2F0),
                             fontSize = 13.sp
                         )
                         AndroidView(
@@ -1361,7 +1709,7 @@ fun PlayerScreen(
                             },
                             modifier = Modifier.size(52.dp)
                         )
-                        Text(castStatusText, color = Color(0xFF9BA8BA), fontSize = 12.sp)
+                        Text(castStatusText, color = Color(0xFF8D8AA8), fontSize = 12.sp)
                         Button(
                             onClick = {
                                 when (castManager.castVideo(videoUri, resolvedTitle) { success ->
@@ -1377,19 +1725,24 @@ fun PlayerScreen(
                                     CastStartResult.UNAVAILABLE -> castStatusText = "Google Cast недоступен. Проверьте Google Play Services."
                                 }
                             },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFFF9A1A),
+                                contentColor = Color(0xFF3A1A00)
+                            ),
+                            shape = RoundedCornerShape(14.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Транслировать текущее видео")
+                            Text("Транслировать текущее видео", fontWeight = FontWeight.Bold)
                         }
                     }
                 },
                 confirmButton = {
                     TextButton(onClick = { showCastDialog = false }) {
-                        Text("Закрыть", color = Color(0xFFA63EF6))
+                        Text("Закрыть", color = Color(0xFFFF9A1A), fontWeight = FontWeight.SemiBold)
                     }
                 },
-                containerColor = Color(0xFF100B18),
-                shape = RoundedCornerShape(16.dp)
+                containerColor = Color(0xFF14121C),
+                shape = RoundedCornerShape(22.dp)
             )
         }
 
@@ -1397,8 +1750,8 @@ fun PlayerScreen(
         if (showMoreBottomSheet) {
             ModalBottomSheet(
                 onDismissRequest = { showMoreBottomSheet = false },
-                containerColor = Color(0xFF090610),
-                scrimColor = Color.Black.copy(alpha = 0.6f)
+                containerColor = Color(0xFF0D0B14),
+                scrimColor = Color.Black.copy(alpha = 0.65f)
             ) {
                 Column(
                     modifier = Modifier
@@ -1408,10 +1761,34 @@ fun PlayerScreen(
                 ) {
                     Text("Параметры воспроизведения", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
 
+                    // Seek to start option
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .clickable {
+                                if (!useNativeFallback) {
+                                    playerManager.seekTo(0)
+                                } else {
+                                    nativeVideoView?.seekTo(0)
+                                    currentTimeMs = 0L
+                                }
+                                showMoreBottomSheet = false
+                                infoFeedbackText = "В начало видео"
+                            }
+                            .padding(vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Начать сначала", color = Color(0xFFE4E2F0), fontSize = 14.sp)
+                        Icon(Icons.Default.Replay, contentDescription = null, tint = Color(0xFFFF9A1A))
+                    }
+
                     // Lock screen option
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .heightIn(min = 48.dp)
                             .clickable {
                                 isControlsLocked = true
                                 showMoreBottomSheet = false
@@ -1421,7 +1798,7 @@ fun PlayerScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Блокировка касаний", color = Color.LightGray, fontSize = 14.sp)
+                        Text("Блокировка касаний", color = Color(0xFFE4E2F0), fontSize = 14.sp)
                         Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFFFF9A1A))
                     }
 
@@ -1431,7 +1808,7 @@ fun PlayerScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Скорость: ${currentSpeed}x", color = Color.LightGray, fontSize = 14.sp)
+                        Text("Скорость: ${currentSpeed}x", color = Color(0xFFE4E2F0), fontSize = 14.sp)
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             listOf(0.75f, 1.0f, 1.25f, 1.5f, 2.0f).forEach { spd ->
                                 FilterChip(
@@ -1460,29 +1837,48 @@ fun PlayerScreen(
                                             }
                                         }
                                     },
-                                    label = { Text("${spd}x", fontSize = 11.sp) },
+                                    label = { Text("${spd}x", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = Color(0xFFFF9A1A),
-                                        selectedLabelColor = Color.Black
+                                        selectedLabelColor = Color(0xFF3A1A00),
+                                        labelColor = Color(0xFFA9A7C4)
                                     )
                                 )
                             }
                         }
                     }
 
+                    // Equalizer option
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .clickable {
+                                showMoreBottomSheet = false
+                                showEqualizerDialog = true
+                            }
+                            .padding(vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Эквалайзер", color = Color(0xFFE4E2F0), fontSize = 14.sp)
+                        Icon(Icons.Default.Tune, contentDescription = null, tint = Color(0xFFFF9A1A))
+                    }
+
                     // Picture-in-picture option
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .heightIn(min = 48.dp)
                             .clickable {
                                 showMoreBottomSheet = false
-                                val activity = context as? Activity
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activity != null) {
+                                val act = context as? Activity
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && act != null) {
                                     try {
                                         val params = PictureInPictureParams.Builder()
                                             .setAspectRatio(Rational(16, 9))
                                             .build()
-                                        activity.enterPictureInPictureMode(params)
+                                        act.enterPictureInPictureMode(params)
                                     } catch (e: Exception) {
                                         Toast.makeText(context, "PiP режим: ${e.message}", Toast.LENGTH_SHORT).show()
                                     }
@@ -1494,7 +1890,7 @@ fun PlayerScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Картинка в картинке", color = Color.LightGray, fontSize = 14.sp)
+                        Text("Картинка в картинке", color = Color(0xFFE4E2F0), fontSize = 14.sp)
                         Icon(Icons.Default.PictureInPictureAlt, contentDescription = null, tint = Color(0xFFFF9A1A))
                     }
 
@@ -1531,72 +1927,69 @@ fun PlayerScreen(
 }
 
 /* =========================================================================
-   EXACT SVG VECTOR ICONS FROM player_screen_v3.html
+   NEXORA OBSIDIAN-VIOLET & NEON ORANGE VECTOR CANVASES
    ========================================================================= */
 
 @Composable
 private fun NexoraLogoCanvas(uVal: Float) {
-    Canvas(modifier = Modifier.size((62f * uVal).dp, (64f * uVal).dp)) {
-        val sX = size.width / 62f
-        val sY = size.height / 64f
-        val strokeW = (4.4f * sX).coerceAtLeast(1.5f)
-        val rectX = 2.2f * sX
-        val rectY = 2.2f * sY
-        val rectW = 57.6f * sX
-        val rectH = 59.6f * sY
-        val rx = 15f * sX
-        val gLogo = Brush.linearGradient(
-            colors = listOf(Color(0xFFFF9A1A), Color(0xFFB05CFF), Color(0xFF9A45F2)),
-            start = Offset(0f, 0f),
-            end = Offset(size.width, size.height)
-        )
-        drawRoundRect(
-            color = Color(0xFF080510),
-            topLeft = Offset(rectX, rectY),
-            size = Size(rectW, rectH),
-            cornerRadius = CornerRadius(rx, rx)
-        )
-        drawRoundRect(
-            brush = gLogo,
-            topLeft = Offset(rectX, rectY),
-            size = Size(rectW, rectH),
-            cornerRadius = CornerRadius(rx, rx),
-            style = Stroke(width = strokeW)
-        )
-        val triPath = androidx.compose.ui.graphics.Path().apply {
-            moveTo(23f * sX, 18.5f * sY)
-            lineTo(23f * sX, 45.5f * sY)
-            lineTo(45f * sX, 32f * sY)
+    val sizeDp = (64f * uVal).dp.coerceIn(28.dp, 38.dp)
+    Canvas(modifier = Modifier.size(sizeDp)) {
+        val sX = size.width / 100f
+        val sY = size.height / 100f
+        val badgePath = androidx.compose.ui.graphics.Path().apply {
+            moveTo(30f * sX, 8f * sY)
+            lineTo(42f * sX, 8f * sY)
+            lineTo(90f * sX, 44f * sY)
+            quadraticTo(98f * sX, 50f * sY, 90f * sX, 56f * sY)
+            lineTo(42f * sX, 92f * sY)
+            lineTo(30f * sX, 92f * sY)
+            quadraticTo(21f * sX, 92f * sY, 21f * sX, 83f * sY)
+            lineTo(21f * sX, 17f * sY)
+            quadraticTo(21f * sX, 8f * sY, 30f * sX, 8f * sY)
             close()
         }
-        drawPath(triPath, color = Color(0xFFFFD08A))
         drawPath(
-            triPath,
-            color = Color(0xFFFFD08A),
-            style = Stroke(
-                width = (3f * sX).coerceAtLeast(1.5f),
-                join = StrokeJoin.Round
+            badgePath,
+            brush = Brush.linearGradient(
+                colors = listOf(Color(0xFFFFC01A), Color(0xFFFF5200)),
+                start = Offset.Zero,
+                end = Offset(size.width, size.height)
             )
         )
+        val facetPath = androidx.compose.ui.graphics.Path().apply {
+            moveTo(21f * sX, 17f * sY)
+            quadraticTo(21f * sX, 8f * sY, 30f * sX, 8f * sY)
+            lineTo(36f * sX, 8f * sY)
+            lineTo(21f * sX, 60f * sY)
+            close()
+        }
+        drawPath(facetPath, color = Color(0x8CFF6A00))
+
+        val cutoutPath = androidx.compose.ui.graphics.Path().apply {
+            moveTo(42f * sX, 30f * sY)
+            lineTo(42f * sX, 70f * sY)
+            lineTo(72f * sX, 50f * sY)
+            close()
+        }
+        drawPath(cutoutPath, color = Color(0xEB2A0C00))
     }
 }
 
 @Composable
 private fun CastIconCanvas(uVal: Float) {
-    Canvas(modifier = Modifier.size((52f * uVal).dp, (42f * uVal).dp)) {
+    Canvas(modifier = Modifier.size(24.dp, 20.dp)) {
         val sX = size.width / 52f
         val sY = size.height / 42f
-        val gAll = Brush.linearGradient(
-            colors = listOf(Color(0xFFFF9A1A), Color(0xFFB05CFF), Color(0xFFA63EF6)),
+        val gOrange = Brush.linearGradient(
+            colors = listOf(Color(0xFFFFFFFF), Color(0xFFFFB040)),
             start = Offset.Zero,
             end = Offset(size.width, size.height)
         )
         val stroke = Stroke(
-            width = (3.6f * sX).coerceAtLeast(1.5f),
+            width = (3.6f * sX).coerceAtLeast(1.8f),
             cap = StrokeCap.Round,
             join = StrokeJoin.Round
         )
-        // path: M12 3h30a7 7 0 0 1 7 7v22a7 7 0 0 1-7 7H28
         val tvPath = androidx.compose.ui.graphics.Path().apply {
             moveTo(12f * sX, 3f * sY)
             lineTo(42f * sX, 3f * sY)
@@ -1605,11 +1998,10 @@ private fun CastIconCanvas(uVal: Float) {
             cubicTo(49f * sX, 35.86f * sY, 45.86f * sX, 39f * sY, 42f * sX, 39f * sY)
             lineTo(28f * sX, 39f * sY)
         }
-        drawPath(tvPath, brush = gAll, style = stroke)
+        drawPath(tvPath, brush = gOrange, style = stroke)
 
-        // wave 1: M3 18 a21 21 0 0 1 21 21
         drawArc(
-            brush = gAll,
+            brush = gOrange,
             startAngle = -90f,
             sweepAngle = 90f,
             useCenter = false,
@@ -1617,9 +2009,8 @@ private fun CastIconCanvas(uVal: Float) {
             size = Size(42f * sX, 42f * sY),
             style = stroke
         )
-        // wave 2: M3 28 a11 11 0 0 1 11 11
         drawArc(
-            brush = gAll,
+            brush = gOrange,
             startAngle = -90f,
             sweepAngle = 90f,
             useCenter = false,
@@ -1627,74 +2018,73 @@ private fun CastIconCanvas(uVal: Float) {
             size = Size(22f * sX, 22f * sY),
             style = stroke
         )
-        // circle: cx = 4.5, cy = 37.5, r = 1.8
-        drawCircle(brush = gAll, radius = (2.2f * sX).coerceAtLeast(1.5f), center = Offset(4.5f * sX, 37.5f * sY))
+        drawCircle(brush = gOrange, radius = (2.4f * sX).coerceAtLeast(1.5f), center = Offset(4.5f * sX, 37.5f * sY))
     }
 }
 
 @Composable
 private fun TopDotsCanvas(uVal: Float) {
-    Canvas(modifier = Modifier.size((16f * uVal).dp, (52f * uVal).dp)) {
+    Canvas(modifier = Modifier.size(8.dp, 22.dp)) {
         val sX = size.width / 16f
         val sY = size.height / 52f
-        val r = (4.4f * sX).coerceAtLeast(2.5f)
+        val r = (4.4f * sX).coerceAtLeast(2.2f)
         val cx = 8f * sX
-        drawCircle(color = Color(0xFF8092FA), radius = r, center = Offset(cx, 7f * sY))
-        drawCircle(color = Color(0xFF8A78FA), radius = r, center = Offset(cx, 26f * sY))
-        drawCircle(color = Color(0xFF9560F9), radius = r, center = Offset(cx, 45f * sY))
+        drawCircle(color = Color.White, radius = r, center = Offset(cx, 7f * sY))
+        drawCircle(color = Color.White, radius = r, center = Offset(cx, 26f * sY))
+        drawCircle(color = Color.White, radius = r, center = Offset(cx, 45f * sY))
     }
 }
 
 @Composable
 private fun SubtitlesIconCanvas(uVal: Float) {
-    Canvas(modifier = Modifier.size((52f * uVal).dp, (46f * uVal).dp)) {
+    Canvas(modifier = Modifier.size(24.dp, 21.dp)) {
         val sX = size.width / 52f
         val sY = size.height / 46f
-        val gCyan = Brush.linearGradient(
-            colors = listOf(Color(0xFFFF9A1A), Color(0xFFFF6A00)),
+        val gSub = Brush.linearGradient(
+            colors = listOf(Color.White, Color(0xFFE4E2F0)),
             start = Offset.Zero,
             end = Offset(size.width, size.height)
         )
         val stroke = Stroke(
-            width = (3.6f * sX).coerceAtLeast(1.5f),
+            width = (3.6f * sX).coerceAtLeast(1.8f),
             cap = StrokeCap.Round,
             join = StrokeJoin.Round
         )
         drawRoundRect(
-            brush = gCyan,
+            brush = gSub,
             topLeft = Offset(2f * sX, 3f * sY),
             size = Size(48f * sX, 40f * sY),
-            cornerRadius = CornerRadius(5f * sX, 5f * sY),
+            cornerRadius = CornerRadius(6f * sX, 6f * sY),
             style = stroke
         )
-        val sw = (3.6f * sX).coerceAtLeast(1.5f)
-        drawLine(brush = gCyan, start = Offset(10f * sX, 15f * sY), end = Offset(42f * sX, 15f * sY), strokeWidth = sw, cap = StrokeCap.Round)
-        drawLine(brush = gCyan, start = Offset(10f * sX, 24f * sY), end = Offset(42f * sX, 24f * sY), strokeWidth = sw, cap = StrokeCap.Round)
-        drawLine(brush = gCyan, start = Offset(10f * sX, 33f * sY), end = Offset(23f * sX, 33f * sY), strokeWidth = sw, cap = StrokeCap.Round)
-        drawLine(brush = gCyan, start = Offset(29f * sX, 33f * sY), end = Offset(42f * sX, 33f * sY), strokeWidth = sw, cap = StrokeCap.Round)
+        val sw = (3.6f * sX).coerceAtLeast(1.8f)
+        drawLine(brush = gSub, start = Offset(10f * sX, 15f * sY), end = Offset(42f * sX, 15f * sY), strokeWidth = sw, cap = StrokeCap.Round)
+        drawLine(brush = gSub, start = Offset(10f * sX, 24f * sY), end = Offset(42f * sX, 24f * sY), strokeWidth = sw, cap = StrokeCap.Round)
+        drawLine(brush = gSub, start = Offset(10f * sX, 33f * sY), end = Offset(23f * sX, 33f * sY), strokeWidth = sw, cap = StrokeCap.Round)
+        drawLine(brush = gSub, start = Offset(29f * sX, 33f * sY), end = Offset(42f * sX, 33f * sY), strokeWidth = sw, cap = StrokeCap.Round)
     }
 }
 
 @Composable
 private fun RepeatIconCanvas(uVal: Float, isActive: Boolean) {
-    Canvas(modifier = Modifier.size((50f * uVal).dp, (46f * uVal).dp)) {
+    Canvas(modifier = Modifier.size(23.dp, 21.dp)) {
         val sX = size.width / 50f
         val sY = size.height / 46f
-        val gBlue = if (isActive) {
+        val gRepeat = if (isActive) {
             Brush.linearGradient(
-                colors = listOf(Color(0xFFFFB02A), Color(0xFFFFC36A)),
+                colors = listOf(Color(0xFFFFC01A), Color(0xFFFF6A00)),
                 start = Offset.Zero,
                 end = Offset(size.width, size.height)
             )
         } else {
             Brush.linearGradient(
-                colors = listOf(Color(0xFFFF9A1A), Color(0xFFB05CFF)),
+                colors = listOf(Color.White, Color(0xFFC9C7E0)),
                 start = Offset.Zero,
                 end = Offset(size.width, size.height)
             )
         }
         val stroke = Stroke(
-            width = (3.8f * sX).coerceAtLeast(1.5f),
+            width = (3.8f * sX).coerceAtLeast(1.8f),
             cap = StrokeCap.Round,
             join = StrokeJoin.Round
         )
@@ -1703,212 +2093,97 @@ private fun RepeatIconCanvas(uVal: Float, isActive: Boolean) {
             cubicTo(8.5f * sX, 13f * sY, 15.5f * sX, 7f * sY, 24.5f * sX, 7f * sY)
             cubicTo(30f * sX, 7f * sY, 34f * sX, 9f * sY, 37f * sX, 12.5f * sY)
         }
-        drawPath(p1, brush = gBlue, style = stroke)
+        drawPath(p1, brush = gRepeat, style = stroke)
 
         val a1 = androidx.compose.ui.graphics.Path().apply {
             moveTo(38f * sX, 3f * sY)
             lineTo(38f * sX, 13.5f * sY)
             lineTo(27.5f * sX, 13.5f * sY)
         }
-        drawPath(a1, brush = gBlue, style = stroke)
+        drawPath(a1, brush = gRepeat, style = stroke)
 
         val p2 = androidx.compose.ui.graphics.Path().apply {
             moveTo(43f * sX, 25f * sY)
             cubicTo(41.5f * sX, 33f * sY, 34.5f * sX, 39f * sY, 25.5f * sX, 39f * sY)
             cubicTo(20f * sX, 39f * sY, 16f * sX, 37f * sY, 13f * sX, 33.5f * sY)
         }
-        drawPath(p2, brush = gBlue, style = stroke)
+        drawPath(p2, brush = gRepeat, style = stroke)
 
         val a2 = androidx.compose.ui.graphics.Path().apply {
             moveTo(12f * sX, 43f * sY)
             lineTo(12f * sX, 32.5f * sY)
             lineTo(22.5f * sX, 32.5f * sY)
         }
-        drawPath(a2, brush = gBlue, style = stroke)
-    }
-}
-
-@Composable
-private fun PrevIconCanvas(uVal: Float) {
-    Canvas(modifier = Modifier.size((40f * uVal).dp, (36f * uVal).dp)) {
-        val sX = size.width / 40f
-        val sY = size.height / 36f
-        val gCyan = Brush.linearGradient(
-            colors = listOf(Color(0xFFFF9A1A), Color(0xFFFF6A00)),
-            start = Offset.Zero,
-            end = Offset(size.width, size.height)
-        )
-        val stroke = Stroke(
-            width = (3.8f * sX).coerceAtLeast(1.5f),
-            cap = StrokeCap.Round,
-            join = StrokeJoin.Round
-        )
-        drawRoundRect(
-            brush = gCyan,
-            topLeft = Offset(3f * sX, 3f * sY),
-            size = Size(4f * sX, 30f * sY),
-            cornerRadius = CornerRadius(2f * sX, 2f * sY)
-        )
-        val tri = androidx.compose.ui.graphics.Path().apply {
-            moveTo(34f * sX, 5.5f * sY)
-            lineTo(34f * sX, 30.5f * sY)
-            lineTo(12f * sX, 18f * sY)
-            close()
-        }
-        drawPath(tri, brush = gCyan, style = stroke)
-    }
-}
-
-@Composable
-private fun SmallPlayPauseCanvas(uVal: Float, isPlaying: Boolean) {
-    Canvas(modifier = Modifier.size((80f * uVal).dp, (80f * uVal).dp)) {
-        val sX = size.width / 80f
-        val sY = size.height / 80f
-        val gRing = Brush.linearGradient(
-            colors = listOf(Color(0xFFFFB02A), Color(0xFFB05CFF), Color(0xFFA24EE6)),
-            start = Offset(0f, size.height * 0.25f),
-            end = Offset(size.width, size.height * 0.75f)
-        )
-        // Gradient Ring without glow or shadow
-        drawCircle(
-            brush = gRing,
-            radius = 37f * sX,
-            center = Offset(40f * sX, 40f * sY),
-            style = Stroke(width = (4f * sX).coerceAtLeast(2f))
-        )
-        if (!isPlaying) {
-            val playPath = androidx.compose.ui.graphics.Path().apply {
-                moveTo(33f * sX, 27f * sY)
-                lineTo(33f * sX, 53f * sY)
-                lineTo(55f * sX, 40f * sY)
-                close()
-            }
-            drawPath(playPath, color = Color.White)
-            drawPath(
-                playPath,
-                color = Color.White,
-                style = Stroke(
-                    width = (3f * sX).coerceAtLeast(1.5f),
-                    join = StrokeJoin.Round
-                )
-            )
-        } else {
-            drawRoundRect(
-                color = Color.White,
-                topLeft = Offset(29f * sX, 27f * sY),
-                size = Size(8f * sX, 26f * sY),
-                cornerRadius = CornerRadius(2f * sX, 2f * sY)
-            )
-            drawRoundRect(
-                color = Color.White,
-                topLeft = Offset(43f * sX, 27f * sY),
-                size = Size(8f * sX, 26f * sY),
-                cornerRadius = CornerRadius(2f * sX, 2f * sY)
-            )
-        }
-    }
-}
-
-@Composable
-private fun NextIconCanvas(uVal: Float) {
-    Canvas(modifier = Modifier.size((40f * uVal).dp, (36f * uVal).dp)) {
-        val sX = size.width / 40f
-        val sY = size.height / 36f
-        val gPurple = Brush.linearGradient(
-            colors = listOf(Color(0xFFA24EE6), Color(0xFFB05CFF)),
-            start = Offset.Zero,
-            end = Offset(size.width, size.height)
-        )
-        val stroke = Stroke(
-            width = (3.8f * sX).coerceAtLeast(1.5f),
-            cap = StrokeCap.Round,
-            join = StrokeJoin.Round
-        )
-        drawRoundRect(
-            brush = gPurple,
-            topLeft = Offset(33f * sX, 3f * sY),
-            size = Size(4f * sX, 30f * sY),
-            cornerRadius = CornerRadius(2f * sX, 2f * sY)
-        )
-        val tri = androidx.compose.ui.graphics.Path().apply {
-            moveTo(6f * sX, 5.5f * sY)
-            lineTo(6f * sX, 30.5f * sY)
-            lineTo(28f * sX, 18f * sY)
-            close()
-        }
-        drawPath(tri, brush = gPurple, style = stroke)
+        drawPath(a2, brush = gRepeat, style = stroke)
     }
 }
 
 @Composable
 private fun PipIconCanvas(uVal: Float) {
-    Canvas(modifier = Modifier.size((56f * uVal).dp, (46f * uVal).dp)) {
+    Canvas(modifier = Modifier.size(24.dp, 20.dp)) {
         val sX = size.width / 56f
         val sY = size.height / 46f
-        val gCyan = Brush.linearGradient(
-            colors = listOf(Color(0xFFFF9A1A), Color(0xFFFF6A00)),
+        val gFit = Brush.linearGradient(
+            colors = listOf(Color.White, Color(0xFFE4E2F0)),
             start = Offset.Zero,
             end = Offset(size.width, size.height)
         )
         val stroke = Stroke(
-            width = (3.6f * sX).coerceAtLeast(1.5f),
+            width = (3.6f * sX).coerceAtLeast(1.8f),
             cap = StrokeCap.Round,
             join = StrokeJoin.Round
         )
-        // Monitor screen: rect x=2, y=2, w=52, h=33, rx=4
         drawRoundRect(
-            brush = gCyan,
+            brush = gFit,
             topLeft = Offset(2f * sX, 2f * sY),
             size = Size(52f * sX, 33f * sY),
             cornerRadius = CornerRadius(4f * sX, 4f * sY),
             style = stroke
         )
-        // Stand: M20 43h16M28 35v8
-        val sw = (3.6f * sX).coerceAtLeast(1.5f)
-        drawLine(brush = gCyan, start = Offset(20f * sX, 43f * sY), end = Offset(36f * sX, 43f * sY), strokeWidth = sw, cap = StrokeCap.Round)
-        drawLine(brush = gCyan, start = Offset(28f * sX, 35f * sY), end = Offset(28f * sX, 43f * sY), strokeWidth = sw, cap = StrokeCap.Round)
+        val sw = (3.6f * sX).coerceAtLeast(1.8f)
+        drawLine(brush = gFit, start = Offset(20f * sX, 43f * sY), end = Offset(36f * sX, 43f * sY), strokeWidth = sw, cap = StrokeCap.Round)
+        drawLine(brush = gFit, start = Offset(28f * sX, 35f * sY), end = Offset(28f * sX, 43f * sY), strokeWidth = sw, cap = StrokeCap.Round)
 
-        // Corner brackets:
         val pTL = androidx.compose.ui.graphics.Path().apply {
             moveTo(10f * sX, 14f * sY)
             lineTo(10f * sX, 10f * sY)
             lineTo(14f * sX, 10f * sY)
         }
-        drawPath(pTL, brush = gCyan, style = stroke)
+        drawPath(pTL, brush = gFit, style = stroke)
 
         val pTR = androidx.compose.ui.graphics.Path().apply {
             moveTo(46f * sX, 14f * sY)
             lineTo(46f * sX, 10f * sY)
             lineTo(42f * sX, 10f * sY)
         }
-        drawPath(pTR, brush = gCyan, style = stroke)
+        drawPath(pTR, brush = gFit, style = stroke)
 
         val pBL = androidx.compose.ui.graphics.Path().apply {
             moveTo(10f * sX, 23f * sY)
             lineTo(10f * sX, 27f * sY)
             lineTo(14f * sX, 27f * sY)
         }
-        drawPath(pBL, brush = gCyan, style = stroke)
+        drawPath(pBL, brush = gFit, style = stroke)
 
         val pBR = androidx.compose.ui.graphics.Path().apply {
             moveTo(46f * sX, 23f * sY)
             lineTo(46f * sX, 27f * sY)
             lineTo(42f * sX, 27f * sY)
         }
-        drawPath(pBR, brush = gCyan, style = stroke)
+        drawPath(pBR, brush = gFit, style = stroke)
     }
 }
 
 @Composable
 private fun BottomMoreDotsCanvas(uVal: Float) {
-    Canvas(modifier = Modifier.size((16f * uVal).dp, (48f * uVal).dp)) {
+    Canvas(modifier = Modifier.size(8.dp, 22.dp)) {
         val sX = size.width / 16f
         val sY = size.height / 48f
-        val r = (4.4f * sX).coerceAtLeast(2.5f)
+        val r = (4.4f * sX).coerceAtLeast(2.2f)
         val cx = 8f * sX
-        drawCircle(color = Color(0xFF969AF7), radius = r, center = Offset(cx, 6f * sY))
-        drawCircle(color = Color(0xFF9C86F8), radius = r, center = Offset(cx, 24f * sY))
-        drawCircle(color = Color(0xFFA070F9), radius = r, center = Offset(cx, 42f * sY))
+        drawCircle(color = Color.White, radius = r, center = Offset(cx, 6f * sY))
+        drawCircle(color = Color.White, radius = r, center = Offset(cx, 24f * sY))
+        drawCircle(color = Color.White, radius = r, center = Offset(cx, 42f * sY))
     }
 }
 
@@ -1926,7 +2201,7 @@ private fun formatTime(ms: Long): String {
 }
 
 /* =========================================================================
-   BRIGHTNESS & VOLUME GAUGES (player_screen_v4.html)
+   GLASS OBSIDIAN BRIGHTNESS & VOLUME GAUGES (nexora_2 mockup)
    ========================================================================= */
 
 @Composable
@@ -1944,25 +2219,30 @@ private fun BrightnessGauge(
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.width((120f * uVal).dp)
+            modifier = Modifier
+                .width(46.dp)
+                .clip(RoundedCornerShape(23.dp))
+                .background(Color(0x9E0A0814))
+                .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(23.dp))
+                .padding(vertical = 12.dp, horizontal = 6.dp)
         ) {
+            SunIconCanvas(uVal)
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            VerticalBarCanvas(fraction = brightness)
+
+            Spacer(modifier = Modifier.height(8.dp))
+
             val pct = (brightness.coerceIn(0f, 1f) * 100f).roundToInt()
             Text(
                 text = "$pct%",
                 color = Color.White,
-                fontSize = (30f * uVal).sp,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
                 fontFamily = FontFamily.Monospace,
                 maxLines = 1
             )
-
-            Spacer(modifier = Modifier.height((44f * uVal).dp))
-
-            VerticalBarCanvas(uVal = uVal, fraction = brightness)
-
-            Spacer(modifier = Modifier.height((56f * uVal).dp))
-
-            SunIconCanvas(uVal)
         }
     }
 }
@@ -1982,130 +2262,139 @@ private fun VolumeGauge(
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.width((120f * uVal).dp)
+            modifier = Modifier
+                .width(46.dp)
+                .clip(RoundedCornerShape(23.dp))
+                .background(Color(0x9E0A0814))
+                .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(23.dp))
+                .padding(vertical = 12.dp, horizontal = 6.dp)
         ) {
+            SpeakerIconCanvas(uVal)
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            VerticalBarCanvas(fraction = volumeFraction)
+
+            Spacer(modifier = Modifier.height(8.dp))
+
             val pct = (volumeFraction.coerceIn(0f, 1f) * 100f).roundToInt()
             Text(
                 text = "$pct%",
                 color = Color.White,
-                fontSize = (30f * uVal).sp,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
                 fontFamily = FontFamily.Monospace,
                 maxLines = 1
             )
-
-            Spacer(modifier = Modifier.height((44f * uVal).dp))
-
-            VerticalBarCanvas(uVal = uVal, fraction = volumeFraction)
-
-            Spacer(modifier = Modifier.height((56f * uVal).dp))
-
-            SpeakerIconCanvas(uVal)
         }
     }
 }
 
 @Composable
-private fun VerticalBarCanvas(uVal: Float, fraction: Float) {
-    Canvas(modifier = Modifier.size((19f * uVal).dp, (270f * uVal).dp)) {
-        val r = (10f * uVal).dp.toPx()
+private fun VerticalBarCanvas(fraction: Float) {
+    val clamped = fraction.coerceIn(0f, 1f)
+    Canvas(modifier = Modifier.size(14.dp, 112.dp)) {
+        val trackW = 6.dp.toPx()
+        val trackLeft = (size.width - trackW) / 2f
+        val r = trackW / 2f
         val barPath = androidx.compose.ui.graphics.Path().apply {
             addRoundRect(
                 androidx.compose.ui.geometry.RoundRect(
-                    left = 0f,
+                    left = trackLeft,
                     top = 0f,
-                    right = size.width,
+                    right = trackLeft + trackW,
                     bottom = size.height,
                     cornerRadius = CornerRadius(r, r)
                 )
             )
         }
-        drawPath(barPath, color = Color(0x2EFFFFFF))
+        drawPath(barPath, color = Color(0x24FFFFFF))
 
-        val fillH = size.height * fraction.coerceIn(0f, 1f)
+        val fillH = size.height * clamped
         if (fillH > 0f) {
             clipPath(barPath) {
                 drawRect(
                     brush = Brush.verticalGradient(
-                        0.0f to Color(0xFFA63EF6),
-                        0.45f to Color(0xFF9A45F2),
-                        1.0f to Color(0xFFFF6A00)
+                        0.0f to Color(0xFFFF9A1A),
+                        1.0f to Color(0xFFFF5200)
                     ),
-                    topLeft = Offset(0f, size.height - fillH),
-                    size = Size(size.width, fillH)
+                    topLeft = Offset(trackLeft, size.height - fillH),
+                    size = Size(trackW, fillH)
                 )
             }
         }
+
+        // White dot thumb at level position
+        val knobY = (size.height - fillH).coerceIn(5.dp.toPx(), size.height - 5.dp.toPx())
+        drawCircle(
+            color = Color(0x88FF6400),
+            radius = 7.dp.toPx(),
+            center = Offset(size.width / 2f, knobY)
+        )
+        drawCircle(
+            color = Color.White,
+            radius = 5.dp.toPx(),
+            center = Offset(size.width / 2f, knobY)
+        )
     }
 }
 
 @Composable
 private fun SunIconCanvas(uVal: Float) {
-    Canvas(modifier = Modifier.size((56f * uVal).dp, (56f * uVal).dp)) {
+    Canvas(modifier = Modifier.size(20.dp)) {
         val s = size.width / 24f
-        val gCyan = Brush.linearGradient(
-            colors = listOf(Color(0xFFFF9A1A), Color(0xFFFF6A00)),
-            start = Offset.Zero,
-            end = Offset(size.width, size.height)
-        )
         val stroke = Stroke(
-            width = (2f * s).coerceAtLeast(1.5f),
+            width = (1.8f * s).coerceAtLeast(1.5f),
             cap = StrokeCap.Round,
             join = StrokeJoin.Round
         )
         drawCircle(
-            brush = gCyan,
+            color = Color.White,
             radius = 4.2f * s,
-            center = Offset(12f * s, 12f * s),
-            style = stroke
+            center = Offset(12f * s, 12f * s)
         )
-        val sw = (2f * s).coerceAtLeast(1.5f)
-        drawLine(brush = gCyan, start = Offset(12f * s, 2.5f * s), end = Offset(12f * s, 4.8f * s), strokeWidth = sw, cap = StrokeCap.Round)
-        drawLine(brush = gCyan, start = Offset(12f * s, 19.2f * s), end = Offset(12f * s, 21.5f * s), strokeWidth = sw, cap = StrokeCap.Round)
-        drawLine(brush = gCyan, start = Offset(2.5f * s, 12f * s), end = Offset(4.8f * s, 12f * s), strokeWidth = sw, cap = StrokeCap.Round)
-        drawLine(brush = gCyan, start = Offset(19.2f * s, 12f * s), end = Offset(21.5f * s, 12f * s), strokeWidth = sw, cap = StrokeCap.Round)
-        drawLine(brush = gCyan, start = Offset(5.3f * s, 5.3f * s), end = Offset(6.9f * s, 6.9f * s), strokeWidth = sw, cap = StrokeCap.Round)
-        drawLine(brush = gCyan, start = Offset(17.1f * s, 17.1f * s), end = Offset(18.7f * s, 18.7f * s), strokeWidth = sw, cap = StrokeCap.Round)
-        drawLine(brush = gCyan, start = Offset(18.7f * s, 5.3f * s), end = Offset(17.1f * s, 6.9f * s), strokeWidth = sw, cap = StrokeCap.Round)
-        drawLine(brush = gCyan, start = Offset(6.9f * s, 17.1f * s), end = Offset(5.3f * s, 18.7f * s), strokeWidth = sw, cap = StrokeCap.Round)
+        val sw = (1.8f * s).coerceAtLeast(1.5f)
+        drawLine(color = Color.White, start = Offset(12f * s, 2.5f * s), end = Offset(12f * s, 5.2f * s), strokeWidth = sw, cap = StrokeCap.Round)
+        drawLine(color = Color.White, start = Offset(12f * s, 18.8f * s), end = Offset(12f * s, 21.5f * s), strokeWidth = sw, cap = StrokeCap.Round)
+        drawLine(color = Color.White, start = Offset(2.5f * s, 12f * s), end = Offset(5.2f * s, 12f * s), strokeWidth = sw, cap = StrokeCap.Round)
+        drawLine(color = Color.White, start = Offset(18.8f * s, 12f * s), end = Offset(21.5f * s, 12f * s), strokeWidth = sw, cap = StrokeCap.Round)
+        drawLine(color = Color.White, start = Offset(5.3f * s, 5.3f * s), end = Offset(7.2f * s, 7.2f * s), strokeWidth = sw, cap = StrokeCap.Round)
+        drawLine(color = Color.White, start = Offset(16.8f * s, 16.8f * s), end = Offset(18.7f * s, 18.7f * s), strokeWidth = sw, cap = StrokeCap.Round)
+        drawLine(color = Color.White, start = Offset(18.7f * s, 5.3f * s), end = Offset(16.8f * s, 7.2f * s), strokeWidth = sw, cap = StrokeCap.Round)
+        drawLine(color = Color.White, start = Offset(7.2f * s, 16.8f * s), end = Offset(5.3f * s, 18.7f * s), strokeWidth = sw, cap = StrokeCap.Round)
     }
 }
 
 @Composable
 private fun SpeakerIconCanvas(uVal: Float) {
-    Canvas(modifier = Modifier.size((56f * uVal).dp, (56f * uVal).dp)) {
+    Canvas(modifier = Modifier.size(20.dp)) {
         val s = size.width / 24f
-        val gPurple = Brush.linearGradient(
-            colors = listOf(Color(0xFFA24EE6), Color(0xFFB05CFF)),
-            start = Offset.Zero,
-            end = Offset(size.width, size.height)
-        )
         val stroke = Stroke(
-            width = (2f * s).coerceAtLeast(1.5f),
+            width = (1.8f * s).coerceAtLeast(1.5f),
             cap = StrokeCap.Round,
             join = StrokeJoin.Round
         )
         val hornPath = androidx.compose.ui.graphics.Path().apply {
-            moveTo(4f * s, 9.5f * s)
-            lineTo(7.5f * s, 9.5f * s)
-            lineTo(12f * s, 5.5f * s)
-            lineTo(12f * s, 18.5f * s)
-            lineTo(7.5f * s, 14.5f * s)
-            lineTo(4f * s, 14.5f * s)
+            moveTo(3f * s, 9.5f * s)
+            lineTo(7f * s, 9.5f * s)
+            lineTo(12f * s, 5f * s)
+            lineTo(12f * s, 19f * s)
+            lineTo(7f * s, 14.5f * s)
+            lineTo(3f * s, 14.5f * s)
             close()
         }
-        drawPath(hornPath, brush = gPurple, style = stroke)
+        drawPath(hornPath, color = Color.White)
 
         val wave1 = androidx.compose.ui.graphics.Path().apply {
-            moveTo(15.5f * s, 9f * s)
-            cubicTo(17.5f * s, 10.2f * s, 17.5f * s, 13.8f * s, 15.5f * s, 15f * s)
+            moveTo(15.5f * s, 8.5f * s)
+            cubicTo(17.5f * s, 10f * s, 17.5f * s, 14f * s, 15.5f * s, 15.5f * s)
         }
-        drawPath(wave1, brush = gPurple, style = stroke)
+        drawPath(wave1, color = Color.White, style = stroke)
 
         val wave2 = androidx.compose.ui.graphics.Path().apply {
-            moveTo(18f * s, 6.5f * s)
-            cubicTo(21.2f * s, 8.5f * s, 21.2f * s, 15.5f * s, 18f * s, 17.5f * s)
+            moveTo(18f * s, 6f * s)
+            cubicTo(21.2f * s, 8.5f * s, 21.2f * s, 15.5f * s, 18f * s, 18f * s)
         }
-        drawPath(wave2, brush = gPurple, style = stroke)
+        drawPath(wave2, color = Color.White, style = stroke)
     }
 }

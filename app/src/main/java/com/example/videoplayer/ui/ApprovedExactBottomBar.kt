@@ -30,21 +30,22 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// Точные цвета из утверждённого дизайна player_ui.html
-private val BottomNavBgTop = Color(0xFF0C0F14)
-private val BottomNavBgBottom = Color(0xFF05070A)
-private val HotOrange = Color(0xFFFF7A00)
-private val HotOrangeLight = Color(0xFFFF9A30)
-private val HotOrangeGlow = Color(0x99FF7A00)
-private val MutedNavGray = Color(0xFF8A90A0)
-private val NavBorderLine = Color(0x1EFFFFFF)
-private val NavIndicatorBorder = Color(0x8CFF7A00)
-private val NavIndicatorBgTop = Color(0x1EFF7A00)
-private val NavIndicatorBgBottom = Color(0x05FFFFFF)
+// Цвета дизайна Nexora Obsidian-Violet & Neon Orange
+private val BottomNavBgTop = Color(0xFF14121C)
+private val BottomNavBgBottom = Color(0xFF090710)
+private val HotOrange = Color(0xFFFF9A1A)
+private val HotOrangeLight = Color(0xFFFFB040)
+private val HotOrangeGlow = Color(0x99FF8A00)
+private val MutedNavGray = Color(0xFF8D8AA8)
+private val NavBorderLine = Color(0x596E5FBE)
+private val NavIndicatorBorder = Color(0xA6FF9A1A)
+private val NavIndicatorBgTop = Color(0x47FF6E00)
+private val NavIndicatorBgBottom = Color(0xE63C1400)
 private val HomeBarColor = Color(0xFFF1F1F1)
 
 data class NavTabItem(
@@ -90,6 +91,7 @@ fun ApprovedExactBottomBar(
                     listOf(BottomNavBgTop, BottomNavBgBottom)
                 )
             )
+            .navigationBarsPadding()
     ) {
         // Верхний декоративный светящийся контур со скриншота/HTML
         Canvas(
@@ -203,6 +205,7 @@ fun ApprovedExactBottomBar(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
+                            .testTag("bottom_nav_tab_$index")
                             .clickable(
                                 interactionSource = interactionSource,
                                 indication = null

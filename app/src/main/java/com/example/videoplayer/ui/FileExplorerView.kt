@@ -25,10 +25,10 @@ import com.example.videoplayer.ui.theme.*
 import java.io.File
 import java.util.Locale
 
-val ExplorerAmber = Color(0xFFFF8800)
-val ExplorerAmberLight = Color(0xFFFFB300)
-val ExplorerCardBg = Color(0xFF1E1E1E)
-val ExplorerBorder = Color(0x33FF8800)
+val ExplorerAmber = Color(0xFFFF9A1A)
+val ExplorerAmberLight = Color(0xFFFFC01A)
+val ExplorerCardBg = SurfaceCardColor
+val ExplorerBorder = ObsidianBorder
 
 @Composable
 fun FileExplorerView(
@@ -97,9 +97,9 @@ fun FileExplorerView(
                 shape = RoundedCornerShape(26.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = ExplorerAmber,
-                    unfocusedBorderColor = Color.White.copy(alpha = 0.12f),
-                    focusedContainerColor = SurfaceCardColor,
-                    unfocusedContainerColor = SurfaceCardColor,
+                    unfocusedBorderColor = ExplorerBorder,
+                    focusedContainerColor = DeepVioletCardTop,
+                    unfocusedContainerColor = DeepVioletCardTop,
                     focusedTextColor = Color.White,
                     unfocusedTextColor = Color.White
                 )
@@ -123,7 +123,7 @@ fun FileExplorerView(
                             currentPath = rootPath
                         }
                     },
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(48.dp)
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -173,9 +173,9 @@ fun FileExplorerView(
                                 onMediaSelected(item.path)
                             }
                         },
-                    shape = RoundedCornerShape(14.dp),
-                    color = ExplorerCardBg,
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
+                    shape = RoundedCornerShape(18.dp),
+                    color = DeepVioletCardTop,
+                    border = BorderStroke(1.dp, ExplorerBorder)
                 ) {
                     Row(
                         modifier = Modifier
@@ -188,9 +188,9 @@ fun FileExplorerView(
                                 .size(40.dp)
                                 .clip(RoundedCornerShape(10.dp))
                                 .background(
-                                    if (item.isDirectory) Color(0xFF2E2216)
-                                    else if (item.isVideo) Color(0xFF382315)
-                                    else Color(0xFF1E2836)
+                                    if (item.isDirectory) Color(0xFF3A1C0C)
+                                    else if (item.isVideo) Color(0xFF4A2410)
+                                    else Color(0xFF1E1C30)
                                 ),
                             contentAlignment = Alignment.Center
                         ) {

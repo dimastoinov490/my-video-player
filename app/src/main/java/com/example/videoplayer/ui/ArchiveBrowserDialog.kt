@@ -42,11 +42,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.io.File
 
-private val BgDark = Color(0xFF020306)
-private val CardDark = Color(0xFF0D0F14)
-private val CardBorder = Color(0x22FFFFFF)
-private val NeonOrange = Color(0xFFFF7A00)
-private val TextMuted = Color(0xFF8A90A0)
+private val BgDark = Color(0xFF030208)
+private val CardDark = Color(0xFF14121C)
+private val CardBorder = Color(0x616E5FBE)
+private val NeonOrange = Color(0xFFFF9A1A)
+private val TextMuted = Color(0xFF8D8AA8)
+private val DarkOrangeText = Color(0xFF3A1A00)
 
 @Composable
 fun ArchiveBrowserScreen(
@@ -245,7 +246,7 @@ fun ArchiveBrowserScreen(
                 Surface(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp),
                     shape = RoundedCornerShape(14.dp),
-                    color = Color(0xFF231307),
+                    color = Color(0xFF23150B),
                     border = BorderStroke(1.dp, NeonOrange.copy(alpha = 0.45f))
                 ) {
                     Row(
@@ -296,7 +297,7 @@ fun ArchiveBrowserScreen(
                 Button(
                     onClick = { startExtraction(null, source.displayName) },
                     enabled = inspectResult != null,
-                    colors = ButtonDefaults.buttonColors(containerColor = NeonOrange, contentColor = Color.Black),
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonOrange, contentColor = DarkOrangeText),
                     shape = RoundedCornerShape(18.dp),
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
                     modifier = Modifier.height(48.dp).testTag("archive_extract_all_button")
@@ -331,7 +332,7 @@ fun ArchiveBrowserScreen(
                                 }
                                 Button(
                                     onClick = { loadArchive(currentPassword) },
-                                    colors = ButtonDefaults.buttonColors(containerColor = NeonOrange, contentColor = Color.Black)
+                                    colors = ButtonDefaults.buttonColors(containerColor = NeonOrange, contentColor = DarkOrangeText)
                                 ) {
                                     Text("Повторить")
                                 }
@@ -464,7 +465,7 @@ fun ArchiveBrowserScreen(
                         infoEntry = null
                         startExtraction(intArrayOf(target.index), target.name)
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = NeonOrange, contentColor = Color.Black)
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonOrange, contentColor = DarkOrangeText)
                 ) {
                     Text("Распаковать")
                 }
@@ -519,7 +520,7 @@ private fun ArchiveRowCard(
                 modifier = Modifier
                     .size(44.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(if (isVideo) NeonOrange.copy(alpha = 0.16f) else Color(0xFF1A120A)),
+                    .background(if (isVideo) NeonOrange.copy(alpha = 0.16f) else Color(0xFF3A1C0C)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -614,7 +615,7 @@ private fun PasswordPromptDialog(
             Button(
                 onClick = { onConfirm(pwd) },
                 enabled = pwd.isNotEmpty(),
-                colors = ButtonDefaults.buttonColors(containerColor = NeonOrange, contentColor = Color.Black),
+                colors = ButtonDefaults.buttonColors(containerColor = NeonOrange, contentColor = DarkOrangeText),
                 modifier = Modifier.testTag("archive_password_confirm")
             ) {
                 Text("Открыть", fontWeight = FontWeight.Bold)
@@ -658,7 +659,7 @@ private fun ExtractionProgressDialog(
                             progress = { (state.percent / 100f).coerceIn(0f, 1f) },
                             modifier = Modifier.fillMaxWidth(),
                             color = NeonOrange,
-                            trackColor = Color(0xFF22252E)
+                            trackColor = Color(0xFF242136)
                         )
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("${state.percent}%", color = NeonOrange, fontWeight = FontWeight.Bold, fontSize = 14.sp)
@@ -681,7 +682,7 @@ private fun ExtractionProgressDialog(
         },
         confirmButton = {
             if (state is ExtractionProgress.Error) {
-                Button(onClick = onDismissError, colors = ButtonDefaults.buttonColors(containerColor = NeonOrange, contentColor = Color.Black)) {
+                Button(onClick = onDismissError, colors = ButtonDefaults.buttonColors(containerColor = NeonOrange, contentColor = DarkOrangeText)) {
                     Text("ОК")
                 }
             } else {

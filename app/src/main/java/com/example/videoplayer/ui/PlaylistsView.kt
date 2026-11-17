@@ -7,6 +7,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -17,8 +20,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -69,26 +74,26 @@ fun PlaylistsView(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(DarkBackground)
+            .background(Color(0xFF030208))
     ) {
         // Header with Create button
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = 16.dp, vertical = 14.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column {
                 Text(
-                    "Мои плейлисты",
+                    "Плейлисты",
                     color = Color.White,
-                    fontSize = 18.sp,
+                    fontSize = 20.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
                     "Всего: ${playlists.size}",
-                    color = GrayText,
+                    color = Color(0xFF8D8AA8),
                     fontSize = 12.sp
                 )
             }
@@ -96,104 +101,120 @@ fun PlaylistsView(
             Button(
                 onClick = { showCreateDialog = true },
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = NeonOrange
+                    containerColor = Color(0xFFFF9A1A),
+                    contentColor = Color(0xFF3A1A00)
                 ),
                 shape = RoundedCornerShape(20.dp),
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                modifier = Modifier
+                    .heightIn(min = 48.dp)
+                    .testTag("playlists_create_button")
             ) {
                 Icon(
                     imageVector = Icons.Default.Add,
                     contentDescription = null,
-                    tint = Color.Black,
+                    tint = Color(0xFF3A1A00),
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     "Создать",
-                    color = Color.Black,
+                    color = Color(0xFF3A1A00),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
         }
 
-        LazyColumn(
+        // Artboard 6: 2x2 Colored Gradient Cards Grid
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(playlists, key = { it.id }) { pl ->
+                val nameLower = pl.name.lowercase()
+                val typeLower = pl.iconType.lowercase()
+                val (gradColors, iconVec, iconTint) = when {
+                    typeLower == "favorites" || nameLower.contains("избран") -> Triple(
+                        listOf(Color(0xFF3D2A2E), Color(0xFF1C1218)),
+                        Icons.Default.Star,
+                        Color(0xFFFFA81F)
+                    )
+                    typeLower == "recent" || nameLower.contains("недавн") -> Triple(
+                        listOf(Color(0xFF152A66), Color(0xFF0B1233)),
+                        Icons.Default.History,
+                        Color(0xFF2F8CF5)
+                    )
+                    typeLower == "movie" || nameLower.contains("фильм") || nameLower.contains("настроен") -> Triple(
+                        listOf(Color(0xFF3A1FB0), Color(0xFF120A3C)),
+                        Icons.Default.GraphicEq,
+                        Color(0xFFB86BFF)
+                    )
+                    typeLower == "music" || nameLower.contains("клип") || nameLower.contains("роман") -> Triple(
+                        listOf(Color(0xFF5A2248), Color(0xFF2A1020)),
+                        Icons.Default.Favorite,
+                        Color(0xFFFF4D63)
+                    )
+                    else -> Triple(
+                        listOf(Color(0xFF1A162D), Color(0xFF0D0B1A)),
+                        Icons.Default.PlaylistPlay,
+                        Color(0xFFFF9A1A)
+                    )
+                }
+
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .clickable { selectedPlaylist = pl },
-                    shape = RoundedCornerShape(16.dp),
-                    color = SurfaceCardColor,
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.06f))
+                        .height(168.dp)
+                        .clip(RoundedCornerShape(22.dp))
+                        .clickable { selectedPlaylist = pl }
+                        .testTag("playlist_card_${pl.id}"),
+                    shape = RoundedCornerShape(22.dp),
+                    color = Color.Transparent,
+                    border = BorderStroke(1.dp, Color(0x28FFFFFF))
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .fillMaxSize()
+                            .background(Brush.verticalGradient(gradColors))
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.SpaceBetween
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(48.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(NeonOrange.copy(alpha = 0.15f)),
+                                .fillMaxWidth()
+                                .weight(1f),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = when (pl.iconType) {
-                                    "favorites" -> Icons.Default.Favorite
-                                    "recent" -> Icons.Default.History
-                                    "movie" -> Icons.Default.Movie
-                                    "music" -> Icons.Default.MusicNote
-                                    else -> Icons.Default.PlaylistPlay
-                                },
+                                imageVector = iconVec,
                                 contentDescription = null,
-                                tint = GoldenYellowLight,
-                                modifier = Modifier.size(26.dp)
+                                tint = iconTint,
+                                modifier = Modifier.size(48.dp)
                             )
                         }
 
-                        Spacer(modifier = Modifier.width(14.dp))
-
-                        Column(modifier = Modifier.weight(1f)) {
+                        Column {
                             Text(
                                 text = pl.name,
                                 color = Color.White,
                                 fontSize = 15.sp,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
-                            if (pl.description.isNotEmpty()) {
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = pl.description,
-                                    color = GrayText,
-                                    fontSize = 12.sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(3.dp))
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = "${pl.itemUris.size} медиафайлов",
-                                color = GoldenYellowLight.copy(alpha = 0.8f),
-                                fontSize = 11.sp
+                                color = Color(0xCCB8B5CE),
+                                fontSize = 12.sp
                             )
                         }
-
-                        Icon(
-                            imageVector = Icons.Default.ChevronRight,
-                            contentDescription = null,
-                            tint = GrayText,
-                            modifier = Modifier.size(20.dp)
-                        )
                     }
                 }
             }

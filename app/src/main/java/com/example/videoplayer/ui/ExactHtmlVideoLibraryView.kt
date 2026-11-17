@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.ComponentName
 import android.content.Intent
 import android.graphics.Bitmap
 import android.media.MediaScannerConnection
@@ -13,6 +12,7 @@ import android.os.Build
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.os.StatFs
 import android.provider.Settings
 import android.util.Base64
 import android.view.View
@@ -28,20 +28,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
-import androidx.core.content.ContextCompat
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.media3.common.MediaItem
-import androidx.media3.common.MediaMetadata
-import androidx.media3.common.C
-import androidx.media3.common.util.UnstableApi
-import androidx.media3.session.MediaController
-import androidx.media3.session.SessionToken
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.FileProvider
 import com.example.videoplayer.archive.ArchiveFileUtils
 import com.example.videoplayer.archive.ArchiveSource
 import com.example.videoplayer.model.AudioItem
@@ -53,22 +44,22 @@ import com.example.videoplayer.model.VideoThumbnailLoader
 import com.example.videoplayer.player.AppPreferences
 import com.example.videoplayer.player.CpuMonitor
 import com.example.videoplayer.player.DeviceInfoHelper
-import com.example.videoplayer.player.DiagnosticManager
+import com.example.videoplayer.player.EqualizerState
 import com.example.videoplayer.player.MemoryMonitor
-import com.example.videoplayer.player.ScreenMetricsHelper
+import com.example.videoplayer.player.PlaybackPreferences
 import com.example.videoplayer.player.VlcEngineConfigurator
 import com.example.videoplayer.service.HttpBroadcastFolder
 import com.example.videoplayer.service.HttpServerConfig
 import com.example.videoplayer.service.LocalHttpShareServer
 import com.example.videoplayer.service.WifiDirectManager
+import com.example.videoplayer.ui.theme.DynamicPlayerConfig
+import com.example.videoplayer.ui.theme.ThemeConfigManager
+import com.example.videoplayer.ui.theme.ThemeManager
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import com.google.zxing.common.BitMatrix
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -78,7 +69,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
-import com.example.videoplayer.service.AudioPlaybackService
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -86,7 +76,6 @@ import java.util.concurrent.atomic.AtomicReference
  * Сохраняет дизайн символ в символ без упрощений.
  */
 @SuppressLint("SetJavaScriptEnabled")
-@OptIn(UnstableApi::class)
 @Composable
 fun ExactHtmlVideoLibraryView(
     videos: List<VideoItem>,
@@ -100,59 +89,23 @@ fun ExactHtmlVideoLibraryView(
     onRefreshVideos: () -> Unit,
     onOpenArchive: (ArchiveSource, File?) -> Unit = { _, _ -> },
     onOpenArchivePicker: () -> Unit = {},
-    onCreateZipArchive: (String) -> Unit = {},
     onOpenBrowser: (String) -> Unit = {},
-    onOpenTerminal: () -> Unit = {},
+    onOpenSystemMediaPicker: () -> Unit = {},
+    onOpenNativeThemeStudio: () -> Unit = {},
     browseRefreshTick: Int = 0,
+    mediaRefreshTick: Int = 0,
     currentNavIndex: Int = 0,
-    audioPermissionGranted: Boolean = false,
-    photoPermissionGranted: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
     val coroutineScope = rememberCoroutineScope()
-    var audioController by remember { mutableStateOf<MediaController?>(null) }
-
-    DisposableEffect(context) {
-        val sessionToken = SessionToken(context, ComponentName(context, AudioPlaybackService::class.java))
-        val controllerFuture = MediaController.Builder(context, sessionToken).buildAsync()
-        controllerFuture.addListener(
-            {
-                runCatching { controllerFuture.get() }
-                    .onSuccess { audioController = it }
-            },
-            ContextCompat.getMainExecutor(context)
-        )
-        onDispose {
-            audioController = null
-            MediaController.releaseFuture(controllerFuture)
-        }
-    }
-
-    // Respect the app's background playback preference for the Media3 session too.
-    DisposableEffect(lifecycleOwner, audioController) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) {
-                val allowBackgroundPlayback = context
-                    .getSharedPreferences("video_prefs", Context.MODE_PRIVATE)
-                    .getBoolean("bg_play", false)
-                if (!allowBackgroundPlayback) audioController?.pause()
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-
-    val latestAudioController by rememberUpdatedState(audioController)
-
     val latestRefresh by rememberUpdatedState(onRefreshVideos)
     val latestVideos by rememberUpdatedState(videos)
     val latestOpenArchive by rememberUpdatedState(onOpenArchive)
     val latestOpenArchivePicker by rememberUpdatedState(onOpenArchivePicker)
-    val latestCreateZipArchive by rememberUpdatedState(onCreateZipArchive)
     val latestOpenBrowser by rememberUpdatedState(onOpenBrowser)
-    val latestOpenTerminal by rememberUpdatedState(onOpenTerminal)
+    val latestOpenSystemMediaPicker by rememberUpdatedState(onOpenSystemMediaPicker)
+    val latestOpenNativeThemeStudio by rememberUpdatedState(onOpenNativeThemeStudio)
     val sentThumbs = remember { java.util.Collections.synchronizedSet(HashSet<String>()) }
     val wifiStatusRef = remember { AtomicReference("") }
     val initialSyncDone = remember { AtomicBoolean(false) }
@@ -168,32 +121,6 @@ fun ExactHtmlVideoLibraryView(
         }
     }
     var currentBrowsePath by remember { mutableStateOf(rootBrowsePath) }
-
-    // Keep the compact HTML player synchronized with the real Media3 session.
-    LaunchedEffect(audioController, isPageReady) {
-        if (!isPageReady) return@LaunchedEffect
-        val controller = audioController ?: return@LaunchedEffect
-        while (isActive) {
-            val item = controller.currentMediaItem
-            val metadata = item?.mediaMetadata
-            val duration = controller.duration.takeIf { it > 0 && it != C.TIME_UNSET } ?: 0L
-            val state = JSONObject()
-                .put("title", metadata?.title?.toString().orEmpty())
-                .put("artist", metadata?.artist?.toString().orEmpty())
-                .put("isPlaying", controller.isPlaying)
-                .put("hasTrack", item != null)
-                .put("position", controller.currentPosition.coerceAtLeast(0L))
-                .put("duration", duration)
-                .put("index", controller.currentMediaItemIndex)
-                .put("queueSize", controller.mediaItemCount)
-                .toString()
-            webViewRef?.takeIf { isPageReady && it.isAttachedToWindow }?.evaluateJavascript(
-                "window.updateAudioPlayback && window.updateAudioPlayback($state)",
-                null
-            )
-            delay(if (controller.isPlaying) 450L else 1000L)
-        }
-    }
 
     fun sendThumbsToWeb(webView: WebView, list: List<VideoItem>) {
         if (list.isEmpty()) return
@@ -284,43 +211,11 @@ fun ExactHtmlVideoLibraryView(
         }
     }
 
-    fun sendPhotosToWeb(webView: WebView) {
-        coroutineScope.launch {
-            val payload = withContext(Dispatchers.IO) {
-                val photos = MediaStoreHelper.getPhotos(context, limit = 80)
-                val json = JSONArray()
-                for (photo in photos) {
-                    val obj = JSONObject()
-                    obj.put("name", photo.displayName)
-                    obj.put("uri", photo.uri.toString())
-                    obj.put("date", photo.dateAdded)
-                    obj.put("size", photo.size)
-                    obj.put("thumb", MediaStoreHelper.getPhotoThumbnailDataUri(context, photo.id).orEmpty())
-                    json.put(obj)
-                }
-                json.toString()
-            }
-            withContext(Dispatchers.Main) {
-                if (webViewRef === webView && webView.isAttachedToWindow) {
-                    webView.evaluateJavascript("if (window.setPhotos) { window.setPhotos($payload); }", null)
-                }
-            }
-        }
-    }
-
     fun sendAudiosToWeb(webView: WebView) {
         coroutineScope.launch {
-            val audioData = withContext(Dispatchers.IO) {
-                val items = MediaStoreHelper.getAudios(context)
-                // Technical probing is bounded so a large library does not trigger hundreds
-                // of extractor instances during initial WebView synchronization.
-                val technical = items.take(100).associate { item ->
-                    item.uri.toString() to MediaStoreHelper.getAudioTechnicalInfo(context, item.uri)
-                }
-                items to technical
+            val audios = withContext(Dispatchers.IO) {
+                MediaStoreHelper.getAudios(context)
             }
-            val audios = audioData.first
-            val technicalByUri = audioData.second
             val jsonArray = JSONArray()
             for (a in audios) {
                 val obj = JSONObject()
@@ -332,18 +227,6 @@ fun ExactHtmlVideoLibraryView(
                 val durStr = String.format(Locale.US, "%02d:%02d", m, s)
                 val sizeMb = String.format(Locale.US, "%.1f MB", a.size / (1024.0 * 1024.0))
                 obj.put("meta", "$durStr • $sizeMb")
-                val technical = technicalByUri[a.uri.toString()]
-                val technicalParts = buildList {
-                    technical?.sampleRateHz?.takeIf { it > 0 }?.let {
-                        add(String.format(Locale.US, "%.1f kHz", it / 1000.0))
-                    }
-                    technical?.channelCount?.takeIf { it > 0 }?.let { add("$it ch") }
-                    technical?.bitrateBps?.takeIf { it > 0 }?.let {
-                        add(String.format(Locale.US, "%.0f kbps", it / 1000.0))
-                    }
-                    technical?.codec?.takeIf { it.isNotBlank() }?.let { add(it) }
-                }
-                obj.put("technical", technicalParts.joinToString(" • "))
                 obj.put("uri", a.uri.toString())
                 jsonArray.put(obj)
             }
@@ -422,12 +305,13 @@ fun ExactHtmlVideoLibraryView(
                 obj.put("id", p.id)
                 obj.put("title", p.name)
                 obj.put("desc", p.description)
+                obj.put("iconType", p.iconType)
                 obj.put("count", "${p.itemUris.size} медиафайлов")
                 val icon = when (p.iconType) {
-                    "heart", "fav" -> "heart"
-                    "history", "hist" -> "hist"
-                    "movies", "clapf" -> "clapf"
-                    "clips", "note1" -> "note1"
+                    "favorites", "heart", "fav" -> "heart"
+                    "recent", "history", "hist" -> "hist"
+                    "movie", "movies", "clapf" -> "clapf"
+                    "music", "clips", "note1" -> "note1"
                     else -> "list"
                 }
                 obj.put("icon", icon)
@@ -441,29 +325,43 @@ fun ExactHtmlVideoLibraryView(
         }
     }
 
+    fun sendRecentMediaToWeb(webView: WebView) {
+        coroutineScope.launch {
+            val jsonStr = withContext(Dispatchers.IO) {
+                val list = PlaybackPreferences.getRecentMedia(context)
+                val arr = JSONArray()
+                for (item in list) {
+                    arr.put(JSONObject().apply {
+                        put("uri", item.uri)
+                        put("title", item.title)
+                        put("subtitle", item.subtitle)
+                        put("isAudio", item.isAudio)
+                        put("positionMs", item.positionMs)
+                        put("durationMs", item.durationMs)
+                        put("updatedAt", item.updatedAt)
+                    })
+                }
+                arr.toString()
+            }
+            withContext(Dispatchers.Main) {
+                webView.evaluateJavascript("if (window.setRecentMedia) { window.setRecentMedia($jsonStr); }", null)
+            }
+        }
+    }
+
     fun syncAllData(webView: WebView) {
         sendVideosToWeb(webView, latestVideos, force = true)
-        // Audio sync is owned by LaunchedEffect(audioPermissionGranted, isPageReady).
-        // Keeping it out of this initial batch avoids probing the same tracks twice.
+        sendAudiosToWeb(webView)
         sendFoldersToWeb(webView, currentBrowsePath)
         sendPlaylistsToWeb(webView)
+        sendRecentMediaToWeb(webView)
+        val savedAccent = PlaybackPreferences.getAccentHex(context)
+        webView.evaluateJavascript("if (window.onAccentChanged) { window.onAccentChanged(${JSONObject.quote(savedAccent)}); }", null)
     }
 
     LaunchedEffect(videos, isPageReady) {
         if (isPageReady) {
             webViewRef?.let { sendVideosToWeb(it, videos) }
-        }
-    }
-
-    LaunchedEffect(audioPermissionGranted, isPageReady) {
-        if (isPageReady && audioPermissionGranted) {
-            webViewRef?.let { sendAudiosToWeb(it) }
-        }
-    }
-
-    LaunchedEffect(photoPermissionGranted, isPageReady) {
-        if (isPageReady && photoPermissionGranted) {
-            webViewRef?.let { sendPhotosToWeb(it) }
         }
     }
 
@@ -479,6 +377,15 @@ fun ExactHtmlVideoLibraryView(
     LaunchedEffect(browseRefreshTick, isPageReady) {
         if (isPageReady && browseRefreshTick > 0) {
             webViewRef?.let { sendFoldersToWeb(it, currentBrowsePath) }
+        }
+    }
+
+    LaunchedEffect(mediaRefreshTick, isPageReady) {
+        if (isPageReady && mediaRefreshTick > 0) {
+            webViewRef?.let {
+                sendRecentMediaToWeb(it)
+                sendPlaylistsToWeb(it)
+            }
         }
     }
 
@@ -512,7 +419,7 @@ fun ExactHtmlVideoLibraryView(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF020306))
+            .background(Color(0xFF030208))
     ) {
         AndroidView(
             factory = { ctx ->
@@ -522,17 +429,11 @@ fun ExactHtmlVideoLibraryView(
                         ViewGroup.LayoutParams.MATCH_PARENT
                     )
                     setLayerType(View.LAYER_TYPE_HARDWARE, null)
-                    setBackgroundColor(android.graphics.Color.parseColor("#020306"))
+                    setBackgroundColor(android.graphics.Color.parseColor("#030208"))
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true
-                    // This WebView loads trusted app assets; keep file access only for those assets.
                     settings.allowFileAccess = true
-                    settings.allowContentAccess = false
-                    settings.allowFileAccessFromFileURLs = false
-                    settings.allowUniversalAccessFromFileURLs = false
-                    settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-                    settings.javaScriptCanOpenWindowsAutomatically = false
-                    settings.setSupportMultipleWindows(false)
+                    settings.allowContentAccess = true
                     settings.cacheMode = WebSettings.LOAD_NO_CACHE
                     settings.useWideViewPort = true
                     settings.loadWithOverviewMode = false
@@ -555,31 +456,6 @@ fun ExactHtmlVideoLibraryView(
                     }
 
                     webViewClient = object : WebViewClient() {
-                        override fun shouldOverrideUrlLoading(
-                            view: WebView?,
-                            request: android.webkit.WebResourceRequest?
-                        ): Boolean {
-                            val target = request?.url ?: return true
-                            val targetUrl = target.toString()
-                            // Keep the privileged JavaScript bridge on the bundled UI origin only.
-                            if (target.scheme == "file" && targetUrl.startsWith("file:///android_asset/")) {
-                                return false
-                            }
-                            if (target.scheme == "about" && targetUrl == "about:blank") {
-                                return false
-                            }
-                            // External navigation must leave this WebView so remote pages never
-                            // receive access to AndroidBridge.
-                            if (target.scheme == "https" || target.scheme == "http") {
-                                try {
-                                    context.startActivity(Intent(Intent.ACTION_VIEW, target))
-                                } catch (_: Exception) {
-                                    Toast.makeText(context, "Не удалось открыть ссылку", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                            return true
-                        }
-
                         override fun onPageFinished(view: WebView?, url: String?) {
                             super.onPageFinished(view, url)
                             view?.let {
@@ -607,119 +483,9 @@ fun ExactHtmlVideoLibraryView(
                         }
 
                         @JavascriptInterface
-                        fun playAudio(uri: String) {
-                            val singleTrack = JSONArray().put(JSONObject().put("uri", uri))
-                            playAudioQueue(singleTrack.toString(), 0)
-                        }
-
-                        @JavascriptInterface
-                        fun playAudioQueue(queueJson: String, selectedIndex: Int) {
-                            Handler(Looper.getMainLooper()).post {
-                                val controller = latestAudioController
-                                if (controller == null) {
-                                    Toast.makeText(context, "Аудиоплеер ещё подключается", Toast.LENGTH_SHORT).show()
-                                    return@post
-                                }
-                                try {
-                                    val source = JSONArray(queueJson)
-                                    val mediaItems = ArrayList<MediaItem>(source.length())
-                                    for (index in 0 until source.length()) {
-                                        val track = source.optJSONObject(index) ?: continue
-                                        val uri = track.optString("uri").trim()
-                                        if (uri.isBlank()) continue
-                                        val metadata = MediaMetadata.Builder()
-                                            .setTitle(track.optString("title").ifBlank {
-                                                uri.substringAfterLast('/').substringBefore('?').ifBlank { "Аудио" }
-                                            })
-                                            .setArtist(track.optString("artist").takeIf { it.isNotBlank() })
-                                            .setAlbumTitle(track.optString("album").takeIf { it.isNotBlank() })
-                                            .build()
-                                        mediaItems.add(
-                                            MediaItem.Builder()
-                                                .setUri(uri)
-                                                .setMediaMetadata(metadata)
-                                                .build()
-                                        )
-                                    }
-                                    if (mediaItems.isEmpty()) {
-                                        Toast.makeText(context, "В очереди нет доступных аудиофайлов", Toast.LENGTH_SHORT).show()
-                                        return@post
-                                    }
-                                    val safeIndex = selectedIndex.coerceIn(0, mediaItems.lastIndex)
-                                    controller.setMediaItems(mediaItems, safeIndex, 0L)
-                                    controller.prepare()
-                                    controller.play()
-                                } catch (error: Exception) {
-                                    Toast.makeText(context, "Не удалось открыть очередь аудио", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        }
-
-                        @JavascriptInterface
-                        fun audioPlayPause() {
-                            Handler(Looper.getMainLooper()).post {
-                                latestAudioController?.let { controller ->
-                                    if (controller.isPlaying) controller.pause() else controller.play()
-                                }
-                            }
-                        }
-
-                        @JavascriptInterface
-                        fun audioNext() {
-                            Handler(Looper.getMainLooper()).post {
-                                latestAudioController?.let { controller ->
-                                    if (controller.hasNextMediaItem()) controller.seekToNextMediaItem()
-                                }
-                            }
-                        }
-
-                        @JavascriptInterface
-                        fun audioPrevious() {
-                            Handler(Looper.getMainLooper()).post {
-                                latestAudioController?.let { controller ->
-                                    if (controller.hasPreviousMediaItem()) controller.seekToPreviousMediaItem()
-                                    else controller.seekTo(0L)
-                                }
-                            }
-                        }
-
-                        @JavascriptInterface
-                        fun audioSeekTo(positionMs: Long) {
-                            Handler(Looper.getMainLooper()).post {
-                                latestAudioController?.let { controller ->
-                                    val target = positionMs.coerceAtLeast(0L)
-                                    val duration = controller.duration
-                                    controller.seekTo(if (duration > 0 && duration != C.TIME_UNSET) target.coerceAtMost(duration) else target)
-                                }
-                            }
-                        }
-
-                        @JavascriptInterface
                         fun refreshVideos() {
                             Handler(Looper.getMainLooper()).post {
                                 latestRefresh()
-                            }
-                        }
-
-                        @JavascriptInterface
-                        fun refreshPhotos() {
-                            Handler(Looper.getMainLooper()).post {
-                                webViewRef?.let { sendPhotosToWeb(it) }
-                            }
-                        }
-
-                        @JavascriptInterface
-                        fun openPhoto(uri: String) {
-                            Handler(Looper.getMainLooper()).post {
-                                runCatching {
-                                    val intent = Intent(Intent.ACTION_VIEW).apply {
-                                        setDataAndType(Uri.parse(uri), "image/*")
-                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                    }
-                                    context.startActivity(intent)
-                                }.onFailure {
-                                    Toast.makeText(context, "Не удалось открыть изображение", Toast.LENGTH_SHORT).show()
-                                }
                             }
                         }
 
@@ -778,13 +544,6 @@ fun ExactHtmlVideoLibraryView(
                         fun openArchivePicker() {
                             Handler(Looper.getMainLooper()).post {
                                 latestOpenArchivePicker()
-                            }
-                        }
-
-                        @JavascriptInterface
-                        fun createZipArchive(path: String) {
-                            Handler(Looper.getMainLooper()).post {
-                                latestCreateZipArchive(path)
                             }
                         }
 
@@ -1154,7 +913,6 @@ fun ExactHtmlVideoLibraryView(
                                 when (id) {
                                     "url" -> onOpenCustomUrl()
                                     "browser" -> latestOpenBrowser("https://google.com")
-                                    "terminal" -> latestOpenTerminal()
                                     "settings" -> { /* В v5 настройки открываются прямо в HTML */ }
                                     "share" -> { /* В v5 раздача открывается прямо в HTML */ }
                                     else -> Toast.makeText(context, "Выбран пункт: $id", Toast.LENGTH_SHORT).show()
@@ -1481,39 +1239,6 @@ fun ExactHtmlVideoLibraryView(
                         }
 
                         @JavascriptInterface
-                        fun runDiagnostics(): String {
-                            return try {
-                                val items = runBlocking {
-                                    DiagnosticManager.runFullDiagnostics(context)
-                                }
-                                val arr = JSONArray()
-                                for (item in items) {
-                                    arr.put(JSONObject().apply {
-                                        put("id", item.id)
-                                        put("title", item.title)
-                                        put("status", item.status.name)
-                                        put("description", item.description)
-                                    })
-                                }
-                                arr.toString()
-                            } catch (e: Exception) {
-                                "[]"
-                            }
-                        }
-
-                        @JavascriptInterface
-                        fun getScreenMetrics(): String {
-                            return try {
-                                val params = ScreenMetricsHelper.getScreenParams(context)
-                                JSONObject().apply {
-                                    params.forEach { (k, v) -> put(k, v) }
-                                }.toString()
-                            } catch (e: Exception) {
-                                "{}"
-                            }
-                        }
-
-                        @JavascriptInterface
                         fun setSetting(key: String, value: String) {
                             Handler(Looper.getMainLooper()).post {
                                 if (key == "orientation_mode") {
@@ -1559,6 +1284,238 @@ fun ExactHtmlVideoLibraryView(
                                 if (initialSyncDone.compareAndSet(false, true)) {
                                     syncAllData(this@apply)
                                 }
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun openSystemMediaPicker() {
+                            Handler(Looper.getMainLooper()).post {
+                                latestOpenSystemMediaPicker()
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun openNativeThemeStudio() {
+                            Handler(Looper.getMainLooper()).post {
+                                latestOpenNativeThemeStudio()
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun isWelcomeSeen(): Boolean {
+                            return PlaybackPreferences.isWelcomeSeen(context)
+                        }
+
+                        @JavascriptInterface
+                        fun setWelcomeSeen(seen: Boolean) {
+                            PlaybackPreferences.setWelcomeSeen(context, seen)
+                        }
+
+                        @JavascriptInterface
+                        fun getAccentHex(): String {
+                            return PlaybackPreferences.getAccentHex(context)
+                        }
+
+                        @JavascriptInterface
+                        fun setAccentHex(hex: String) {
+                            PlaybackPreferences.setAccentHex(context, hex)
+                            Handler(Looper.getMainLooper()).post {
+                                val parsed = try {
+                                    Color(android.graphics.Color.parseColor(hex))
+                                } catch (_: Exception) {
+                                    Color(0xFFFF9A1A)
+                                }
+                                val curTheme = ThemeManager.activeTheme
+                                ThemeManager.saveAndApplyAiTheme(
+                                    context = context,
+                                    name = curTheme.name,
+                                    description = curTheme.description,
+                                    primary = parsed,
+                                    secondary = curTheme.secondary,
+                                    background = curTheme.background,
+                                    surface = curTheme.surface,
+                                    playerControlStyle = curTheme.playerControlStyle,
+                                    buttonSize = curTheme.buttonSize,
+                                    cornerRadiusDp = curTheme.cornerRadiusDp,
+                                    controlPanelBg = curTheme.controlPanelBg,
+                                    buttonShape = curTheme.buttonShape,
+                                    activeButtons = curTheme.activeButtons
+                                )
+                                val cfg = ThemeConfigManager.currentConfig
+                                ThemeConfigManager.applyConfig(
+                                    cfg.copy(
+                                        primaryAccentHex = hex,
+                                        progressBarStartHex = hex
+                                    ),
+                                    context
+                                )
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun getEqualizerState(): String {
+                            val st = PlaybackPreferences.getEqualizerState(context)
+                            return JSONObject().apply {
+                                put("enabled", st.enabled)
+                                put("presetName", st.presetName)
+                                put("bands", JSONArray().apply { st.bands.forEach { put(it.toDouble()) } })
+                            }.toString()
+                        }
+
+                        @JavascriptInterface
+                        fun setEqualizerState(enabled: Boolean, preset: String, bandsJson: String) {
+                            val bands = try {
+                                val arr = JSONArray(bandsJson)
+                                (0 until 5).map { arr.optDouble(it, 0.0).toFloat().coerceIn(-12f, 12f) }
+                            } catch (_: Exception) {
+                                PlaybackPreferences.EQ_PRESETS[preset] ?: listOf(0f, 0f, 0f, 0f, 0f)
+                            }
+                            PlaybackPreferences.saveEqualizerState(
+                                context,
+                                EqualizerState(enabled = enabled, presetName = preset, bands = bands)
+                            )
+                        }
+
+                        @JavascriptInterface
+                        fun getStorageVolumes(): String {
+                            return try {
+                                val internalDir = Environment.getExternalStorageDirectory()
+                                val intStat = StatFs(internalDir.absolutePath)
+                                val intTotal = intStat.totalBytes / (1024.0 * 1024.0 * 1024.0)
+                                val intFree = intStat.availableBytes / (1024.0 * 1024.0 * 1024.0)
+                                val internalSub = String.format(
+                                    Locale.US,
+                                    "Свободно: %.1f ГБ / %.1f ГБ",
+                                    intFree,
+                                    intTotal
+                                )
+
+                                var sdPath = ""
+                                var sdSub = ""
+                                val extDirs = context.getExternalFilesDirs(null)
+                                val internalCanonical = internalDir.canonicalPath
+                                for (dir in extDirs) {
+                                    if (dir == null) continue
+                                    var root: File? = dir
+                                    repeat(4) { root = root?.parentFile }
+                                    val candidate = root ?: continue
+                                    val canPath = try { candidate.canonicalPath } catch (_: Exception) { candidate.absolutePath }
+                                    if (!canPath.startsWith(internalCanonical) && candidate.exists() && candidate.canRead()) {
+                                        sdPath = candidate.absolutePath
+                                        val sdStat = StatFs(sdPath)
+                                        val sdTotal = sdStat.totalBytes / (1024.0 * 1024.0 * 1024.0)
+                                        val sdFree = sdStat.availableBytes / (1024.0 * 1024.0 * 1024.0)
+                                        sdSub = String.format(Locale.US, "Свободно: %.1f ГБ / %.1f ГБ", sdFree, sdTotal)
+                                        break
+                                    }
+                                }
+
+                                JSONObject().apply {
+                                    put("internalSub", internalSub)
+                                    put("sdPath", sdPath)
+                                    put("sdSub", sdSub)
+                                }.toString()
+                            } catch (_: Exception) {
+                                "{}"
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun shareMedia(uri: String, title: String) {
+                            Handler(Looper.getMainLooper()).post {
+                                try {
+                                    val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
+                                    if (uri.startsWith("http://", true) || uri.startsWith("https://", true) || uri.startsWith("sample://")) {
+                                        sendIntent.type = "text/plain"
+                                        sendIntent.putExtra(Intent.EXTRA_SUBJECT, title)
+                                        sendIntent.putExtra(Intent.EXTRA_TEXT, "$title\n$uri")
+                                    } else if (uri.startsWith("content://")) {
+                                        val contentUri = Uri.parse(uri)
+                                        val mime = context.contentResolver.getType(contentUri) ?: "*/*"
+                                        sendIntent.type = mime
+                                        sendIntent.putExtra(Intent.EXTRA_STREAM, contentUri)
+                                        sendIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    } else {
+                                        val filePath = if (uri.startsWith("file://")) Uri.parse(uri).path ?: uri else uri
+                                        val file = File(filePath)
+                                        if (file.exists()) {
+                                            val shareUri = try {
+                                                FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
+                                            } catch (_: Exception) {
+                                                Uri.fromFile(file)
+                                            }
+                                            sendIntent.type = if (file.extension.lowercase() in setOf("mp3", "m4a", "flac", "ogg", "wav", "aac", "opus")) "audio/*" else "video/*"
+                                            sendIntent.putExtra(Intent.EXTRA_STREAM, shareUri)
+                                            sendIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        } else {
+                                            sendIntent.type = "text/plain"
+                                            sendIntent.putExtra(Intent.EXTRA_TEXT, "$title\n$uri")
+                                        }
+                                    }
+                                    val chooser = Intent.createChooser(sendIntent, "Поделиться: $title").apply {
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
+                                    context.startActivity(chooser)
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Не удалось поделиться: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun addToPlaylistById(playlistId: String, uri: String, title: String) {
+                            Handler(Looper.getMainLooper()).post {
+                                PlaylistManager.addItemToPlaylist(context, playlistId, uri)
+                                sendPlaylistsToWeb(this@apply)
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun getPlaylistDetails(playlistId: String): String {
+                            return try {
+                                val pl = PlaylistManager.getPlaylists(context).find { it.id == playlistId }
+                                    ?: return "{}"
+                                val itemsArr = JSONArray()
+                                for (uriStr in pl.itemUris) {
+                                    val displayName = resolveVideoTitle(context, uriStr)
+                                    val lower = (displayName + " " + uriStr).lowercase()
+                                    val isAud = uriStr.contains("media/external/audio") ||
+                                        lower.endsWith(".mp3") || lower.endsWith(".m4a") ||
+                                        lower.endsWith(".flac") || lower.endsWith(".ogg") ||
+                                        lower.endsWith(".wav") || lower.endsWith(".aac") ||
+                                        lower.endsWith(".opus") || uriStr.startsWith("sample://audio")
+                                    itemsArr.put(JSONObject().apply {
+                                        put("uri", uriStr)
+                                        put("title", displayName)
+                                        put("isAudio", isAud)
+                                    })
+                                }
+                                JSONObject().apply {
+                                    put("id", pl.id)
+                                    put("title", pl.name)
+                                    put("desc", pl.description)
+                                    put("items", itemsArr)
+                                }.toString()
+                            } catch (_: Exception) {
+                                "{}"
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun removeItemFromPlaylist(playlistId: String, uri: String) {
+                            Handler(Looper.getMainLooper()).post {
+                                PlaylistManager.removeItemFromPlaylist(context, playlistId, uri)
+                                sendPlaylistsToWeb(this@apply)
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun deletePlaylist(playlistId: String) {
+                            Handler(Looper.getMainLooper()).post {
+                                PlaylistManager.deletePlaylist(context, playlistId)
+                                sendPlaylistsToWeb(this@apply)
                             }
                         }
                     }

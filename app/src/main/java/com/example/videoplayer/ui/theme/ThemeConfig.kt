@@ -38,23 +38,23 @@ data class ButtonConfig(
  * сериализуемая в JSON и мгновенно применяемая без пересборки APK.
  */
 data class DynamicPlayerConfig(
-    // 1. Цветовая палитра: глубокий темный фон (#05050D), неоновый сиреневый (#9D00FF), ярко-голубой (#00E5FF)
-    val backgroundHex: String = "#05050D",
-    val primaryAccentHex: String = "#9D00FF",
-    val secondaryAccentHex: String = "#00E5FF",
-    val surfaceHex: String = "#0E101A",
-    val controlPanelBgHex: String = "#121422",
-    val progressBarStartHex: String = "#9D00FF",
-    val progressBarEndHex: String = "#00E5FF",
+    // 1. Цветовая палитра: обсидианово-фиолетовый фон (#030208 / #0D0B1A) и огненный неоновый оранжевый (#FF9A1A -> #FF5200)
+    val backgroundHex: String = "#030208",
+    val primaryAccentHex: String = "#FF9A1A",
+    val secondaryAccentHex: String = "#FF5200",
+    val surfaceHex: String = "#0D0B1A",
+    val controlPanelBgHex: String = "#14121C",
+    val progressBarStartHex: String = "#FF9A1A",
+    val progressBarEndHex: String = "#FF6A00",
     val textColorHex: String = "#FFFFFF",
 
-    // 2. Геометрия и стиль: без неонового свечения/glow-эффектов
+    // 2. Геометрия и стиль: обсидиановое стекло и мягкое неоновое свечение
     val buttonShape: String = "circle", // "circle", "rounded", "square", "pill"
-    val cornerRadiusDp: Int = 18,
+    val cornerRadiusDp: Int = 22,
     val controlPanelPaddingDp: Int = 12,
-    val glowEnabled: Boolean = false, // Отключено по ТЗ (без размытия и свечения)
+    val glowEnabled: Boolean = true,
     val centerPlayBorderWidthDp: Int = 2,
-    val spotlightBeamEnabled: Boolean = true, // Вертикальный луч за центральной кнопкой Play со скриншота
+    val spotlightBeamEnabled: Boolean = false,
 
     // 3. Top Bar Buttons
     val logo: ButtonConfig = ButtonConfig(visible = true, sizeDp = 28, paddingDp = 2),
@@ -75,13 +75,13 @@ data class DynamicPlayerConfig(
     val moreMenuButton: ButtonConfig = ButtonConfig(visible = true, sizeDp = 40, paddingDp = 4)
 ) {
     // Helper color getters for Compose
-    val backgroundColor: Color get() = parseHex(backgroundHex, Color(0xFF05050D))
-    val primaryAccentColor: Color get() = parseHex(primaryAccentHex, Color(0xFF9D00FF))
-    val secondaryAccentColor: Color get() = parseHex(secondaryAccentHex, Color(0xFF00E5FF))
-    val surfaceColor: Color get() = parseHex(surfaceHex, Color(0xFF0E101A))
-    val controlPanelBgColor: Color get() = parseHex(controlPanelBgHex, Color(0xFF121422))
-    val progressBarStartColor: Color get() = parseHex(progressBarStartHex, Color(0xFF9D00FF))
-    val progressBarEndColor: Color get() = parseHex(progressBarEndHex, Color(0xFF00E5FF))
+    val backgroundColor: Color get() = parseHex(backgroundHex, Color(0xFF030208))
+    val primaryAccentColor: Color get() = parseHex(primaryAccentHex, Color(0xFFFF9A1A))
+    val secondaryAccentColor: Color get() = parseHex(secondaryAccentHex, Color(0xFFFF5200))
+    val surfaceColor: Color get() = parseHex(surfaceHex, Color(0xFF0D0B1A))
+    val controlPanelBgColor: Color get() = parseHex(controlPanelBgHex, Color(0xFF14121C))
+    val progressBarStartColor: Color get() = parseHex(progressBarStartHex, Color(0xFFFF9A1A))
+    val progressBarEndColor: Color get() = parseHex(progressBarEndHex, Color(0xFFFF6A00))
     val textColor: Color get() = parseHex(textColorHex, Color.White)
 
     fun toJson(indent: Int = 2): String {
@@ -130,7 +130,24 @@ data class DynamicPlayerConfig(
     }
 
     companion object {
-        fun defaultNeon(): DynamicPlayerConfig = screenshotPreset()
+        fun defaultNeon(): DynamicPlayerConfig = obsidianOrangePreset()
+
+        fun obsidianOrangePreset(): DynamicPlayerConfig = DynamicPlayerConfig(
+            backgroundHex = "#030208",
+            primaryAccentHex = "#FF9A1A",
+            secondaryAccentHex = "#FF5200",
+            surfaceHex = "#0D0B1A",
+            controlPanelBgHex = "#14121C",
+            progressBarStartHex = "#FF9A1A",
+            progressBarEndHex = "#FF6A00",
+            textColorHex = "#FFFFFF",
+            buttonShape = "circle",
+            cornerRadiusDp = 22,
+            controlPanelPaddingDp = 12,
+            glowEnabled = true,
+            centerPlayBorderWidthDp = 2,
+            spotlightBeamEnabled = false
+        )
 
         fun screenshotPreset(): DynamicPlayerConfig = DynamicPlayerConfig(
             backgroundHex = "#05050D",
